@@ -1,0 +1,49 @@
+# Stage 2 deployment on ONE host (Docker Compose).
+# Default values come from .env. Start:  docker compose up -d
+#
+# Current content (DP-02): the 2-member Hazelcast cluster used for coordination.
+# The services (control, ingestion, indexing, search) and nginx are added in DP-08.
+
+x-hazelcast-member: &hazelcast-member
+  image: hazelcast/hazelcast:${HAZELCAST_VERSION}
+  environment: &hazelcast-env
+    # Hazelcast reads any HZ_* variable as a configuration override (no YAML file needed yet;
+    # hazelcast/hazelcast.yaml from CF-03 can be mounted later and these lines removed).
+    HZ_CLUSTERNAME: ${HZ_CLUSTER_NAME}
+    # No multicast: we must not join other groups' clusters on the university network.
+    HZ_NETWORK_JOIN_MULTICAST_ENABLED: "false"
+    HZ_NETWORK_JOIN_TCPIP_ENABLED: "true"
+    HZ_NETWORK_JOIN_TCPIP_MEMBERS: "hz-1,hz-2"
+    # Health endpoint used by the healthcheck: GET /hazelcast/health/ready
+    HZ_NETWORK_RESTAPI_ENABLED: "true"
+    HZ_NETWORK_RESTAPI_ENDPOINTGROUPS_HEALTHCHECK_ENABLED: "true"
+    JAVA_OPTS: "-Xms${HZ_HEAP} -Xmx${HZ_HEAP}"
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fs http://localhost:5701/hazelcast/health/ready || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+  restart: unless-stopped
+
+services:
+  hz-1:
+    <<: *hazelcast-member
+    container_name: hz-1
+    hostname: hz-1
+    environment:
+      <<: *hazelcast-env
+      # Address this member announces to the cluster. Without it, the member picks 127.0.0.1
+      # (because "hz-1" is in the TCP/IP member list) and the other member cannot reach it.
+      HZ_NETWORK_PUBLICADDRESS: "hz-1:5701"
+    ports:
+      - "${HZ1_HOST_PORT}:5701"
+
+  hz-2:
+    <<: *hazelcast-member
+    container_name: hz-2
+    hostname: hz-2
+    environment:
+      <<: *hazelcast-env
+      HZ_NETWORK_PUBLICADDRESS: "hz-2:5701"
+    ports:
+      - "${HZ2_HOST_PORT}:5701"
