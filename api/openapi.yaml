@@ -1,0 +1,412 @@
+openapi: 3.0.3
+info:
+  title: Stage 2 Search Engine — Search Service API
+  version: 0.1.0
+  description: |
+    Front-end-facing API of the search engine (provider: **Search Service**), plus its
+    operational status endpoint.
+
+    **Status: draft v0.1.0 (DP-01).** Internal endpoints of Ingestion, Indexing and the
+    Control Module are added by their owners in later versions; the full inventory of
+    front-end, internal and operational endpoints is `api/endpoints.md`.
+
+    ## Common rules
+    - All responses are JSON (`application/json; charset=utf-8`).
+    - **Consistency:** every response is computed from ONE published version of the index.
+      That version is returned as `index_version` (for example `"v000042"`). Search only
+      reads the version that `datamarts/index/CURRENT` points to, so it never sees a
+      half-written index.
+    - **Errors** always use the `Error` schema with a machine-readable `code`:
+      `MISSING_PARAMETER`, `INVALID_PARAMETER` (400), `NOT_FOUND` (404),
+      `INDEX_NOT_READY` (503, no index version has been published yet), `INTERNAL_ERROR` (500).
+    - All endpoints are read-only (`GET`): they are safe and idempotent, and a client may
+      retry them freely.
+    - **CORS:** the allowed browser origins are configured with the `CORS_ORIGINS`
+      environment variable of the Search Service.
+  contact:
+    name: Daniel Perdomo (Search Service, API contract)
+
+servers:
+  - url: http://localhost:8080
+    description: nginx gateway in front of the Search replicas (Docker Compose deployment)
+  - url: http://localhost:7003
+    description: one Search Service instance started directly (development)
+
+tags:
+  - name: front-end
+    description: Consumed by the search front-end (or an HTTP client exercising the same contract).
+  - name: operational
+    description: Health and status checks, consumed by Docker healthchecks and the Control Module.
+
+paths:
+  /search:
+    get:
+      tags: [front-end]
+      operationId: searchBooks
+      summary: Keyword search with optional author, language and year filters
+      description: |
+        **Provider:** Search Service. **Consumers:** front-end.
+
+        **Matching.** `q` is tokenized with the same tokenizer used by the Indexing Service
+        (ASCII letters and digits, lower-cased; tokens shorter than 2 characters and
+        stopwords are removed). A book matches if its body contains **all** the terms
+        (AND semantics).
+
+        **Filters** are optional and are combined with AND:
+        - `author`: case-insensitive *substring* match on the author field
+          (`author=dickens` matches "Charles Dickens").
+        - `language`: exact ISO 639-1 code in lower case (`en`, `es`, `fr`...). A well-formed
+          code that no book uses gives an empty result; `GET /search/filters` lists the codes
+          present in the index.
+        - `year`: exact 4-digit year. The year of a book is its original publication year
+          when the Gutenberg header states it, otherwise the year of its Gutenberg release
+          date (see `year_source` in `GET /books/{book_id}`).
+
+        **Ordering and pagination.** Results are sorted by `book_id` ascending
+        (deterministic). `total` is the number of matching books; `results` contains only
+        the requested page (`offset`, `limit`). An `offset` beyond `total` returns an empty
+        page with 200.
+
+        A valid query with no matches returns **200** with `total: 0` and `results: []`.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search terms (at least one valid term after tokenization).
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          example: adventure
+        - name: author
+          in: query
+          required: false
+          description: Case-insensitive substring of the author name.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          example: twain
+        - name: language
+          in: query
+          required: false
+          description: ISO 639-1 language code, lower case.
+          schema:
+            type: string
+            pattern: '^[a-z]{2}$'
+          example: en
+        - name: year
+          in: query
+          required: false
+          description: Publication year (4 digits).
+          schema:
+            type: integer
+            minimum: 1000
+            maximum: 9999
+          example: 1998
+        - name: offset
+          in: query
+          required: false
+          description: Number of matching books to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of books returned in this page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Search executed (also when there are no matches).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              examples:
+                withFilter:
+                  summary: Keyword search with a language filter
+                  value:
+                    query: adventure
+                    filters: { language: en }
+                    total: 25
+                    offset: 0
+                    limit: 20
+                    index_version: v000042
+                    results:
+                      - { book_id: 5, title: Robinson Crusoe, author: Daniel Defoe, language: en, year: 1719 }
+                      - { book_id: 1342, title: Pride and Prejudice, author: Jane Austen, language: en, year: 1813 }
+                noMatches:
+                  summary: Valid query with no matches
+                  value:
+                    query: zzzzqqq
+                    filters: {}
+                    total: 0
+                    offset: 0
+                    limit: 20
+                    index_version: v000042
+                    results: []
+                secondPage:
+                  summary: Combined filters and second page
+                  value:
+                    query: river
+                    filters: { author: twain, language: en }
+                    total: 2
+                    offset: 1
+                    limit: 1
+                    index_version: v000042
+                    results:
+                      - { book_id: 76, title: Adventures of Huckleberry Finn, author: Mark Twain, language: en, year: 2004 }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/IndexNotReady'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /books/{book_id}:
+    get:
+      tags: [front-end]
+      operationId: getBook
+      summary: Metadata of one book
+      description: |
+        **Provider:** Search Service. **Consumers:** front-end (book detail page).
+
+        Only books contained in the published index version are visible; a book that has
+        been ingested but not yet published returns 404.
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          description: Project Gutenberg book id.
+          schema:
+            type: integer
+            minimum: 0
+          example: 1342
+      responses:
+        '200':
+          description: The book exists in the published index.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+              example:
+                book_id: 1342
+                title: Pride and Prejudice
+                author: Jane Austen
+                language: en
+                year: 1998
+                year_source: release_date
+                release_date: June 1, 1998
+                index_version: v000042
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: The book is not in the published index.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: NOT_FOUND, message: 'book 999999 is not in the published index', field: book_id }
+        '503':
+          $ref: '#/components/responses/IndexNotReady'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /search/filters:
+    get:
+      tags: [front-end]
+      operationId: getSearchFilters
+      summary: Filter values available in the published index
+      description: |
+        **Provider:** Search Service. **Consumers:** front-end (to fill the language selector
+        and the year range).
+      responses:
+        '200':
+          description: Available filter values.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FiltersResponse'
+              example:
+                books: 187
+                languages:
+                  - { code: en, books: 170 }
+                  - { code: fr, books: 9 }
+                  - { code: es, books: 8 }
+                years: { min: 1991, max: 2026 }
+                index_version: v000042
+        '503':
+          $ref: '#/components/responses/IndexNotReady'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /status:
+    get:
+      tags: [operational]
+      operationId: getStatus
+      summary: Health and loaded index version of this Search instance
+      description: |
+        **Provider:** Search Service (each replica answers for itself).
+        **Consumers:** Docker healthcheck, Control Module, operators.
+
+        Returns 200 while the process is running, even if no index has been published yet
+        (`index_version` is then `null`).
+      responses:
+        '200':
+          description: The instance is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+              example:
+                service: search-service
+                status: running
+                index_version: v000042
+                books_indexed: 187
+
+components:
+  schemas:
+    BookSummary:
+      type: object
+      required: [book_id, title, author, language, year]
+      properties:
+        book_id: { type: integer, example: 1342 }
+        title: { type: string, nullable: true, example: Pride and Prejudice }
+        author: { type: string, nullable: true, example: Jane Austen }
+        language:
+          type: string
+          nullable: true
+          description: ISO 639-1 code; null if the header language is not recognised.
+          example: en
+        year: { type: integer, nullable: true, example: 1998 }
+
+    BookDetail:
+      allOf:
+        - $ref: '#/components/schemas/BookSummary'
+        - type: object
+          required: [year_source, index_version]
+          properties:
+            year_source:
+              type: string
+              nullable: true
+              enum: [original_publication, release_date, null]
+              description: Where `year` comes from.
+            release_date:
+              type: string
+              nullable: true
+              description: Gutenberg release date as written in the header.
+              example: June 1, 1998
+            index_version: { type: string, example: v000042 }
+
+    SearchResponse:
+      type: object
+      required: [query, filters, total, offset, limit, index_version, results]
+      properties:
+        query: { type: string, description: The q parameter as received. }
+        filters:
+          type: object
+          description: Only the filters present in the request.
+          properties:
+            author: { type: string }
+            language: { type: string }
+            year: { type: integer }
+        total: { type: integer, minimum: 0, description: Number of matching books (all pages). }
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        index_version: { type: string, description: Index version used for this response. }
+        results:
+          type: array
+          description: The requested page, sorted by book_id ascending (at most `limit` items).
+          items:
+            $ref: '#/components/schemas/BookSummary'
+
+    FiltersResponse:
+      type: object
+      required: [books, languages, years, index_version]
+      properties:
+        books: { type: integer, description: Books in the published index. }
+        languages:
+          type: array
+          items:
+            type: object
+            required: [code, books]
+            properties:
+              code: { type: string, example: en }
+              books: { type: integer, example: 170 }
+        years:
+          type: object
+          required: [min, max]
+          properties:
+            min: { type: integer, nullable: true }
+            max: { type: integer, nullable: true }
+        index_version: { type: string }
+
+    ServiceStatus:
+      type: object
+      required: [service, status, index_version]
+      properties:
+        service: { type: string, example: search-service }
+        status: { type: string, enum: [running] }
+        index_version: { type: string, nullable: true }
+        books_indexed: { type: integer, nullable: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [MISSING_PARAMETER, INVALID_PARAMETER, NOT_FOUND, INDEX_NOT_READY, INTERNAL_ERROR]
+            message: { type: string, description: Human-readable explanation. }
+            field:
+              type: string
+              nullable: true
+              description: Parameter that caused the error, if any.
+
+  responses:
+    BadRequest:
+      description: |
+        Malformed or missing parameter. Cases: `q` missing (`MISSING_PARAMETER`); `q` with no
+        valid term after tokenization, non-numeric or out-of-range `offset`/`limit`/`year`,
+        `language` not matching `^[a-z]{2}$`, non-numeric `book_id` (`INVALID_PARAMETER`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingQ:
+              value:
+                error: { code: MISSING_PARAMETER, message: 'q is required', field: q }
+            badLimit:
+              value:
+                error: { code: INVALID_PARAMETER, message: 'limit must be an integer between 1 and 100', field: limit }
+            onlyStopwords:
+              value:
+                error: { code: INVALID_PARAMETER, message: 'q has no searchable terms (only stopwords or 1-character words)', field: q }
+    IndexNotReady:
+      description: No index version has been published yet, so there is nothing to search.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INDEX_NOT_READY, message: 'no index version has been published yet', field: null }
+    InternalError:
+      description: Unexpected server error (for example, the metadata database cannot be read).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INTERNAL_ERROR, message: 'internal error', field: null }
