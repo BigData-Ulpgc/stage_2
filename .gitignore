@@ -1,0 +1,10 @@
+# Maven build output
+target/
+# Runtime data (datalake, datamarts) created by the services
+data/
+# IDE files
+.idea/
+*.iml
+.vscode/
+# Logs and large raw benchmark output
+*.log
