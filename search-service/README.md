@@ -4,10 +4,11 @@ Owner: Daniel Perdomo. Front-end-facing search API (contract: `../api/openapi.ya
 
 ## Build and test
 
+From the repository root (the module depends on `common`, built in the same reactor):
+
 ```bash
-cd search-service
-mvn package            # runs the tests and builds target/search-service.jar (fat jar)
-DATA_DIR=<data root> java -jar target/search-service.jar
+mvn -B -pl search-service -am package   # runs the tests and builds search-service/target/search-service.jar (fat jar)
+DATA_DIR=<data root> java -jar search-service/target/search-service.jar
 ```
 
 `DATA_DIR` is the root of the shared data volume; the service reads `DATA_DIR/datamarts`
@@ -38,6 +39,7 @@ independent implementation of the SPEC tokenizer (identical index). Facts worth 
 Regenerate it (needs a clone of `stage_1` next to `stage_2`):
 
 ```bash
+mvn -q -pl common -am install -DskipTests   # once, so that search-service finds common on its own
 cd search-service
 mvn -q test-compile exec:java -Dexec.args="../../stage_1/sample_dataset/book src/test/resources/fixtures/stopwords.txt src/test/resources/fixtures/sample-datamarts"
 ```
