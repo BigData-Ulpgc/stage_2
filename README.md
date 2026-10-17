@@ -8,6 +8,48 @@ and deployed on one host with Docker Compose.
 > Work in progress. The full README (build, run, configuration, tests and benchmarks)
 > is task DP-13.
 
+## Build (Maven multi-module)
+
+Requirements: JDK 17 or newer, Maven 3.8+. From the repository root:
+
+```bash
+mvn -B verify                              # builds every module and runs all the tests
+mvn -B -pl indexing-service -am package    # one service and the modules it depends on (common)
+```
+
+| Module | What it is | Jar |
+|---|---|---|
+| `common` | Code shared by the services (configuration, HTTP server conventions; Stage 1 code in DR-02) | library |
+| `ingestion-service` | Ingestion Service | `ingestion-service/target/ingestion-service.jar` |
+| `indexing-service` | Indexing Service | `indexing-service/target/indexing-service.jar` |
+| `search-service` | Search Service | `search-service/target/search-service.jar` |
+| `control-module` | Control Module | `control-module/target/control-module.jar` |
+
+All versions (Java 17, Javalin 6.1.3, Gson, Hazelcast, JUnit, JMH) are fixed once in the parent
+`pom.xml`. The Hazelcast version there must match `HAZELCAST_VERSION` in `.env`.
+
+## Run a service without Docker
+
+Each jar is self-contained (fat jar) and is configured with environment variables:
+
+```bash
+java -jar control-module/target/control-module.jar          # :7000
+java -jar ingestion-service/target/ingestion-service.jar    # :7001
+INDEXING_PORT=7012 java -jar indexing-service/target/indexing-service.jar
+curl localhost:7012/status    # {"service":"indexing-service","status":"running"}
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CONTROL_PORT`, `INGESTION_PORT`, `INDEXING_PORT` | 7000, 7001, 7002 | HTTP port of each process |
+| `<SERVICE>_HTTP_THREADS` (`CONTROL_`, `INGESTION_`, `INDEXING_`) | 250 | Maximum Jetty request threads of the process (minimum 8) |
+
+The request thread pool is always set explicitly (`common` → `ServiceServer`): a Jetty
+`QueuedThreadPool` with max `<SERVICE>_HTTP_THREADS`, min 8, idle timeout 60 s. These are the
+values Javalin 6.1.3 would use by default, but here they are a documented setting. An invalid
+value (`INDEXING_PORT=abc`, `INDEXING_HTTP_THREADS=2`) stops the process at startup with a
+message naming the variable.
+
 ## Start the Hazelcast cluster (development)
 
 Requirements: Docker Desktop running.
