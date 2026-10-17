@@ -46,8 +46,6 @@ mvn -q test-compile exec:java -Dexec.args="../../stage_1/sample_dataset/book src
 
 The output is deterministic (fixed `published_at`), so regenerating gives identical files.
 
-## Temporary code
-
-`es.ulpgc.bigdata.datamart.index.Tokenizer` is an unchanged copy of the Stage 1 tokenizer. It will
-be deleted when the `common` module exists (DR-02); the package and class name are already the
-ones `common` will use.
+The tokenizer is `es.ulpgc.bigdata.datamart.index.Tokenizer` from `common` (DR-02), the same class
+Indexing uses; `Tokenizer.standard()` loads the stopwords packaged in `common`, identical to
+`src/test/resources/fixtures/stopwords.txt`.

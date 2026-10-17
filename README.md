@@ -19,7 +19,7 @@ mvn -B -pl indexing-service -am package    # one service and the modules it depe
 
 | Module | What it is | Jar |
 |---|---|---|
-| `common` | Code shared by the services (configuration, HTTP server conventions; Stage 1 code in DR-02) | library |
+| `common` | Code shared by the services: configuration and HTTP conventions, plus the Stage 1 model, datalake, tokenizer, monolithic index and SQLite metadata (see below) | library |
 | `ingestion-service` | Ingestion Service | `ingestion-service/target/ingestion-service.jar` |
 | `indexing-service` | Indexing Service | `indexing-service/target/indexing-service.jar` |
 | `search-service` | Search Service | `search-service/target/search-service.jar` |
@@ -27,6 +27,34 @@ mvn -B -pl indexing-service -am package    # one service and the modules it depe
 
 All versions (Java 17, Javalin 6.1.3, Gson, Hazelcast, JUnit, JMH) are fixed once in the parent
 `pom.xml`. The Hazelcast version there must match `HAZELCAST_VERSION` in `.env`.
+
+### What `common` contains
+
+| Package | Classes | Origin |
+|---|---|---|
+| `config` | `Env` (environment variables), `DataLayout` (paths below `DATA_DIR`), `MongoSettings` (`MONGO_*`) | Stage 2 (replace Stage 1 `AppConfig`) |
+| `http` | `ServiceServer` (Javalin + Gson, thread pool, `GET /status`) | Stage 2 |
+| `model` | `RawBook`, `BookLocation`, `BookMetadata` | Stage 1, unchanged |
+| `datalake` | `Datalake`, `AbstractFileDatalake` (atomic write), `RangeBasedDatalake` | Stage 1, unchanged; only the `range` structure |
+| `datamart.index` | `Tokenizer` (+ `standard()` with the packaged `stopwords.txt`), `InvertedIndex`, `InMemoryInvertedIndex`, `MongoInvertedIndex` | Stage 1, unchanged |
+| `datamart.metadata` | `MetadataParser`, `MetadataRepository`, `SqliteMetadataRepository`, `SqliteSchema` | Stage 1, unchanged (year / ISO language come in DR-04) |
+
+Storage chosen for Stage 2 (goal: hundreds of thousands of books):
+
+| Store | Structure | Where |
+|---|---|---|
+| Datalake | `range`: folders of 1000 ids | `<DATA_DIR>/datalake/range/<START>-<END>/<id>.header.txt`, `<id>.body.txt` |
+| Metadata | SQLite, table `books` | `<DATA_DIR>/datamarts/metadata.db` |
+| Inverted index | MongoDB, one document `{"term", "postings"}` per term | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / `MONGO_COLLECTION` (`inverted_index`) |
+
+Tests: the MongoDB ones run against `MONGO_URI` (default `mongodb://localhost:27017`, database
+`search_engine_test`) and are skipped, not failed, when no MongoDB answers:
+
+```bash
+docker run -d --rm --name mongo-test -p 127.0.0.1:27017:27017 mongo:8.2.12
+mvn -B verify
+docker stop mongo-test
+```
 
 ## Run a service without Docker
 
