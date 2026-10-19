@@ -83,3 +83,50 @@ repository root with the Maven module as an argument:
 ```bash
 docker build -f docker/service.Dockerfile --build-arg MODULE=search-service -t stage2/search-service .
 ```
+
+## Contributing: branches, pull requests and protection rules
+
+### Branches
+
+| Branch | Role |
+|---|---|
+| `main` | Stable. Only receives a PR from `develop` when a milestone closes (v0.1 … v1.0), then it is tagged. Always builds and starts. |
+| `develop` | Integration. Every work branch starts here and comes back through a PR. |
+| `feature/<area>/<ID>-<desc>` | One task of the plan, e.g. `feature/common/DR-02-migrate-stage1`, `feature/search/DP-04-filters`. |
+| `infra/…`, `contract/…`, `test/…`, `bench/…`, `docs/…`, `fix/…` | Docker/Hazelcast/MongoDB config, changes in `api/`, validation, experiments, report, fixes. |
+
+### Rules enforced by GitHub on `develop` and `main`
+
+Configured in *Settings → Branches*. They apply to everyone, administrators included.
+
+| Rule | What it means for you |
+|---|---|
+| Require a pull request before merging | `git push` directly to `develop` or `main` is rejected: every change goes through a PR. |
+| Required approvals: 1 | The PR cannot be merged until **another** member clicks *Approve* (the author's own approval does not count). |
+| Dismiss stale approvals when new commits are pushed | If you push a new commit after the approval, the PR has to be approved again: what is merged is exactly what was reviewed. |
+| Do not allow bypassing the above settings | Nobody, not even an admin, can merge skipping the rules. |
+| No force pushes, no deletions | Nobody can rewrite the history of `develop`/`main` or delete them. |
+| Require status checks to pass *(when CI exists)* | Only PRs with `mvn -B verify` green can be merged. |
+
+### Team agreements (not enforced by GitHub)
+
+- A PR that touches `common/`, the parent `pom.xml`, `api/`, `hazelcast/`, the MongoDB collections or
+  `docker-compose.yml` needs the approval of **both** other members. On this plan GitHub lets us request
+  only one reviewer: request one and mention the other (`@user`) in the PR; any member can approve.
+- PRs to `main` only come from `develop`.
+- Merge with **Create a merge commit** (never *Squash*), so the history shows each person's commits.
+- Do not delete `develop` when GitHub offers *Delete branch* after a merge (feature branches, yes).
+- Conventional Commits with scope: `feat(search): …`, `build(docker): …`, `test(chaos): …`.
+
+### Daily workflow
+
+```bash
+git checkout develop && git pull                       # start from the latest develop
+git checkout -b feature/indexing/DR-05-api             # one branch per task
+# ... commits ...
+git pull origin develop                                # keep it up to date (every morning; a merge, no force push needed)
+git push -u origin feature/indexing/DR-05-api          # then open the PR against develop
+```
+
+Review: in the PR, *Files changed* → comment on lines if needed → *Review changes* →
+*Approve* / *Request changes*. Changes are made with new commits on the same branch.
