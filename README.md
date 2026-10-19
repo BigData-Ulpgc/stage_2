@@ -19,7 +19,7 @@ mvn -B -pl indexing-service -am package    # one service and the modules it depe
 
 | Module | What it is | Jar |
 |---|---|---|
-| `common` | Code shared by the services (configuration, HTTP server conventions; Stage 1 code in DR-02) | library |
+| `common` | Code shared by the services: configuration and HTTP conventions, plus the Stage 1 model, datalake, tokenizer, monolithic index and SQLite metadata (see below) | library |
 | `ingestion-service` | Ingestion Service | `ingestion-service/target/ingestion-service.jar` |
 | `indexing-service` | Indexing Service | `indexing-service/target/indexing-service.jar` |
 | `search-service` | Search Service | `search-service/target/search-service.jar` |
@@ -27,6 +27,34 @@ mvn -B -pl indexing-service -am package    # one service and the modules it depe
 
 All versions (Java 17, Javalin 6.1.3, Gson, Hazelcast, JUnit, JMH) are fixed once in the parent
 `pom.xml`. The Hazelcast version there must match `HAZELCAST_VERSION` in `.env`.
+
+### What `common` contains
+
+| Package | Classes | Origin |
+|---|---|---|
+| `config` | `Env` (environment variables), `DataLayout` (paths below `DATA_DIR`), `MongoSettings` (`MONGO_*`) | Stage 2 (replace Stage 1 `AppConfig`) |
+| `http` | `ServiceServer` (Javalin + Gson, thread pool, `GET /status`) | Stage 2 |
+| `model` | `RawBook`, `BookLocation`, `BookMetadata` | Stage 1, unchanged |
+| `datalake` | `Datalake`, `AbstractFileDatalake` (atomic write), `RangeBasedDatalake` | Stage 1, unchanged; only the `range` structure |
+| `datamart.index` | `Tokenizer` (+ `standard()` with the packaged `stopwords.txt`), `InvertedIndex`, `InMemoryInvertedIndex`, `MongoInvertedIndex` | Stage 1, unchanged |
+| `datamart.metadata` | `MetadataParser`, `MetadataRepository`, `SqliteMetadataRepository`, `SqliteSchema` | Stage 1, unchanged (year / ISO language come in DR-04) |
+
+Storage chosen for Stage 2 (goal: hundreds of thousands of books):
+
+| Store | Structure | Where |
+|---|---|---|
+| Datalake | `range`: folders of 1000 ids | `<DATA_DIR>/datalake/range/<START>-<END>/<id>.header.txt`, `<id>.body.txt` |
+| Metadata | SQLite, table `books` | `<DATA_DIR>/datamarts/metadata.db` |
+| Inverted index | MongoDB, one document `{"term", "postings"}` per term | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / `MONGO_COLLECTION` (`inverted_index`) |
+
+Tests: the MongoDB ones run against `MONGO_URI` (default `mongodb://localhost:27017`, database
+`search_engine_test`) and are skipped, not failed, when no MongoDB answers:
+
+```bash
+docker run -d --rm --name mongo-test -p 127.0.0.1:27017:27017 mongo:8.2.12
+mvn -B verify
+docker stop mongo-test
+```
 
 ## Run a service without Docker
 
@@ -83,3 +111,50 @@ repository root with the Maven module as an argument:
 ```bash
 docker build -f docker/service.Dockerfile --build-arg MODULE=search-service -t stage2/search-service .
 ```
+
+## Contributing: branches, pull requests and protection rules
+
+### Branches
+
+| Branch | Role |
+|---|---|
+| `main` | Stable. Only receives a PR from `develop` when a milestone closes (v0.1 … v1.0), then it is tagged. Always builds and starts. |
+| `develop` | Integration. Every work branch starts here and comes back through a PR. |
+| `feature/<area>/<ID>-<desc>` | One task of the plan, e.g. `feature/common/DR-02-migrate-stage1`, `feature/search/DP-04-filters`. |
+| `infra/…`, `contract/…`, `test/…`, `bench/…`, `docs/…`, `fix/…` | Docker/Hazelcast/MongoDB config, changes in `api/`, validation, experiments, report, fixes. |
+
+### Rules enforced by GitHub on `develop` and `main`
+
+Configured in *Settings → Branches*. They apply to everyone, administrators included.
+
+| Rule | What it means for you |
+|---|---|
+| Require a pull request before merging | `git push` directly to `develop` or `main` is rejected: every change goes through a PR. |
+| Required approvals: 1 | The PR cannot be merged until **another** member clicks *Approve* (the author's own approval does not count). |
+| Dismiss stale approvals when new commits are pushed | If you push a new commit after the approval, the PR has to be approved again: what is merged is exactly what was reviewed. |
+| Do not allow bypassing the above settings | Nobody, not even an admin, can merge skipping the rules. |
+| No force pushes, no deletions | Nobody can rewrite the history of `develop`/`main` or delete them. |
+| Require status checks to pass *(when CI exists)* | Only PRs with `mvn -B verify` green can be merged. |
+
+### Team agreements (not enforced by GitHub)
+
+- A PR that touches `common/`, the parent `pom.xml`, `api/`, `hazelcast/`, the MongoDB collections or
+  `docker-compose.yml` needs the approval of **both** other members. On this plan GitHub lets us request
+  only one reviewer: request one and mention the other (`@user`) in the PR; any member can approve.
+- PRs to `main` only come from `develop`.
+- Merge with **Create a merge commit** (never *Squash*), so the history shows each person's commits.
+- Do not delete `develop` when GitHub offers *Delete branch* after a merge (feature branches, yes).
+- Conventional Commits with scope: `feat(search): …`, `build(docker): …`, `test(chaos): …`.
+
+### Daily workflow
+
+```bash
+git checkout develop && git pull                       # start from the latest develop
+git checkout -b feature/indexing/DR-05-api             # one branch per task
+# ... commits ...
+git pull origin develop                                # keep it up to date (every morning; a merge, no force push needed)
+git push -u origin feature/indexing/DR-05-api          # then open the PR against develop
+```
+
+Review: in the PR, *Files changed* → comment on lines if needed → *Review changes* →
+*Approve* / *Request changes*. Changes are made with new commits on the same branch.

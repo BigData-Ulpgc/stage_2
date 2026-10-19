@@ -1,6 +1,7 @@
 package es.ulpgc.bigdata.datamart.index;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -13,13 +14,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
-/*
- * TODO(DR-02): TEMPORARY COPY of stage_1/java/stage1/.../datamart/index/Tokenizer.java,
- * unchanged. Search must tokenize exactly like Indexing, so this class will live in the
- * `common` module. When common is available, delete this file and depend on common
- * (same package and class name, so no import changes are needed).
- */
-
 /**
  * Tokenizer of the common contract (shared/SPEC.md, section 5), identical in Java, Python and C:
  *
@@ -31,6 +25,10 @@ import java.util.function.Consumer;
  *
  * It does not use toLowerCase() or Character.isLetter(): both follow Unicode rules
  * that C cannot reproduce byte by byte.
+ *
+ * Stage 2: it lives in common because Indexing and Search must tokenize EXACTLY the same;
+ * otherwise a query term would never match the term stored in the index. Immutable, so one
+ * instance can be shared by every thread.
  */
 public class Tokenizer {
 
@@ -48,17 +46,41 @@ public class Tokenizer {
      */
     public static Tokenizer fromStopwordsFile(Path file) {
         try {
-            Set<String> words = new LinkedHashSet<>();
-            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                String word = line.strip();
-                if (!word.isEmpty() && !word.startsWith("#")) {
-                    words.add(word);
-                }
-            }
-            return new Tokenizer(words);
+            return new Tokenizer(parseStopwords(Files.readAllLines(file, StandardCharsets.UTF_8)));
         } catch (IOException e) {
             throw new UncheckedIOException("No se pudieron leer las stopwords de " + file, e);
         }
+    }
+
+    /** Copy of stage_1/shared/stopwords.txt packaged inside the common jar. */
+    static final String STANDARD_STOPWORDS = "/stopwords.txt";
+
+    /**
+     * The tokenizer every Stage 2 service uses (Indexing to build the index, Search to parse
+     * the query). The stopwords travel inside the common jar instead of being a file each
+     * service reads from its own path: two services cannot end up with different lists.
+     */
+    public static Tokenizer standard() {
+        try (InputStream in = Tokenizer.class.getResourceAsStream(STANDARD_STOPWORDS)) {
+            if (in == null) {
+                throw new IllegalStateException(STANDARD_STOPWORDS + " no está en el classpath");
+            }
+            String content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            return new Tokenizer(parseStopwords(content.lines().toList()));
+        } catch (IOException e) {
+            throw new UncheckedIOException("No se pudieron leer las stopwords " + STANDARD_STOPWORDS, e);
+        }
+    }
+
+    private static Set<String> parseStopwords(List<String> lines) {
+        Set<String> words = new LinkedHashSet<>();
+        for (String line : lines) {
+            String word = line.strip();
+            if (!word.isEmpty() && !word.startsWith("#")) {
+                words.add(word);
+            }
+        }
+        return words;
     }
 
     /** All the tokens, in order and with repetitions: "Boat, BOAT!" -> [boat, boat]. */
