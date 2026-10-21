@@ -88,51 +88,24 @@ class SqliteMetadataRepositoryTest {
         assertEquals("Frankenstein", repo.findById(84).orElseThrow().title());
     }
 
-    // --- Queries by author and title ---------------------------------------
+    // --- findByIds ----------------------------------------------------------
 
     @Test
-    void findByAuthorDevuelveSusLibrosOrdenadosPorId() {
-        repo.saveAll(List.of(
-                book(1342, "Pride and Prejudice", "Jane Austen"),
-                book(84, "Frankenstein", "Mary Shelley"),
-                book(158, "Emma", "Jane Austen"),
-                book(141, "Mansfield Park", "Jane Austen"),
-                book(42324, "Frankenstein", "Mary Shelley")));
+    void findByIdsDevuelveLosQueExistenOrdenadosPorId() {
+        repo.saveAll(List.of(book(1342, "Pride and Prejudice", "Jane Austen"),
+                book(84, "Frankenstein", "Mary Shelley"), book(158, "Emma", "Jane Austen")));
 
-        assertEquals(List.of(141, 158, 1342), ids(repo.findByAuthor("Jane Austen")));
-        assertEquals(List.of(84, 42324), ids(repo.findByAuthor("Mary Shelley")));
+        assertEquals(List.of(84, 158, 1342), ids(repo.findByIds(List.of(1342, 999, 84, 158, 84))));
     }
 
     @Test
-    void findByTitlePuedeDevolverVariosLibros() {
-        repo.saveAll(List.of(
-                book(42324, "Frankenstein", "Mary Shelley"),
-                book(84, "Frankenstein", "Mary Shelley"),
-                book(158, "Emma", "Jane Austen")));
+    void findByIdsSinIdsDevuelveListaVacia() {
+        repo.save(book(84, "Frankenstein", "Mary Shelley"));
 
-        assertEquals(List.of(84, 42324), ids(repo.findByTitle("Frankenstein")));
-        assertEquals(List.of(158), ids(repo.findByTitle("Emma")));
+        assertEquals(List.of(), repo.findByIds(List.of()));
     }
 
-    @Test
-    void lasConsultasSonDeIgualdadExacta() {
-        repo.save(book(158, "Emma", "Jane Austen"));
-
-        assertEquals(List.of(), repo.findByAuthor("Austen"));        // it is not "contains"
-        assertEquals(List.of(), repo.findByAuthor("jane austen"));   // case-sensitive
-        assertEquals(List.of(), repo.findByTitle("Em"));
-    }
-
-    @Test
-    void consultasSinResultadosONullDevuelvenListaVacia() {
-        repo.save(new BookMetadata(16328, "Beowulf", null, null, null, null, null, null, null));
-
-        assertEquals(List.of(), repo.findByAuthor("Nadie"));
-        assertEquals(List.of(), repo.findByAuthor(null));
-        assertEquals(List.of(), repo.findByTitle(null));
-    }
-
-    // --- saveAll: one transaction ------------------------------------------
+    // --- SQLite only: saveAll in one transaction (no longer required by the contract) ---
 
     @Test
     void saveAllGuardaTodoElLote() {
@@ -179,7 +152,7 @@ class SqliteMetadataRepositoryTest {
         repo.close();
         repo = new SqliteMetadataRepository(dbFile);        // did it reach the disk?
 
-        assertEquals(List.of(84), ids(repo.findByAuthor("Mary Shelley")));
+        assertTrue(repo.findById(84).isPresent());
     }
 
     @Test

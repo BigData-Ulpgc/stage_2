@@ -14,15 +14,19 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeSet;
 
 /**
  * MetadataRepository on top of a SQLite file (shared/SPEC.md: books table).
  *
  * It keeps ONE connection open from the constructor until close().
  * It is not safe to use from several threads at once.
+ *
+ * Kept only until MongoMetadataRepository replaces it (DR-04): metadata moves to MongoDB.
  */
 public class SqliteMetadataRepository implements MetadataRepository {
 
@@ -45,8 +49,6 @@ public class SqliteMetadataRepository implements MetadataRepository {
             "SELECT book_id, title, author, language, release_date, body_path, header_path FROM books ";
 
     private static final String FIND_BY_ID = SELECT_COLUMNS + "WHERE book_id = ?";
-    private static final String FIND_BY_AUTHOR = SELECT_COLUMNS + "WHERE author = ? ORDER BY book_id";
-    private static final String FIND_BY_TITLE = SELECT_COLUMNS + "WHERE title = ? ORDER BY book_id";
 
     private final Connection connection;
 
@@ -138,20 +140,15 @@ public class SqliteMetadataRepository implements MetadataRepository {
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
+    /** One query per id: simple, and enough for a class that is about to be removed. */
     @Override
-    public List<BookMetadata> findByAuthor(String author) {
-        if (author == null) {
-            return List.of();                            // "= NULL" never matches in SQL
+    public List<BookMetadata> findByIds(Collection<Integer> bookIds) {
+        Objects.requireNonNull(bookIds, "bookIds");
+        List<BookMetadata> result = new ArrayList<>();
+        for (int id : new TreeSet<>(bookIds)) {         // sorted and without repeats
+            findById(id).ifPresent(result::add);
         }
-        return query(FIND_BY_AUTHOR, ps -> ps.setString(1, author));
-    }
-
-    @Override
-    public List<BookMetadata> findByTitle(String title) {
-        if (title == null) {
-            return List.of();
-        }
-        return query(FIND_BY_TITLE, ps -> ps.setString(1, title));
+        return List.copyOf(result);
     }
 
     @Override
