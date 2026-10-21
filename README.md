@@ -19,7 +19,7 @@ mvn -B -pl indexing-service -am package    # one service and the modules it depe
 
 | Module | What it is | Jar |
 |---|---|---|
-| `common` | Code shared by the services: configuration and HTTP conventions, plus the Stage 1 model, datalake, tokenizer, monolithic index and SQLite metadata (see below) | library |
+| `common` | Code shared by the services: configuration and HTTP conventions, plus the Stage 1 model, datalake, tokenizer, and the inverted index and metadata in MongoDB (see below) | library |
 | `ingestion-service` | Ingestion Service | `ingestion-service/target/ingestion-service.jar` |
 | `indexing-service` | Indexing Service | `indexing-service/target/indexing-service.jar` |
 | `search-service` | Search Service | `search-service/target/search-service.jar` |
@@ -34,17 +34,17 @@ All versions (Java 17, Javalin 6.1.3, Gson, Hazelcast, JUnit, JMH) are fixed onc
 |---|---|---|
 | `config` | `Env` (environment variables), `DataLayout` (paths below `DATA_DIR`), `MongoSettings` (`MONGO_*`) | Stage 2 (replace Stage 1 `AppConfig`) |
 | `http` | `ServiceServer` (Javalin + Gson, thread pool, `GET /status`) | Stage 2 |
-| `model` | `RawBook`, `BookLocation`, `BookMetadata` | Stage 1, unchanged |
+| `model` | `RawBook`, `BookLocation`, `BookMetadata`, `YearSource` | Stage 1; `year` and `yearSource` added in DR-04 |
 | `datalake` | `Datalake`, `AbstractFileDatalake` (atomic write), `RangeBasedDatalake` | Stage 1, unchanged; only the `range` structure |
 | `datamart.index` | `Tokenizer` (+ `standard()` with the packaged `stopwords.txt`), `InvertedIndex`, `InMemoryInvertedIndex`, `MongoInvertedIndex` | Stage 1, unchanged |
-| `datamart.metadata` | `MetadataParser`, `MetadataRepository`, `SqliteMetadataRepository`, `SqliteSchema` | Stage 1, unchanged (year / ISO language come in DR-04) |
+| `datamart.metadata` | `MetadataParser`, `LanguageCodes`, `MetadataRepository`, `MongoMetadataRepository` | Stage 1 parser and interface; ISO language, year rule, `Creator` fallback and MongoDB in DR-04 |
 
 Storage chosen for Stage 2 (goal: hundreds of thousands of books):
 
 | Store | Structure | Where |
 |---|---|---|
 | Datalake | `range`: folders of 1000 ids | `<DATA_DIR>/datalake/range/<START>-<END>/<id>.header.txt`, `<id>.body.txt` |
-| Metadata | SQLite, table `books` | `<DATA_DIR>/datamarts/metadata.db` |
+| Metadata | MongoDB, one document per book with the book id as `_id` (contract §6.3) | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / collection `books` |
 | Inverted index | MongoDB, one document `{"term", "postings"}` per term | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / `MONGO_COLLECTION` (`inverted_index`) |
 
 Tests: the MongoDB ones run against `MONGO_URI` (default `mongodb://localhost:27017`, database

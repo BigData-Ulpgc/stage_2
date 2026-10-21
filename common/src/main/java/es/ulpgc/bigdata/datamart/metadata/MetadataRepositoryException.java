@@ -1,9 +1,8 @@
 package es.ulpgc.bigdata.datamart.metadata;
 
 /**
- * Error of the metadata store. It wraps the database's own exception (MongoException,
- * SQLException) so that whoever uses the repository only catches this one, whatever
- * database is behind it.
+ * Error of the metadata store. It wraps the database's own exception (MongoException)
+ * so that whoever uses the repository only catches this one, whatever database is behind it.
  */
 public class MetadataRepositoryException extends RuntimeException {
 
