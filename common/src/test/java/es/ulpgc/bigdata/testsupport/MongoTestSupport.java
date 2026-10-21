@@ -1,4 +1,4 @@
-package es.ulpgc.bigdata.datamart.index;
+package es.ulpgc.bigdata.testsupport;
 
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
@@ -13,11 +13,13 @@ import java.util.concurrent.TimeUnit;
  * They use the "search_engine_test" database and a new collection per test, so they never
  * touch the real index. Without MongoDB the Mongo tests are SKIPPED, not failed, so that
  * "mvn verify" also works without Docker (moved here from Stage 1's MongoInvertedIndexTest).
+ *
+ * Public and in its own package because the index tests and the metadata tests share it.
  */
-final class MongoTestSupport {
+public final class MongoTestSupport {
 
-    static final String URI = System.getenv().getOrDefault("MONGO_URI", "mongodb://localhost:27017");
-    static final String TEST_DB = "search_engine_test";
+    public static final String URI = System.getenv().getOrDefault("MONGO_URI", "mongodb://localhost:27017");
+    public static final String TEST_DB = "search_engine_test";
 
     private static Boolean available;
 
@@ -25,7 +27,7 @@ final class MongoTestSupport {
     }
 
     /** Does Mongo answer? It is asked once and remembered. */
-    static synchronized boolean available() {
+    public static synchronized boolean available() {
         if (available == null) {
             MongoClientSettings quick = MongoClientSettings.builder()
                     .applyConnectionString(new ConnectionString(URI))
@@ -42,7 +44,7 @@ final class MongoTestSupport {
     }
 
     /** A collection name no other test uses. */
-    static String newCollectionName(String prefix) {
+    public static String newCollectionName(String prefix) {
         return prefix + "_" + System.nanoTime();
     }
 }
