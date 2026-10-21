@@ -46,6 +46,8 @@ public class MetadataParser {
                 firstMatch(TITLE, text),
                 firstMatch(AUTHOR, text),
                 firstMatch(LANGUAGE, text),
+                null,                                   // year and yearSource: DR-04 step 3
+                null,
                 firstMatch(RELEASE_DATE, text),
                 location.bodyPath(),
                 location.headerPath());

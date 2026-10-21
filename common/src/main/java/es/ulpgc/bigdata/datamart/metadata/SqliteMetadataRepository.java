@@ -217,6 +217,8 @@ public class SqliteMetadataRepository implements MetadataRepository {
                 rs.getString("title"),
                 rs.getString("author"),
                 rs.getString("language"),
+                null,                                   // no year columns: this class is replaced by Mongo (DR-04)
+                null,
                 rs.getString("release_date"),
                 bodyPath == null ? null : Path.of(bodyPath),
                 headerPath == null ? null : Path.of(headerPath));

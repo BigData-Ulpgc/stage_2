@@ -35,7 +35,7 @@ class SqliteMetadataRepositoryTest {
     }
 
     private static BookMetadata book(int id, String title, String author) {
-        return new BookMetadata(id, title, author, "English", "June 1, 1998",
+        return new BookMetadata(id, title, author, "English", null, null, "June 1, 1998",
                 Path.of("datalake/book/" + id + "/body.txt"),
                 Path.of("datalake/book/" + id + "/header.txt"));
     }
@@ -61,7 +61,7 @@ class SqliteMetadataRepositoryTest {
 
     @Test
     void camposNullSeConservanComoNull() {
-        BookMetadata sinDatos = new BookMetadata(16328, "Beowulf", null, null, null, null, null);
+        BookMetadata sinDatos = new BookMetadata(16328, "Beowulf", null, null, null, null, null, null, null);
         repo.save(sinDatos);
 
         assertEquals(sinDatos, repo.findById(16328).orElseThrow());
@@ -125,7 +125,7 @@ class SqliteMetadataRepositoryTest {
 
     @Test
     void consultasSinResultadosONullDevuelvenListaVacia() {
-        repo.save(new BookMetadata(16328, "Beowulf", null, null, null, null, null));
+        repo.save(new BookMetadata(16328, "Beowulf", null, null, null, null, null, null, null));
 
         assertEquals(List.of(), repo.findByAuthor("Nadie"));
         assertEquals(List.of(), repo.findByAuthor(null));
