@@ -22,4 +22,20 @@ public enum YearSource {
     public String key() {
         return key;
     }
+
+    /**
+     * The opposite of key(), for reading from the database: null gives null (a book
+     * without a year). An unknown value is an error: the data does not follow the contract.
+     */
+    public static YearSource fromKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        for (YearSource source : values()) {
+            if (source.key.equals(key)) {
+                return source;
+            }
+        }
+        throw new IllegalArgumentException("year_source desconocido: " + key);
+    }
 }

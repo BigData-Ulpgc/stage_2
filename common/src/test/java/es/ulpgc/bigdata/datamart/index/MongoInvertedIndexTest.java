@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.datamart.index;
 
+import es.ulpgc.bigdata.testsupport.MongoTestSupport;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
