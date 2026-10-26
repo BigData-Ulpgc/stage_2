@@ -1,24 +1,31 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Search Service API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Front-end-facing API of the search engine (provider: **Search Service**), plus its
     operational status endpoint.
 
-    **Status: draft v0.1.0 (DP-01).** Internal endpoints of Ingestion, Indexing and the
-    Control Module are added by their owners in later versions; the full inventory of
-    front-end, internal and operational endpoints is `api/endpoints.md`.
+    **Status: draft v0.2.0** (DP-01, updated to plan v3.1: index and metadata in MongoDB).
+    Internal endpoints of Ingestion, Indexing and the Control Module are added by their owners
+    in later versions; the full inventory of front-end, internal and operational endpoints is
+    `api/endpoints.md`.
 
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
-    - **Consistency:** every response is computed from ONE published version of the index.
-      That version is returned as `index_version` (for example `"v000042"`). Search only
-      reads the version that `datamarts/index/CURRENT` points to, so it never sees a
-      half-written index.
+    - **Consistency:** every response is computed from ONE published version of the index,
+      returned as `index_version` (an integer, for example `42`). Each Search replica keeps an
+      immutable snapshot of the published version: the version number from the `CURRENT`
+      document of the MongoDB collection `index_meta`, the ids of the books published up to
+      that version (`index_books`) and their metadata (`books`). A request takes the snapshot
+      once when it starts, reads the posting lists of its terms from MongoDB and discards any
+      book that is not in the snapshot, so it never sees a book that is indexed but not yet
+      published, nor mixes two versions (contract §6.5 of the group plan). Filters are applied
+      in memory on the snapshot metadata.
     - **Errors** always use the `Error` schema with a machine-readable `code`:
       `MISSING_PARAMETER`, `INVALID_PARAMETER` (400), `NOT_FOUND` (404),
-      `INDEX_NOT_READY` (503, no index version has been published yet), `INTERNAL_ERROR` (500).
+      `INDEX_NOT_READY` (503, no index version has been published yet),
+      `STORAGE_UNAVAILABLE` (503, MongoDB does not answer; retry later), `INTERNAL_ERROR` (500).
     - All endpoints are read-only (`GET`): they are safe and idempotent, and a client may
       retry them freely.
     - **CORS:** the allowed browser origins are configured with the `CORS_ORIGINS`
@@ -55,12 +62,17 @@ paths:
         **Filters** are optional and are combined with AND:
         - `author`: case-insensitive *substring* match on the author field
           (`author=dickens` matches "Charles Dickens").
-        - `language`: exact ISO 639-1 code in lower case (`en`, `es`, `fr`...). A well-formed
-          code that no book uses gives an empty result; `GET /search/filters` lists the codes
-          present in the index.
-        - `year`: exact 4-digit year. The year of a book is its original publication year
-          when the Gutenberg header states it, otherwise the year of its Gutenberg release
-          date (see `year_source` in `GET /books/{book_id}`).
+        - `language`: exact ISO 639-1 code in lower case, one of the 15 supported codes
+          (`da`, `de`, `el`, `en`, `eo`, `es`, `fi`, `fr`, `it`, `la`, `nl`, `pt`, `ru`, `sv`,
+          `zh`); any other value is a 400. A supported code that no book uses gives an empty
+          result; `GET /search/filters` lists the codes present in the index. A book written in
+          several languages ("English, French") has the code of the first one.
+        - `year`: exact 4-digit year. The year of a book is the year of the "Original
+          publication" line of its Gutenberg header when there is one, otherwise the year of
+          its Gutenberg "Release date" (see `year_source` in `GET /books/{book_id}`). The
+          release date is the date of the ebook, not of the work: in the 200 reference books
+          only 9 have an "Original publication" line, so for about 95% of them `year` is the
+          ebook year (Pride and Prejudice: 1998, not 1813).
 
         **Ordering and pagination.** Results are sorted by `book_id` ascending
         (deterministic). `total` is the number of matching books; `results` contains only
@@ -90,10 +102,10 @@ paths:
         - name: language
           in: query
           required: false
-          description: ISO 639-1 language code, lower case.
+          description: ISO 639-1 language code, lower case, one of the supported codes.
           schema:
             type: string
-            pattern: '^[a-z]{2}$'
+            enum: [da, de, el, en, eo, es, fi, fr, it, la, nl, pt, ru, sv, zh]
           example: en
         - name: year
           in: query
@@ -137,10 +149,10 @@ paths:
                     total: 25
                     offset: 0
                     limit: 20
-                    index_version: v000042
+                    index_version: 42
                     results:
-                      - { book_id: 5, title: Robinson Crusoe, author: Daniel Defoe, language: en, year: 1719 }
-                      - { book_id: 1342, title: Pride and Prejudice, author: Jane Austen, language: en, year: 1813 }
+                      - { book_id: 1342, title: Pride and Prejudice, author: Jane Austen, language: en, year: 1998 }
+                      - { book_id: 67979, title: 'The Blue Castle: a novel', author: L. M. Montgomery, language: en, year: 1926 }
                 noMatches:
                   summary: Valid query with no matches
                   value:
@@ -149,7 +161,7 @@ paths:
                     total: 0
                     offset: 0
                     limit: 20
-                    index_version: v000042
+                    index_version: 42
                     results: []
                 secondPage:
                   summary: Combined filters and second page
@@ -159,13 +171,13 @@ paths:
                     total: 2
                     offset: 1
                     limit: 1
-                    index_version: v000042
+                    index_version: 42
                     results:
                       - { book_id: 76, title: Adventures of Huckleberry Finn, author: Mark Twain, language: en, year: 2004 }
         '400':
           $ref: '#/components/responses/BadRequest'
         '503':
-          $ref: '#/components/responses/IndexNotReady'
+          $ref: '#/components/responses/ServiceUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -203,7 +215,7 @@ paths:
                 year: 1998
                 year_source: release_date
                 release_date: June 1, 1998
-                index_version: v000042
+                index_version: 42
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -215,7 +227,7 @@ paths:
               example:
                 error: { code: NOT_FOUND, message: 'book 999999 is not in the published index', field: book_id }
         '503':
-          $ref: '#/components/responses/IndexNotReady'
+          $ref: '#/components/responses/ServiceUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -241,9 +253,9 @@ paths:
                   - { code: fr, books: 9 }
                   - { code: es, books: 8 }
                 years: { min: 1991, max: 2026 }
-                index_version: v000042
+                index_version: 42
         '503':
-          $ref: '#/components/responses/IndexNotReady'
+          $ref: '#/components/responses/ServiceUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -268,7 +280,7 @@ paths:
               example:
                 service: search-service
                 status: running
-                index_version: v000042
+                index_version: 42
                 books_indexed: 187
 
 components:
@@ -279,11 +291,15 @@ components:
       properties:
         book_id: { type: integer, example: 1342 }
         title: { type: string, nullable: true, example: Pride and Prejudice }
-        author: { type: string, nullable: true, example: Jane Austen }
+        author:
+          type: string
+          nullable: true
+          description: '"Author:" line of the header or, if there is none, "Creator:" ("Translator:" never counts).'
+          example: Jane Austen
         language:
           type: string
           nullable: true
-          description: ISO 639-1 code; null if the header language is not recognised.
+          description: ISO 639-1 code of the first language; null if it is not one of the supported languages.
           example: en
         year: { type: integer, nullable: true, example: 1998 }
 
@@ -303,7 +319,7 @@ components:
               nullable: true
               description: Gutenberg release date as written in the header.
               example: June 1, 1998
-            index_version: { type: string, example: v000042 }
+            index_version: { type: integer, example: 42 }
 
     SearchResponse:
       type: object
@@ -320,7 +336,7 @@ components:
         total: { type: integer, minimum: 0, description: Number of matching books (all pages). }
         offset: { type: integer, minimum: 0 }
         limit: { type: integer, minimum: 1, maximum: 100 }
-        index_version: { type: string, description: Index version used for this response. }
+        index_version: { type: integer, description: Index version used for this response. }
         results:
           type: array
           description: The requested page, sorted by book_id ascending (at most `limit` items).
@@ -346,7 +362,7 @@ components:
           properties:
             min: { type: integer, nullable: true }
             max: { type: integer, nullable: true }
-        index_version: { type: string }
+        index_version: { type: integer }
 
     ServiceStatus:
       type: object
@@ -354,7 +370,7 @@ components:
       properties:
         service: { type: string, example: search-service }
         status: { type: string, enum: [running] }
-        index_version: { type: string, nullable: true }
+        index_version: { type: integer, nullable: true }
         books_indexed: { type: integer, nullable: true }
 
     Error:
@@ -367,7 +383,7 @@ components:
           properties:
             code:
               type: string
-              enum: [MISSING_PARAMETER, INVALID_PARAMETER, NOT_FOUND, INDEX_NOT_READY, INTERNAL_ERROR]
+              enum: [MISSING_PARAMETER, INVALID_PARAMETER, NOT_FOUND, INDEX_NOT_READY, STORAGE_UNAVAILABLE, INTERNAL_ERROR]
             message: { type: string, description: Human-readable explanation. }
             field:
               type: string
@@ -379,7 +395,7 @@ components:
       description: |
         Malformed or missing parameter. Cases: `q` missing (`MISSING_PARAMETER`); `q` with no
         valid term after tokenization, non-numeric or out-of-range `offset`/`limit`/`year`,
-        `language` not matching `^[a-z]{2}$`, non-numeric `book_id` (`INVALID_PARAMETER`).
+        `language` not in the supported codes, non-numeric `book_id` (`INVALID_PARAMETER`).
       content:
         application/json:
           schema:
@@ -394,16 +410,27 @@ components:
             onlyStopwords:
               value:
                 error: { code: INVALID_PARAMETER, message: 'q has no searchable terms (only stopwords or 1-character words)', field: q }
-    IndexNotReady:
-      description: No index version has been published yet, so there is nothing to search.
+            unsupportedLanguage:
+              value:
+                error: { code: INVALID_PARAMETER, message: 'language must be one of: da, de, el, en, eo, es, fi, fr, it, la, nl, pt, ru, sv, zh', field: language }
+    ServiceUnavailable:
+      description: |
+        The request cannot be answered now; the client may retry later. Cases: no index version
+        has been published yet (`INDEX_NOT_READY`), or MongoDB does not answer within the
+        driver timeout (`STORAGE_UNAVAILABLE`).
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            error: { code: INDEX_NOT_READY, message: 'no index version has been published yet', field: null }
+          examples:
+            indexNotReady:
+              value:
+                error: { code: INDEX_NOT_READY, message: 'no index version has been published yet', field: null }
+            storageUnavailable:
+              value:
+                error: { code: STORAGE_UNAVAILABLE, message: 'the index storage (MongoDB) does not answer', field: null }
     InternalError:
-      description: Unexpected server error (for example, the metadata database cannot be read).
+      description: Unexpected server error.
       content:
         application/json:
           schema:
