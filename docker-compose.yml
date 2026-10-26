@@ -1,7 +1,8 @@
 # Stage 2 deployment on ONE host (Docker Compose).
 # Default values come from .env. Start:  docker compose up -d
 #
-# Current content (DP-02): the 2-member Hazelcast cluster used for coordination.
+# Current content (DP-02): the 2-member Hazelcast cluster used for coordination and the
+# MongoDB instance that stores the inverted index and the book metadata (plan v3.1 §3.4).
 # The services (control, ingestion, indexing, search) and nginx are added in DP-08.
 
 x-hazelcast-member: &hazelcast-member
@@ -47,3 +48,29 @@ services:
       HZ_NETWORK_PUBLICADDRESS: "hz-2:5701"
     ports:
       - "${HZ2_HOST_PORT}:5701"
+
+  mongo:
+    image: mongo:${MONGO_VERSION}
+    container_name: mongo
+    hostname: mongo
+    # By default WiredTiger takes half of the RAM it sees as cache, which ignores mem_limit and
+    # makes results depend on the host. The cache is fixed and stays below the container limit.
+    command: ["mongod", "--bind_ip_all", "--wiredTigerCacheSizeGB", "${MONGO_CACHE_GB}"]
+    mem_limit: ${MONGO_MEM_LIMIT}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # Only reachable from this machine (tests and services run from the IDE); the services in
+    # Docker use mongodb://mongo:27017 through the internal network.
+    ports:
+      - "127.0.0.1:${MONGO_HOST_PORT}:27017"
+    restart: unless-stopped
+
+volumes:
+  # Named volume, not a bind mount: avoids slow I/O and file-locking problems of Windows folders.
+  # `docker compose down` keeps the data; `docker compose down -v` wipes it.
+  mongo-data:
