@@ -39,6 +39,7 @@ import java.util.function.Supplier;
  *  - All 9 fields are always present; a missing value is an explicit null, so every
  *    document has the same shape, like the rows of a table.
  *  - Field names in snake_case, as in the OpenAPI.
+ *  - header_path and body_path always use '/' as separator, also when written from Windows.
  *
  * It does not own the MongoClient: it receives a database of the client the service
  * shares (MongoSettings.openClient), and close() leaves that client open.
@@ -178,8 +179,8 @@ public class MongoMetadataRepository implements MetadataRepository {
                 .append(YEAR, m.year())
                 .append(YEAR_SOURCE, m.yearSource() == null ? null : m.yearSource().key())
                 .append(RELEASE_DATE, m.releaseDate())
-                .append(HEADER_PATH, m.headerPath() == null ? null : m.headerPath().toString())
-                .append(BODY_PATH, m.bodyPath() == null ? null : m.bodyPath().toString());
+                .append(HEADER_PATH, contractPath(m.headerPath()))
+                .append(BODY_PATH, contractPath(m.bodyPath()));
     }
 
     static BookMetadata fromDocument(Document doc) {
@@ -195,6 +196,15 @@ public class MongoMetadataRepository implements MetadataRepository {
                 doc.getString(RELEASE_DATE),
                 bodyPath == null ? null : Path.of(bodyPath),
                 headerPath == null ? null : Path.of(headerPath));
+    }
+
+    /**
+     * A path as contract text: always with '/', whatever the OS of the writer. Path.toString()
+     * uses '\' on Windows, and a reader on Linux would not understand it. Reading needs no
+     * change: Path.of("a/b/c") also works on Windows.
+     */
+    private static String contractPath(Path path) {
+        return path == null ? null : path.toString().replace('\\', '/');
     }
 
     /**
