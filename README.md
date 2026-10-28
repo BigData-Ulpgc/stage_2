@@ -78,15 +78,16 @@ values Javalin 6.1.3 would use by default, but here they are a documented settin
 value (`INDEXING_PORT=abc`, `INDEXING_HTTP_THREADS=2`) stops the process at startup with a
 message naming the variable.
 
-## Start the Hazelcast cluster (development)
+## Start Hazelcast and MongoDB (development)
 
 Requirements: Docker Desktop running.
 
 ```bash
-docker compose up -d          # starts hz-1 and hz-2 (cluster "search-engine")
-docker compose ps             # both must show "(healthy)"
+docker compose up -d          # starts hz-1, hz-2 (cluster "search-engine") and mongo
+docker compose ps             # the three must show "(healthy)"
 docker logs hz-1 | grep -A3 "Members {size"   # expected: Members {size:2, ...}
-docker compose down           # stop
+docker compose down           # stop (MongoDB data is kept in the volume mongo-data)
+docker compose down -v        # stop and wipe MongoDB data (clean benchmark runs)
 ```
 
 | Setting | Default (`.env`) |
@@ -96,12 +97,22 @@ docker compose down           # stop
 | Members | `hz-1:5701`, `hz-2:5701` inside Docker; published on the host as `localhost:5701` and `localhost:5702` |
 | Discovery | TCP/IP with a fixed member list; multicast disabled |
 | Heap per member | `HZ_HEAP=512m` |
+| MongoDB image | `MONGO_VERSION=8.2.12` (same as Stage 1; driver version in the parent `pom.xml`) |
+| MongoDB memory | `MONGO_MEM_LIMIT=1g` container limit, `MONGO_CACHE_GB=0.25` WiredTiger cache |
+| MongoDB address | `mongo:27017` inside Docker (`MONGO_URI=mongodb://mongo:27017`); `127.0.0.1:27017` on the host only (`MONGO_HOST_PORT`) |
+| MongoDB data | named volume `mongo-data` |
 
-Services running **inside** Docker connect to `hz-1:5701,hz-2:5701` (service names, never
-`localhost`). A service started from the IDE on the host connects to `localhost:5701`; it
+Services running **inside** Docker connect to `hz-1:5701,hz-2:5701` and `mongodb://mongo:27017`
+(service names, never `localhost`). A service started from the IDE on the host connects to
+`localhost:5701` and `mongodb://localhost:27017` (the `MongoSettings` default). For Hazelcast it
 should use the client in single-member routing mode (`ClusterRoutingConfig` with
-`RoutingMode.SINGLE_MEMBER`; the old `smartRouting=false` is deprecated in 5.7), because the members announce
-their Docker-internal addresses.
+`RoutingMode.SINGLE_MEMBER`; the old `smartRouting=false` is deprecated in 5.7), because the members
+announce their Docker-internal addresses.
+
+The MongoDB cache is fixed on purpose: by default WiredTiger takes half of the RAM it sees,
+ignoring the container limit, and benchmark results would depend on the host. The `mongo` service
+also serves the MongoDB tests (`mvn -B verify` with it running), so the separate `mongo-test`
+container of the Build section is not needed; do not run both, they use the same host port.
 
 ## Service images
 
