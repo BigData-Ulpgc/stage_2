@@ -53,8 +53,8 @@ services:
     image: mongo:${MONGO_VERSION}
     container_name: mongo
     hostname: mongo
-    # By default WiredTiger takes half of the RAM it sees as cache, which ignores mem_limit and
-    # makes results depend on the host. The cache is fixed and stays below the container limit.
+    # mongod sizes its default cache from mem_limit (50% of limit - 1 GB, at least 256 MB), so it
+    # would change whenever MONGO_MEM_LIMIT changes. The cache is fixed so benchmarks stay comparable.
     command: ["mongod", "--bind_ip_all", "--wiredTigerCacheSizeGB", "${MONGO_CACHE_GB}"]
     mem_limit: ${MONGO_MEM_LIMIT}
     volumes:
