@@ -1,90 +1,123 @@
 package es.ulpgc.bigdata.search.index;
 
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
+import es.ulpgc.bigdata.datamart.metadata.MongoMetadataRepository;
+import es.ulpgc.bigdata.model.BookMetadata;
+import es.ulpgc.bigdata.model.YearSource;
+import es.ulpgc.bigdata.search.fixture.TestBooks;
+import es.ulpgc.bigdata.search.testsupport.MongoTestDb;
+import org.bson.Document;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-/**
- * Loads the DP-03 fixture (src/test/resources/fixtures/sample-datamarts, 15 books of
- * stage_1/sample_dataset). Expected postings were cross-checked with an independent
- * implementation of the SPEC tokenizer (identical index, 30396 terms).
- */
+/** The loader against a real MongoDB with the TestBooks fixture (skipped without MongoDB). */
 class IndexSnapshotLoaderTest {
 
-    private static Path fixture() throws URISyntaxException {
-        return Path.of(IndexSnapshotLoaderTest.class.getResource("/fixtures/sample-datamarts").toURI());
+    private String dbName;
+    private MongoClient client;
+    private MongoDatabase db;
+    private IndexSnapshotLoader loader;
+
+    @BeforeEach
+    void setUp() {
+        assumeTrue(MongoTestDb.available(), "MongoDB is not running: start it with docker compose up -d mongo");
+        dbName = MongoTestDb.newDatabaseName("loader");
+        client = MongoClients.create(MongoTestDb.URI);
+        db = client.getDatabase(dbName);
+        loader = new IndexSnapshotLoader(db, new MongoMetadataRepository(db));
     }
 
-    @Test
-    void loadsThePublishedVersion() throws Exception {
-        IndexSnapshot snapshot = IndexSnapshotLoader.loadCurrent(fixture()).orElseThrow();
-        assertEquals("v000001", snapshot.version());
-        assertEquals(15, snapshot.bookCount());
-        assertEquals(30396, snapshot.termCount());
-        assertEquals(List.of(5, 11, 46, 74, 76, 84, 98, 174, 345, 1080, 1342, 1661, 1952, 2542, 2701),
-                List.copyOf(snapshot.bookIds()));
-    }
-
-    @Test
-    void postingsMatchTheReferenceResults() throws Exception {
-        IndexSnapshot snapshot = IndexSnapshotLoader.loadCurrent(fixture()).orElseThrow();
-        assertEquals(List.of(76, 84, 345, 2701), snapshot.postings("whale"));
-        assertEquals(List.of(46, 74, 76, 84, 174, 345, 1342, 1661, 2701), snapshot.postings("adventure"));
-        assertEquals(List.of(), snapshot.postings("zzzzqqq"));      // unknown term
-        assertEquals(List.of(), snapshot.postings("the"));          // stopword: never indexed
-    }
-
-    @Test
-    void metadataFollowsTheStage2Contract() throws Exception {
-        IndexSnapshot snapshot = IndexSnapshotLoader.loadCurrent(fixture()).orElseThrow();
-        BookRecord book = snapshot.book(1342).orElseThrow();
-        assertEquals("Pride and Prejudice", book.title());
-        assertEquals("Jane Austen", book.author());
-        assertEquals("en", book.language());                 // ISO 639-1, not "English"
-        assertEquals(1998, book.year());                     // Gutenberg release year...
-        assertEquals("release_date", book.yearSource());     // ...because there is no original publication line
-        assertTrue(snapshot.book(999999).isEmpty());         // not in the published index
-    }
-
-    @Test
-    void nothingPublishedYieldsEmpty(@TempDir Path empty) {
-        assertTrue(IndexSnapshotLoader.loadCurrent(empty).isEmpty());   // the API will answer 503
-    }
-
-    @Test
-    void currentPointingToAMissingVersionIsRejected(@TempDir Path dir) throws IOException {
-        Files.createDirectories(dir.resolve("index"));
-        Files.writeString(dir.resolve("index/CURRENT"), "v000099");
-        assertThrows(IllegalStateException.class, () -> IndexSnapshotLoader.loadCurrent(dir));
-    }
-
-    @Test
-    void manifestThatDisagreesWithTheIndexIsRejected(@TempDir Path dir) throws Exception {
-        copyTree(fixture(), dir);
-        Files.writeString(dir.resolve("index/versions/v000001/manifest.json"), "{\"version\": 1, \"books\": 14}");
-        assertThrows(IllegalStateException.class, () -> IndexSnapshotLoader.loadCurrent(dir));
-    }
-
-    private static void copyTree(Path from, Path to) throws IOException {
-        try (Stream<Path> paths = Files.walk(from)) {
-            for (Path source : paths.toList()) {
-                Path target = to.resolve(from.relativize(source).toString());
-                if (Files.isDirectory(source)) {
-                    Files.createDirectories(target);
-                } else {
-                    Files.copy(source, target);
-                }
-            }
+    @AfterEach
+    void tearDown() {
+        if (client != null) {
+            db.drop();
+            client.close();
         }
+    }
+
+    @Test
+    void nothingPublishedYetGivesNoSnapshot() {
+        assertTrue(loader.loadCurrent().isEmpty());
+    }
+
+    @Test
+    void loadsExactlyTheBooksPublishedUpToCurrent() {
+        TestBooks.load(MongoTestDb.URI, dbName);
+
+        IndexSnapshot snapshot = loader.loadCurrent().orElseThrow();
+
+        assertEquals(TestBooks.CURRENT_VERSION, snapshot.version());
+        assertEquals("inverted_index", snapshot.collection());
+        assertEquals(TestBooks.VISIBLE_IDS, snapshot.books().stream().map(BookMetadata::bookId).toList());
+        assertFalse(snapshot.isPublished(2701), "indexed but never published");
+        assertFalse(snapshot.isPublished(11), "published with version 3 while CURRENT is still 2");
+    }
+
+    @Test
+    void metadataFollowsTheContractRules() {
+        TestBooks.load(MongoTestDb.URI, dbName);
+
+        IndexSnapshot snapshot = loader.loadCurrent().orElseThrow();
+
+        BookMetadata pride = snapshot.book(1342).orElseThrow();
+        assertEquals("Pride and Prejudice", pride.title());
+        assertEquals("Jane Austen", pride.author());
+        assertEquals("en", pride.language());
+        assertEquals(1998, pride.year());                    // ebook year: no "Original publication" line
+        assertEquals(YearSource.RELEASE_DATE, pride.yearSource());
+        assertEquals("June 1, 1998", pride.releaseDate());
+
+        BookMetadata castle = snapshot.book(67979).orElseThrow();
+        assertEquals(1926, castle.year());                   // year of the work
+        assertEquals(YearSource.ORIGINAL_PUBLICATION, castle.yearSource());
+
+        assertEquals("fr", snapshot.book(17489).orElseThrow().language());
+    }
+
+    @Test
+    void theFixtureIsDeterministic() {
+        TestBooks.load(MongoTestDb.URI, dbName);
+        IndexSnapshot first = loader.loadCurrent().orElseThrow();
+        List<Document> firstIndex = db.getCollection("inverted_index").find().sort(new Document("term", 1))
+                .projection(new Document("_id", 0)).into(new java.util.ArrayList<>());
+
+        TestBooks.load(MongoTestDb.URI, dbName);
+        IndexSnapshot second = loader.loadCurrent().orElseThrow();
+        List<Document> secondIndex = db.getCollection("inverted_index").find().sort(new Document("term", 1))
+                .projection(new Document("_id", 0)).into(new java.util.ArrayList<>());
+
+        assertEquals(List.copyOf(first.books()), List.copyOf(second.books()));
+        assertEquals(firstIndex, secondIndex);
+    }
+
+    @Test
+    void aPublishedBookWithoutMetadataStaysVisible() {
+        db.getCollection(IndexSnapshotLoader.INDEX_META).insertOne(new Document("_id", "CURRENT")
+                .append("version", 1).append("collection", "inverted_index"));
+        db.getCollection(IndexSnapshotLoader.INDEX_BOOKS).insertOne(new Document("_id", 5).append("version", 1));
+
+        IndexSnapshot snapshot = loader.loadCurrent().orElseThrow();
+
+        assertTrue(snapshot.isPublished(5));
+        assertNull(snapshot.book(5).orElseThrow().title());
+    }
+
+    @Test
+    void aCurrentWithoutCollectionIsAnError() {
+        db.getCollection(IndexSnapshotLoader.INDEX_META).insertOne(new Document("_id", "CURRENT").append("version", 1));
+
+        assertThrows(IllegalStateException.class, loader::loadCurrent);
     }
 }

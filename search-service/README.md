@@ -2,50 +2,64 @@
 
 Owner: Daniel Perdomo. Front-end-facing search API (contract: `../api/openapi.yaml`).
 
-## Build and test
+Search mounts no volume and never writes: it reads the published index version from MongoDB
+(plan v3.1, contract §6.5) and keeps it in memory as an immutable snapshot.
+
+## Build, test and run
 
 From the repository root (the module depends on `common`, built in the same reactor):
 
 ```bash
-mvn -B -pl search-service -am package   # runs the tests and builds search-service/target/search-service.jar (fat jar)
-DATA_DIR=<data root> java -jar search-service/target/search-service.jar
+docker compose up -d mongo                      # the MongoDB tests are skipped without it
+mvn -B -pl search-service -am package           # tests + search-service/target/search-service.jar (fat jar)
+java -jar search-service/target/search-service.jar
+curl localhost:7003/status                      # {"service":"search-service","status":"running","index_version":1,"books_indexed":15}
 ```
 
-`DATA_DIR` is the root of the shared data volume; the service reads `DATA_DIR/datamarts`
-(read-only).
+| Variable | Default | Meaning |
+|---|---|---|
+| `SEARCH_PORT` | `7003` | HTTP port |
+| `SEARCH_THREADS` | `250` (Javalin's default, made explicit) | maximum Jetty request threads |
+| `MONGO_URI` | `mongodb://localhost:27017` | in Docker: `mongodb://mongo:27017` |
+| `MONGO_DATABASE` | `search_engine` | database with the index and the metadata |
 
-## Test fixture (DP-03)
+The service starts even if MongoDB is down or nothing is published yet: `/status` answers with
+`index_version: null` and the API returns 503 until a version is loaded.
 
-`src/test/resources/fixtures/sample-datamarts/` is a published index built from the 15 books
-of `stage_1/sample_dataset`, in the layout the Indexing Service publishes (contracts §6.3 and §6.5):
+## What Search reads from MongoDB
 
 ```
-metadata.db                                books(book_id, title, author, language, year,
-                                                 year_source, release_date, body_path, header_path)
-index/CURRENT                              "v000001"
-index/versions/v000001/inverted_index.json {"term": [book ids ascending], ...}   (30396 terms)
-index/versions/v000001/manifest.json       {"version": 1, "books": 15, ...}
+index_meta    {_id: "CURRENT", version: V, collection: "inverted_index", ...}   which version is visible
+index_books   {_id: <book_id>, version: <n>}                                  published books (n <= V are visible)
+books         {_id: <book_id>, title, author, language, year, year_source, ...} metadata (common, DR-04)
+<collection>  {term: "whale", postings: [...]}                                 posting lists (common, DR-02)
 ```
 
-It lets Search be developed and tested before Indexing exists. It was cross-checked against an
-independent implementation of the SPEC tokenizer (identical index). Facts worth knowing for tests:
+The snapshot holds the version, the collection and the metadata of the published books; the
+posting lists stay in MongoDB and each request reads only those of its terms. A book that is
+indexed but not published is never returned.
 
-- All 15 books are English (`language = "en"`): a `language=es` search is a valid query with no matches.
-- None of their headers has an "Original publication" line, so `year` is the Gutenberg release year
-  (`year_source = "release_date"`), e.g. Pride and Prejudice → 1998.
-- Reference results (AND semantics): `whale` → [76, 84, 345, 2701];
-  `adventure` → [46, 74, 76, 84, 174, 345, 1342, 1661, 2701].
+## Test data (DP-03)
 
-Regenerate it (needs a clone of `stage_1` next to `stage_2`):
+There is no Indexing Service yet, so the tests write a published index themselves with the same
+`common` code Indexing will use (`Tokenizer.standard()`, `MetadataParser`, `MongoInvertedIndex`,
+`MongoMetadataRepository`): `src/test/java/.../fixture/MongoFixtureLoader`. Each test class uses a
+database of its own (`search_test_*`) and drops it afterwards.
+
+- **`TestBooks`**: 9 books with short bodies written for the tests. CURRENT is version 2; book 11
+  is published with version 3 (a publication stopped before switching CURRENT) and book 2701 is
+  indexed but not published, so neither may ever appear in a result.
+- **`SampleDatasetLoader`**: loads the 15 real books of `stage_1/sample_dataset` into
+  `search_engine` as version 1, to run the service by hand (needs a clone of `stage_1` next to
+  `stage_2`):
 
 ```bash
-mvn -q -pl common -am install -DskipTests   # once, so that search-service finds common on its own
+mvn -q -pl search-service -am install -DskipTests   # once, so that search-service finds common
 cd search-service
-mvn -q test-compile exec:java -Dexec.args="../../stage_1/sample_dataset/book src/test/resources/fixtures/stopwords.txt src/test/resources/fixtures/sample-datamarts"
+mvn -q test-compile exec:java -Dexec.args="../../stage_1/sample_dataset/book"
 ```
 
-The output is deterministic (fixed `published_at`), so regenerating gives identical files.
-
-The tokenizer is `es.ulpgc.bigdata.datamart.index.Tokenizer` from `common` (DR-02), the same class
-Indexing uses; `Tokenizer.standard()` loads the stopwords packaged in `common`, identical to
-`src/test/resources/fixtures/stopwords.txt`.
+With the 15 books the index has 30396 terms. Reference results (AND semantics):
+`whale` → [76, 84, 345, 2701]; `adventure` → [46, 74, 76, 84, 174, 345, 1342, 1661, 2701].
+All 15 are English and none has an "Original publication" line, so `year` is the ebook year
+(Pride and Prejudice → 1998).
