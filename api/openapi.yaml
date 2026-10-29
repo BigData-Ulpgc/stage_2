@@ -84,7 +84,7 @@ paths:
         - name: q
           in: query
           required: true
-          description: Search terms (at least one valid term after tokenization).
+          description: Search terms (at least one valid term after tokenization). If repeated, the first value counts, as for every parameter.
           schema:
             type: string
             minLength: 1
@@ -393,7 +393,7 @@ components:
   responses:
     BadRequest:
       description: |
-        Malformed or missing parameter. Cases: `q` missing (`MISSING_PARAMETER`); `q` with no
+        Malformed or missing parameter. Cases: `q` missing or blank (`MISSING_PARAMETER`); `q` with no
         valid term after tokenization, non-numeric or out-of-range `offset`/`limit`/`year`,
         `language` not in the supported codes, non-numeric `book_id` (`INVALID_PARAMETER`).
       content:
