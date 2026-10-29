@@ -42,6 +42,10 @@ The service starts even if MongoDB is down or nothing is published yet: `/status
 
 If MongoDB does not answer, the response is 503 `STORAGE_UNAVAILABLE`.
 
+`GET /books/{book_id}` and `GET /search/filters` (DP-05) do not touch MongoDB at all: they answer
+from the snapshot metadata. A book that is indexed but not published is a 404. The languages and
+year range are computed once, when the snapshot is built.
+
 ## What Search reads from MongoDB
 
 ```

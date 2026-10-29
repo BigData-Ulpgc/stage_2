@@ -202,6 +202,71 @@ class SearchApiTest {
         assertEquals(new JsonArray(), body.getAsJsonArray("results"));
     }
 
+    // ---------------------------------------------------------------- GET /books/{book_id} (DP-05)
+
+    @Test
+    void bookDetailHasTheYearSourceAndTheVersion() throws Exception {
+        startWithFixture(null);
+
+        HttpResponse<String> response = get("/books/67979");
+        JsonObject castle = json(response);
+
+        assertEquals(200, response.statusCode());
+        assertEquals(67979, castle.get("book_id").getAsInt());
+        assertEquals("The Blue Castle: a novel", castle.get("title").getAsString());
+        assertEquals(1926, castle.get("year").getAsInt());
+        assertEquals("original_publication", castle.get("year_source").getAsString());
+        assertEquals("April 5, 2022", castle.get("release_date").getAsString());
+        assertEquals(TestBooks.CURRENT_VERSION, castle.get("index_version").getAsInt());
+    }
+
+    @Test
+    void aBookThatIsNotPublishedIs404EvenIfIndexed() throws Exception {
+        startWithFixture(null);
+
+        assertError(get("/books/2701"), 404, "NOT_FOUND", "book_id");     // indexed, never published
+        assertError(get("/books/11"), 404, "NOT_FOUND", "book_id");       // version 3 > CURRENT
+        assertError(get("/books/999999"), 404, "NOT_FOUND", "book_id");   // does not exist
+    }
+
+    @Test
+    void aBookIdThatIsNotANonNegativeIntegerIs400() throws Exception {
+        startWithoutIndex();
+
+        assertError(get("/books/abc"), 400, "INVALID_PARAMETER", "book_id");
+        assertError(get("/books/-1"), 400, "INVALID_PARAMETER", "book_id");
+        assertError(get("/books/99999999999"), 400, "INVALID_PARAMETER", "book_id");
+        assertError(get("/books/1342"), 503, "INDEX_NOT_READY", null);
+    }
+
+    // ---------------------------------------------------------------- GET /search/filters (DP-05)
+
+    @Test
+    void filtersListTheLanguagesAndYearsOfThePublishedBooks() throws Exception {
+        startWithFixture(null);
+
+        JsonObject filters = json(get("/search/filters"));
+
+        assertEquals(7, filters.get("books").getAsInt());
+        JsonArray languages = filters.getAsJsonArray("languages");
+        assertEquals(2, languages.size());
+        assertEquals("en", languages.get(0).getAsJsonObject().get("code").getAsString());
+        assertEquals(6, languages.get(0).getAsJsonObject().get("books").getAsInt());
+        assertEquals("fr", languages.get(1).getAsJsonObject().get("code").getAsString());
+        assertEquals(1926, filters.getAsJsonObject("years").get("min").getAsInt());   // The Blue Castle
+        assertEquals(2006, filters.getAsJsonObject("years").get("max").getAsInt());   // Les misérables
+        assertEquals(TestBooks.CURRENT_VERSION, filters.get("index_version").getAsInt());
+    }
+
+    @Test
+    void filtersBeforeAnyPublicationAre503() throws Exception {
+        startWithoutIndex();
+
+        assertError(get("/search/filters"), 503, "INDEX_NOT_READY", null);
+    }
+
+    // ---------------------------------------------------------------- MongoDB down
+
     @Test
     void mongoNotAnsweringIs503StorageUnavailable() throws Exception {
         startWithFixture((collection, terms) -> {

@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Entry point of the Search Service: loads the published index version from MongoDB and
- * serves the API of api/openapi.yaml (GET /search, GET /status; /books and /search/filters in DP-05).
+ * serves the API of api/openapi.yaml: GET /search, /books/{book_id}, /search/filters and /status.
  *
  * Configuration (environment variables):
  *   SEARCH_PORT       HTTP port (default 7003)
