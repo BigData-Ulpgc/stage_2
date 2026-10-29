@@ -5,16 +5,20 @@ import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.config.MongoSettings;
 import es.ulpgc.bigdata.datamart.metadata.MongoMetadataRepository;
+import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.http.ServiceServer;
+import es.ulpgc.bigdata.search.http.SearchApi;
 import es.ulpgc.bigdata.search.index.IndexSnapshotLoader;
+import es.ulpgc.bigdata.search.index.MongoPostingSource;
 import es.ulpgc.bigdata.search.index.SnapshotHolder;
+import es.ulpgc.bigdata.search.query.SearchEngine;
 import io.javalin.Javalin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Entry point of the Search Service: loads the published index version from MongoDB and
- * serves GET /status. The search endpoints of api/openapi.yaml are added in DP-04 and DP-05.
+ * serves the API of api/openapi.yaml (GET /search, GET /status; /books and /search/filters in DP-05).
  *
  * Configuration (environment variables):
  *   SEARCH_PORT       HTTP port (default 7003)
@@ -45,7 +49,8 @@ public final class App {
                 new IndexSnapshotLoader(database, new MongoMetadataRepository(database)));
         loadFirstSnapshot(snapshots);
 
-        Javalin server = ServiceServer.create(SERVICE_NAME, threads, snapshots::status);
+        SearchApi api = new SearchApi(snapshots, new SearchEngine(new MongoPostingSource(database)), Tokenizer.standard());
+        Javalin server = api.create(SERVICE_NAME, threads);
         server.start(port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             server.stop();
