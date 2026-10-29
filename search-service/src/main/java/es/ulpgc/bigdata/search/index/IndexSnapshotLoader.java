@@ -1,154 +1,94 @@
 package es.ulpgc.bigdata.search.index;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Projections;
+import es.ulpgc.bigdata.datamart.metadata.MetadataRepository;
+import es.ulpgc.bigdata.model.BookMetadata;
+import org.bson.Document;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.UncheckedIOException;
-import java.lang.reflect.Type;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
-import java.util.TreeSet;
-import java.util.regex.Pattern;
 
 /**
- * Loads the published index version from the datamarts directory (contracts §6.3 and §6.5):
+ * Builds the snapshot of the published index version from MongoDB (contract §6.5):
  *
  * <pre>
- * datamarts/
- *   metadata.db                               books table (may be ahead of the index)
- *   index/CURRENT                             contains e.g. "v000042"
- *   index/versions/v000042/inverted_index.json {"term": [id, ...], ...}
- *   index/versions/v000042/manifest.json       {"version": 42, "books": 187, "published_at": "..."}
+ *   index_meta   {_id: "CURRENT", version: 42, collection: "inverted_index", ...}   which version is visible
+ *   index_books  {_id: 1342, version: 41}                                         one document per published book
+ *   books        {_id: 1342, title: ..., author: ..., language: ..., year: ...}   metadata (MetadataRepository)
  * </pre>
  *
- * Search starts from the ids of the index: books that are in metadata.db but not yet in the
- * published index are not visible.
+ * Order of the reads: CURRENT first, then the books with version &lt;= CURRENT.version.
+ * Indexing publishes V+1 by inserting its books in index_books and only then switching
+ * CURRENT (one document, so the switch is atomic). Whatever moment this runs, it sees either
+ * all of version V or all of V+1, never part of V+1.
+ *
+ * Search only reads: it never writes to any of these collections.
  */
 public final class IndexSnapshotLoader {
 
-    private static final Pattern VERSION_NAME = Pattern.compile("v\\d{6}");
-    private static final Type INDEX_TYPE = new TypeToken<Map<String, int[]>>() {}.getType();
-    private static final Gson GSON = new Gson();
+    public static final String INDEX_META = "index_meta";
+    public static final String INDEX_BOOKS = "index_books";
+    public static final String CURRENT = "CURRENT";
 
-    private IndexSnapshotLoader() {
+    private final MongoDatabase database;
+    private final MetadataRepository metadata;
+
+    public IndexSnapshotLoader(MongoDatabase database, MetadataRepository metadata) {
+        this.database = Objects.requireNonNull(database, "database");
+        this.metadata = Objects.requireNonNull(metadata, "metadata");
     }
 
     /**
-     * Loads the version CURRENT points to.
+     * The snapshot of the version CURRENT points to.
      *
-     * @return empty if nothing has been published yet (no CURRENT file): the API answers 503
-     * @throws IllegalStateException if CURRENT points to a missing or inconsistent version
+     * @return empty if nothing has been published yet (no CURRENT document): the API answers 503
+     * @throws IllegalStateException if CURRENT does not follow the contract
+     * @throws com.mongodb.MongoException if MongoDB does not answer
      */
-    public static Optional<IndexSnapshot> loadCurrent(Path datamartsDir) {
-        Path current = datamartsDir.resolve("index").resolve("CURRENT");
-        if (!Files.exists(current)) {
+    public Optional<IndexSnapshot> loadCurrent() {
+        Document current = database.getCollection(INDEX_META).find(Filters.eq("_id", CURRENT)).first();
+        if (current == null) {
             return Optional.empty();
         }
-        String version = readString(current).strip();
-        if (!VERSION_NAME.matcher(version).matches()) {
-            throw new IllegalStateException("CURRENT contains an invalid version name: '" + version + "'");
+        Number version = current.get("version", Number.class);
+        String collection = current.getString("collection");
+        if (version == null || collection == null || collection.isBlank()) {
+            throw new IllegalStateException("index_meta CURRENT must have version and collection: " + current.toJson());
         }
-        return Optional.of(load(datamartsDir, version));
+        List<Integer> ids = publishedIds(version.intValue());
+        return Optional.of(new IndexSnapshot(version.intValue(), collection, metadataOf(ids)));
     }
 
-    /** Loads one specific version (used by loadCurrent and by tests). */
-    public static IndexSnapshot load(Path datamartsDir, String version) {
-        Path versionDir = datamartsDir.resolve("index").resolve("versions").resolve(version);
-        Path indexFile = versionDir.resolve("inverted_index.json");
-        Path manifestFile = versionDir.resolve("manifest.json");
-        if (!Files.exists(indexFile) || !Files.exists(manifestFile)) {
-            throw new IllegalStateException("Index version " + version + " is incomplete or missing in " + versionDir);
-        }
-
-        Map<String, int[]> postings = readJson(indexFile, INDEX_TYPE);
-        TreeSet<Integer> bookIds = new TreeSet<>();
-        for (Map.Entry<String, int[]> entry : postings.entrySet()) {
-            checkSortedWithoutDuplicates(entry.getKey(), entry.getValue());
-            for (int id : entry.getValue()) {
-                bookIds.add(id);
-            }
-        }
-
-        JsonObject manifest = readJson(manifestFile, JsonObject.class);
-        int declaredBooks = manifest.get("books").getAsInt();
-        if (declaredBooks != bookIds.size()) {
-            throw new IllegalStateException("manifest.json of " + version + " declares " + declaredBooks
-                    + " books but the index contains " + bookIds.size());
-        }
-
-        Map<Integer, BookRecord> books = readMetadata(datamartsDir.resolve("metadata.db"), bookIds);
-        return new IndexSnapshot(version, postings, books, bookIds);
+    /** Ids of index_books with version &lt;= the given one (only the _id is transferred). */
+    private List<Integer> publishedIds(int version) {
+        List<Integer> ids = new ArrayList<>();
+        database.getCollection(INDEX_BOOKS)
+                .find(Filters.lte("version", version))
+                .projection(Projections.include("_id"))
+                .forEach(doc -> ids.add(doc.get("_id", Number.class).intValue()));
+        return ids;
     }
 
-    /** Reads the metadata of the given books; a book without a row gets an all-null record. */
-    private static Map<Integer, BookRecord> readMetadata(Path dbFile, TreeSet<Integer> bookIds) {
-        Map<Integer, BookRecord> books = new HashMap<>();
-        for (int id : bookIds) {
-            books.put(id, BookRecord.withoutMetadata(id));
+    /**
+     * Metadata of the published ids. books may be AHEAD of the index (Indexing saves the
+     * metadata before publishing), never behind; if a published id has no metadata anyway,
+     * the book stays visible with null fields instead of disappearing from the results.
+     */
+    private List<BookMetadata> metadataOf(List<Integer> ids) {
+        Map<Integer, BookMetadata> found = new HashMap<>();
+        for (BookMetadata book : metadata.findByIds(ids)) {
+            found.put(book.bookId(), book);
         }
-        if (!Files.exists(dbFile)) {
-            return books;
+        List<BookMetadata> result = new ArrayList<>(ids.size());
+        for (int id : ids) {
+            result.add(found.getOrDefault(id, new BookMetadata(id, null, null, null, null, null, null, null, null)));
         }
-        Properties readOnly = new Properties();
-        readOnly.setProperty("open_mode", "1");          // SQLITE_OPEN_READONLY: Search never writes
-        String sql = "SELECT book_id, title, author, language, year, year_source, release_date FROM books";
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.toAbsolutePath(), readOnly);
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet rows = statement.executeQuery()) {
-            while (rows.next()) {
-                int id = rows.getInt("book_id");
-                if (bookIds.contains(id)) {               // metadata.db may be ahead of the index
-                    int yearValue = rows.getInt("year");
-                    Integer year = rows.wasNull() ? null : yearValue;   // must follow getInt directly
-                    books.put(id, new BookRecord(id,
-                            rows.getString("title"),
-                            rows.getString("author"),
-                            rows.getString("language"),
-                            year,
-                            rows.getString("year_source"),
-                            rows.getString("release_date")));
-                }
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot read " + dbFile, e);
-        }
-        return books;
-    }
-
-    private static void checkSortedWithoutDuplicates(String term, int[] ids) {
-        for (int i = 1; i < ids.length; i++) {
-            if (ids[i] <= ids[i - 1]) {
-                throw new IllegalStateException("Posting list of '" + term + "' is not strictly ascending");
-            }
-        }
-    }
-
-    private static <T> T readJson(Path file, Type type) {
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            return GSON.fromJson(reader, type);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Cannot read " + file, e);
-        }
-    }
-
-    private static String readString(Path file) {
-        try {
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Cannot read " + file, e);
-        }
+        return result;
     }
 }
