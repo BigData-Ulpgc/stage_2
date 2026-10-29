@@ -2,8 +2,9 @@
 <!--
   Code shared by every service (owner: Daniel Rodríguez; common/coordination: Carlos Falcón).
   A plain library jar, not executable: no shade plugin and no main class.
-  Stage 1 code migrated in DR-02: model, datalake (range), tokenizer + stopwords, inverted
-  index (MongoDB) and SQLite metadata. config holds Env, DataLayout and MongoSettings.
+  Stage 1 code migrated in DR-02: model, datalake (range), tokenizer + stopwords and inverted
+  index (MongoDB). Metadata in MongoDB too since DR-04 (MongoMetadataRepository, collection
+  "books"). config holds Env, DataLayout and MongoSettings.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -28,12 +29,7 @@
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
         </dependency>
-        <!-- JDBC driver of metadata.db (SqliteMetadataRepository) -->
-        <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
-        </dependency>
-        <!-- Inverted index (MongoInvertedIndex) -->
+        <!-- Inverted index (MongoInvertedIndex) and metadata (MongoMetadataRepository) -->
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver-sync</artifactId>

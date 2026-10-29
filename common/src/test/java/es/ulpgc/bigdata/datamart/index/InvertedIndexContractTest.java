@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.datamart.index;
 
+import es.ulpgc.bigdata.testsupport.MongoTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;

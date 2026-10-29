@@ -22,7 +22,5 @@ class DataLayoutTest {
         DataLayout layout = DataLayout.fromEnv(Env.of(Map.of("DATA_DIR", "/data")));
 
         assertEquals(Path.of("/data/datalake/range"), layout.datalakeDir());
-        assertEquals(Path.of("/data/datamarts"), layout.datamartsDir());
-        assertEquals(Path.of("/data/datamarts/metadata.db"), layout.metadataDb());
     }
 }
