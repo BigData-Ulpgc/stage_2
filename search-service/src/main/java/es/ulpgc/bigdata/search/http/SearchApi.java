@@ -48,6 +48,8 @@ public final class SearchApi {
     public Javalin create(String serviceName, int maxThreads) {
         Javalin app = ServiceServer.create(serviceName, maxThreads, snapshots::status);
         app.get("/search", this::search);
+        app.get("/search/filters", this::filters);
+        app.get("/books/{book_id}", this::book);
         app.exception(ApiException.class, (e, ctx) -> error(ctx, e.status(), e.code(), e.getMessage(), e.field()));
         app.exception(MongoException.class, (e, ctx) -> storageUnavailable(ctx, e));
         app.exception(MetadataRepositoryException.class, (e, ctx) -> storageUnavailable(ctx, e));
@@ -98,6 +100,64 @@ public final class SearchApi {
             filters.put("year", Integer.parseInt(year.strip()));   // already validated
         }
         return filters;
+    }
+
+    // ------------------------------------------------------------------
+    // GET /books/{book_id}
+    // ------------------------------------------------------------------
+
+    /** Metadata of one book of the snapshot; 404 if it is not published (even if it is indexed). */
+    private void book(Context ctx) {
+        int bookId = bookId(ctx.pathParam("book_id"));            // 400 before looking at the index
+        IndexSnapshot snapshot = snapshot();
+        BookMetadata book = snapshot.book(bookId).orElseThrow(() -> new ApiException(404, "NOT_FOUND",
+                "book " + bookId + " is not in the published index", "book_id"));
+
+        Map<String, Object> body = summary(book);
+        body.put("year_source", book.yearSource() == null ? null : book.yearSource().key());
+        body.put("release_date", book.releaseDate());
+        body.put("index_version", snapshot.version());
+        ctx.json(body);
+    }
+
+    private static int bookId(String text) {
+        try {
+            int id = Integer.parseInt(text);
+            if (id >= 0) {
+                return id;
+            }
+        } catch (NumberFormatException e) {
+            // falls through to the 400
+        }
+        throw ApiException.invalid("book_id", "book_id must be a non-negative integer");
+    }
+
+    // ------------------------------------------------------------------
+    // GET /search/filters
+    // ------------------------------------------------------------------
+
+    /** Languages and year range of the snapshot, precomputed when it was built. */
+    private void filters(Context ctx) {
+        IndexSnapshot snapshot = snapshot();
+        IndexSnapshot.FilterValues values = snapshot.filterValues();
+
+        List<Map<String, Object>> languages = new ArrayList<>();
+        values.languages().forEach((code, books) -> {
+            Map<String, Object> language = new LinkedHashMap<>();
+            language.put("code", code);
+            language.put("books", books);
+            languages.add(language);
+        });
+        Map<String, Object> years = new LinkedHashMap<>();
+        years.put("min", values.minYear());
+        years.put("max", values.maxYear());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("books", snapshot.bookCount());
+        body.put("languages", languages);
+        body.put("years", years);
+        body.put("index_version", snapshot.version());
+        ctx.json(body);
     }
 
     // ------------------------------------------------------------------

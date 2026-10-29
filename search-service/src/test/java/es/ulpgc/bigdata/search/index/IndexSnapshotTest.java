@@ -39,6 +39,34 @@ class IndexSnapshotTest {
     }
 
     @Test
+    void filterValuesCountLanguagesAndSpanTheYears() {
+        IndexSnapshot snapshot = new IndexSnapshot(1, "c", List.of(
+                withLanguageAndYear(1, "en", 1998), withLanguageAndYear(2, "fr", 2006),
+                withLanguageAndYear(3, "en", 1926), withLanguageAndYear(4, "de", null),
+                withLanguageAndYear(5, null, 2004)));
+
+        IndexSnapshot.FilterValues values = snapshot.filterValues();
+
+        assertEquals(List.of("en", "de", "fr"), List.copyOf(values.languages().keySet()));   // 2, then ties by code
+        assertEquals(2, values.languages().get("en"));
+        assertEquals(1926, values.minYear());
+        assertEquals(2006, values.maxYear());
+    }
+
+    @Test
+    void withoutYearsTheRangeIsNull() {
+        IndexSnapshot.FilterValues values = new IndexSnapshot(1, "c", List.of(book(1))).filterValues();
+
+        assertEquals(null, values.minYear());
+        assertEquals(null, values.maxYear());
+    }
+
+    private static BookMetadata withLanguageAndYear(int id, String language, Integer year) {
+        return new BookMetadata(id, null, null, language, year,
+                year == null ? null : es.ulpgc.bigdata.model.YearSource.RELEASE_DATE, null, null, null);
+    }
+
+    @Test
     void cannotBeChangedFromOutside() {
         List<BookMetadata> input = new ArrayList<>(List.of(book(1)));
         IndexSnapshot snapshot = new IndexSnapshot(1, "c", input);

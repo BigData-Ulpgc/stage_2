@@ -4,6 +4,8 @@ import es.ulpgc.bigdata.model.BookMetadata;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SortedMap;
@@ -29,6 +31,18 @@ public final class IndexSnapshot {
     private final String collection;
     /** book_id -> metadata of every published book, ascending by id. */
     private final SortedMap<Integer, BookMetadata> books;
+    /** Computed once here: the snapshot never changes, so neither do they (GET /search/filters). */
+    private final FilterValues filterValues;
+
+    /**
+     * Values a front-end can offer as filters in this version.
+     *
+     * @param languages ISO code -> number of books, most frequent first (ties by code);
+     *                  books without a recognised language are not counted
+     * @param minYear   smallest year of a published book, null if no book has a year
+     */
+    public record FilterValues(Map<String, Integer> languages, Integer minYear, Integer maxYear) {
+    }
 
     public IndexSnapshot(int version, String collection, Collection<BookMetadata> publishedBooks) {
         this.version = version;
@@ -38,6 +52,27 @@ public final class IndexSnapshot {
             byId.put(book.bookId(), book);
         }
         this.books = Collections.unmodifiableSortedMap(byId);
+        this.filterValues = computeFilterValues(byId.values());
+    }
+
+    private static FilterValues computeFilterValues(Collection<BookMetadata> books) {
+        Map<String, Integer> counts = new TreeMap<>();
+        Integer min = null;
+        Integer max = null;
+        for (BookMetadata book : books) {
+            if (book.language() != null) {
+                counts.merge(book.language(), 1, Integer::sum);
+            }
+            if (book.year() != null) {
+                min = min == null ? book.year() : Math.min(min, book.year());
+                max = max == null ? book.year() : Math.max(max, book.year());
+            }
+        }
+        Map<String, Integer> byFrequency = new LinkedHashMap<>();
+        counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())   // stable: ties keep code order
+                .forEach(e -> byFrequency.put(e.getKey(), e.getValue()));
+        return new FilterValues(Collections.unmodifiableMap(byFrequency), min, max);
     }
 
     /** Version of index_meta CURRENT this snapshot was built from, e.g. 42. */
@@ -67,5 +102,10 @@ public final class IndexSnapshot {
 
     public int bookCount() {
         return books.size();
+    }
+
+    /** Languages and year range present in this version. */
+    public FilterValues filterValues() {
+        return filterValues;
     }
 }
