@@ -239,12 +239,18 @@ class MongoInvertedIndexTest {
     }
 
     @Test
-    void conClienteCompartidoTambienCreaElIndiceUnico() {
+    void conClienteCompartidoElIndiceUnicoSeCreaEnElPrimerFlush() {
         index.clear();                                        // the collection does not exist now
-        assertFalse(hasUniqueIndexOnTerm());
 
         try (MongoInvertedIndex onShared = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName)) {
-            assertTrue(hasUniqueIndexOnTerm());
+            assertFalse(hasUniqueIndexOnTerm(), "el constructor no debe hablar con Mongo");
+
+            onShared.addDocument(10, Set.of("boat"));
+            assertFalse(hasUniqueIndexOnTerm(), "addDocument tampoco: solo acumula en memoria");
+
+            onShared.flush();
+            assertTrue(hasUniqueIndexOnTerm(), "el primer flush lo crea antes de escribir");
+            assertEquals(List.of(10), onShared.postings("boat"));
         }
     }
 

@@ -71,7 +71,10 @@ public class MongoInvertedIndex implements InvertedIndex {
     /** Ids added since the last flush, per term. */
     private final Map<String, SortedSet<Integer>> pending = new HashMap<>();
 
-    /** false after clear: the unique index is recreated before the next write. */
+    /**
+     * false until this object has created the unique index: on a shared client (it is not
+     * created in the constructor) and after clear. flush creates it before the next write.
+     */
     private boolean uniqueIndexReady = false;
 
     // ------------------------------------------------------------------
@@ -121,13 +124,18 @@ public class MongoInvertedIndex implements InvertedIndex {
      * Index on a database of a client the service shares (MongoSettings.openClient), as
      * MongoMetadataRepository does: the index does not own that client, so close() leaves it
      * open and whoever created it closes it when the service stops.
+     *
+     * It does not talk to MongoDB: the unique index on "term" is created at the first flush,
+     * still before the first write. So a service starts (and answers GET /status) while
+     * MongoDB is down, and its requests fail with a MongoException until it comes back,
+     * instead of the process dying and being restarted over and over (DR-05, D4).
      */
     public MongoInvertedIndex(MongoDatabase database, String collectionName) {
         this.ownedClient = null;
         this.database = Objects.requireNonNull(database, "database");
         this.collectionName = Objects.requireNonNull(collectionName, "collectionName");
         this.collection = database.getCollection(collectionName);
-        ensureUniqueIndex();                           // the client is not ours: nothing to close if it fails
+        // uniqueIndexReady stays false: flush creates the unique index before writing.
     }
 
     @Override
@@ -195,7 +203,7 @@ public class MongoInvertedIndex implements InvertedIndex {
             return;
         }
         if (!uniqueIndexReady) {
-            ensureUniqueIndex();
+            ensureUniqueIndex();                        // if Mongo fails here, pending is kept and flush can be retried
         }
         List<WriteModel<Document>> updates = new ArrayList<>(pending.size());
         UpdateOptions upsert = new UpdateOptions().upsert(true);
