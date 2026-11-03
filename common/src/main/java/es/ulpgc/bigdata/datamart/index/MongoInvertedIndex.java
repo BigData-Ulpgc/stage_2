@@ -46,6 +46,10 @@ import java.util.concurrent.TimeUnit;
  *  - $addToSet checks the existing array, so updating very common terms gets slower as the
  *    corpus grows.
  * Not thread-safe (the pending map): Indexing has a single writer (DR-09).
+ *
+ * Two ways to open it: with a connection string it creates and closes its OWN client (tests,
+ * benchmarks); with a MongoDatabase it works on the client the service shares with its other
+ * repositories and never closes it.
  */
 public class MongoInvertedIndex implements InvertedIndex {
 
@@ -55,7 +59,11 @@ public class MongoInvertedIndex implements InvertedIndex {
     private static final String TERM = "term";
     private static final String POSTINGS = "postings";
 
-    private final MongoClient client;
+    /**
+     * The client this index created and must close; null when it received the database of a
+     * client shared by the whole process ("who creates, closes").
+     */
+    private final MongoClient ownedClient;
     private final MongoDatabase database;
     private final String collectionName;
     private final MongoCollection<Document> collection;
@@ -66,29 +74,60 @@ public class MongoInvertedIndex implements InvertedIndex {
     /** false after clear: the unique index is recreated before the next write. */
     private boolean uniqueIndexReady = false;
 
-    /** SPEC database and collection. */
+    // ------------------------------------------------------------------
+    // With its own client (tests, benchmarks, Search's fixture loader)
+    // ------------------------------------------------------------------
+
+    /** SPEC database and collection, with its own client. */
     public MongoInvertedIndex(String connectionString) {
         this(connectionString, DEFAULT_DATABASE, DEFAULT_COLLECTION);
     }
 
-    /** Configurable database and collection (the tests use their own database). */
+    /**
+     * Configurable database and collection (the tests use their own database). Creates its OWN
+     * MongoClient and closes it in close(). A service that also uses other collections should
+     * share one client instead: see {@link #MongoInvertedIndex(MongoDatabase, String)}.
+     */
     public MongoInvertedIndex(String connectionString, String databaseName, String collectionName) {
         Objects.requireNonNull(connectionString, "connectionString");
+        Objects.requireNonNull(databaseName, "databaseName");   // checked before opening anything
         this.collectionName = Objects.requireNonNull(collectionName, "collectionName");
         MongoClientSettings settings = MongoClientSettings.builder()
                 .applyConnectionString(new ConnectionString(connectionString))
                 // If Mongo is not running, fail in 3 s instead of waiting 30 s.
                 .applyToClusterSettings(b -> b.serverSelectionTimeout(3, TimeUnit.SECONDS))
                 .build();
-        this.client = MongoClients.create(settings);
-        this.database = client.getDatabase(Objects.requireNonNull(databaseName, "databaseName"));
+        this.ownedClient = MongoClients.create(settings);
+        this.database = ownedClient.getDatabase(databaseName);
         this.collection = database.getCollection(collectionName);
         try {
             ensureUniqueIndex();                       // also checks that Mongo answers
         } catch (RuntimeException e) {
-            client.close();                            // do not leave the connection open if the constructor fails
+            ownedClient.close();                       // do not leave the connection open if the constructor fails
             throw e;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // On a shared client (the services: one MongoClient per process)
+    // ------------------------------------------------------------------
+
+    /** SPEC collection, in a database of a shared client. */
+    public MongoInvertedIndex(MongoDatabase database) {
+        this(database, DEFAULT_COLLECTION);
+    }
+
+    /**
+     * Index on a database of a client the service shares (MongoSettings.openClient), as
+     * MongoMetadataRepository does: the index does not own that client, so close() leaves it
+     * open and whoever created it closes it when the service stops.
+     */
+    public MongoInvertedIndex(MongoDatabase database, String collectionName) {
+        this.ownedClient = null;
+        this.database = Objects.requireNonNull(database, "database");
+        this.collectionName = Objects.requireNonNull(collectionName, "collectionName");
+        this.collection = database.getCollection(collectionName);
+        ensureUniqueIndex();                           // the client is not ours: nothing to close if it fails
     }
 
     @Override
@@ -192,10 +231,14 @@ public class MongoInvertedIndex implements InvertedIndex {
         if (!names.contains(collectionName)) {
             return 0;
         }
-        try {
-            client.getDatabase("admin").runCommand(new Document("fsync", 1));
-        } catch (RuntimeException e) {
-            // No permission for fsync (e.g. a managed Mongo): the number may lag behind.
+        // fsync only runs against the "admin" database, which a shared MongoDatabase cannot
+        // reach: on a shared client the number may lag behind (to be decided in DR-05, P2).
+        if (ownedClient != null) {
+            try {
+                ownedClient.getDatabase("admin").runCommand(new Document("fsync", 1));
+            } catch (RuntimeException e) {
+                // No permission for fsync (e.g. a managed Mongo): the number may lag behind.
+            }
         }
         Document stats = collection.aggregate(List.of(
                 new Document("$collStats", new Document("storageStats", new Document())))).first();
@@ -211,9 +254,14 @@ public class MongoInvertedIndex implements InvertedIndex {
         return value instanceof Number n ? n.longValue() : 0;
     }
 
-    /** Closes the connection. It does not flush: whoever uses the index decides that. */
+    /**
+     * Closes the client only if this index created it; a shared client stays open for the
+     * rest of the service. It does not flush: whoever uses the index decides that.
+     */
     @Override
     public void close() {
-        client.close();
+        if (ownedClient != null) {
+            ownedClient.close();
+        }
     }
 }

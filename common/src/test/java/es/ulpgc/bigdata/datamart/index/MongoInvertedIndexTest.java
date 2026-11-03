@@ -4,6 +4,7 @@ import es.ulpgc.bigdata.testsupport.MongoTestSupport;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -184,5 +185,68 @@ class MongoInvertedIndexTest {
         raw.insertOne(new Document("term", "boat").append("postings", List.of(20L, 10L, 20L)));
 
         assertEquals(List.of(10, 20), index.postings("boat"));
+    }
+
+    // --- Who owns the client: "who creates, closes" (DR-05) ----------------------
+
+    @Test
+    void conClientePropioCloseCierraSuCliente() {
+        index.close();
+
+        // The driver refuses to work with a closed client.
+        assertThrows(IllegalStateException.class, () -> index.postings("boat"));
+
+        index = open();                                       // so that tearDown can clean up
+    }
+
+    @Test
+    void conClienteCompartidoCloseNoCierraElCliente() {
+        // rawClient plays the client of the service: it is created outside the index.
+        MongoInvertedIndex onShared = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName);
+        onShared.addDocument(10, Set.of("boat"));
+        onShared.flush();
+
+        onShared.close();
+
+        // The client keeps working for the rest of the service...
+        assertEquals(1, raw.countDocuments());
+        // ...and a new index on the same client sees what the first one saved.
+        try (MongoInvertedIndex again = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName)) {
+            assertEquals(List.of(10), again.postings("boat"));
+        }
+    }
+
+    @Test
+    void variosIndicesSobreElMismoClienteNoSeMezclan() {
+        String otherName = MongoTestSupport.newCollectionName("test");
+        try (MongoInvertedIndex first = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName);
+             MongoInvertedIndex second = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), otherName)) {
+            first.addDocument(10, Set.of("boat"));
+            second.addDocument(20, Set.of("boat"));
+            first.flush();
+            second.flush();
+
+            assertEquals(List.of(10), first.postings("boat"));
+            assertEquals(List.of(20), second.postings("boat"));
+        } finally {
+            rawClient.getDatabase(TEST_DB).getCollection(otherName).drop();
+        }
+    }
+
+    @Test
+    void conClienteCompartidoTambienCreaElIndiceUnico() {
+        index.clear();                                        // the collection does not exist now
+        assertFalse(hasUniqueIndexOnTerm());
+
+        try (MongoInvertedIndex onShared = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName)) {
+            assertTrue(hasUniqueIndexOnTerm());
+        }
+    }
+
+    @Test
+    void elConstructorConClienteCompartidoRechazaNulos() {
+        assertThrows(NullPointerException.class, () -> new MongoInvertedIndex((MongoDatabase) null));
+        assertThrows(NullPointerException.class,
+                () -> new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), null));
     }
 }
