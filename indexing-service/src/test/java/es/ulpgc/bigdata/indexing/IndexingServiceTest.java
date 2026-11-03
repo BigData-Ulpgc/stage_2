@@ -140,7 +140,7 @@ class IndexingServiceTest {
     void siFallaElFlushElLockSeSueltaYOtroHiloPuedeIndexar() throws Exception {
         datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
         datalake.save(new RawBook(84, HEADER_1342, "Frankenstein monster"));
-        index.failNextFlush = true;
+        index.failNextFlushWith = new IllegalStateException("flush falla (simulado)");
 
         assertThrows(IllegalStateException.class, () -> service.update(1342));
 
@@ -200,7 +200,8 @@ class IndexingServiceTest {
         private final AtomicInteger writersNow = new AtomicInteger();
         final AtomicInteger maxWritersAtOnce = new AtomicInteger();
         final AtomicInteger flushes = new AtomicInteger();
-        volatile boolean failNextFlush = false;
+        /** If not null, the next flush throws it (once). */
+        volatile RuntimeException failNextFlushWith = null;
 
         private void enter() {
             int now = writersNow.incrementAndGet();
@@ -224,9 +225,10 @@ class IndexingServiceTest {
         public void flush() {
             enter();
             try {
-                if (failNextFlush) {
-                    failNextFlush = false;
-                    throw new IllegalStateException("flush falla (simulado)");
+                RuntimeException failure = failNextFlushWith;
+                if (failure != null) {
+                    failNextFlushWith = null;
+                    throw failure;
                 }
                 delegate.flush();
                 flushes.incrementAndGet();
