@@ -40,7 +40,11 @@ public interface InvertedIndex extends AutoCloseable {
     /** Empties the index completely, in memory and on disk. */
     void clear();
 
-    /** Bytes the index takes on disk right now (0 if it does not use disk). For the benchmark. */
+    /**
+     * Bytes the index takes on disk (0 if it does not use disk). For the benchmark and the
+     * status endpoint. Exact right now, except MongoInvertedIndex on a shared client, whose
+     * number may lag up to one MongoDB checkpoint (about 60 s) behind the last flush.
+     */
     long diskUsageBytes();
 
     /** Releases resources (connections, open files). Does not imply flush. */

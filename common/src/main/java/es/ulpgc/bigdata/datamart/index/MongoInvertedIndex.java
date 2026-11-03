@@ -221,9 +221,13 @@ public class MongoInvertedIndex implements InvertedIndex {
      * Bytes Mongo reports on disk for this collection: data (storageSize)
      * plus indexes (totalIndexSize). 0 if the collection does not exist.
      *
-     * An fsync is requested first: WiredTiger only moves the data to the collection file
-     * at each checkpoint (about 60 s); right after writing, storageSize would still be
-     * that of the almost empty collection.
+     * WiredTiger only moves the data to the collection file at each checkpoint (about 60 s):
+     * right after writing, storageSize is still smaller than it will be. So:
+     *  - with its OWN client (benchmarks): an fsync is requested first and the number is exact.
+     *  - on a SHARED client (the services, GET /index/status): no fsync, so the number may lag
+     *    up to one checkpoint behind. fsync only runs against the "admin" database, which a
+     *    MongoDatabase cannot reach, and it is expensive (it writes everything pending to
+     *    disk, close to 1 s with 50,000 terms) for an endpoint that is polled often.
      */
     @Override
     public long diskUsageBytes() {
@@ -231,8 +235,6 @@ public class MongoInvertedIndex implements InvertedIndex {
         if (!names.contains(collectionName)) {
             return 0;
         }
-        // fsync only runs against the "admin" database, which a shared MongoDatabase cannot
-        // reach: on a shared client the number may lag behind (to be decided in DR-05, P2).
         if (ownedClient != null) {
             try {
                 ownedClient.getDatabase("admin").runCommand(new Document("fsync", 1));

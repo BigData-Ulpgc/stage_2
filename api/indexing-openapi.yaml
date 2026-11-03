@@ -364,7 +364,11 @@ components:
         index_size_MB:
           type: number
           minimum: 0
-          description: Size in MongoDB of the current inverted index collection, data plus indexes (MB).
+          description: |
+            Size in MongoDB of the current inverted index collection, data plus indexes (MB).
+            Approximate: MongoDB moves new data to the collection file at each checkpoint
+            (about every 60 s), so right after indexing the value may still be lower than it
+            will be. Exact sizes are measured by the benchmarks, not by this endpoint.
         published_version:
           type: integer
           nullable: true
