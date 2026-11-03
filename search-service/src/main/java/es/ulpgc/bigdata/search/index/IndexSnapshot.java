@@ -1,60 +1,71 @@
 package es.ulpgc.bigdata.search.index;
 
-import java.util.Arrays;
+import es.ulpgc.bigdata.model.BookMetadata;
+
+import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.SortedSet;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
- * One published version of the index, loaded in memory and never modified afterwards.
+ * One published version of the index, as Search sees it: the version number, the MongoDB
+ * collection that holds its posting lists, and the books published up to that version with
+ * their metadata (contract §6.5 of the plan).
  *
- * Immutability is what makes concurrent searches safe without locks: every request takes
- * a reference to a snapshot and uses only that one, so a response never mixes two index
- * versions. A new version is loaded into a NEW snapshot and swapped in (DP-06).
+ * It is never modified after it is built. That is what makes concurrent requests safe
+ * without locks: a request takes ONE snapshot when it starts and uses only that one, so a
+ * response never mixes two versions. A new version is loaded into a NEW snapshot and swapped
+ * in (SnapshotHolder; reload on publication in DP-06).
+ *
+ * The posting lists are NOT here: they stay in MongoDB and each request reads only those of
+ * its terms. The index may contain books that are indexed but not yet published; whoever
+ * searches must keep only the ids for which isPublished is true.
  */
 public final class IndexSnapshot {
 
-    private final String version;
-    private final Map<String, int[]> postings;     // term -> ids, ascending, no duplicates
-    private final Map<Integer, BookRecord> books;  // every book id that appears in the index
-    private final SortedSet<Integer> bookIds;
+    private final int version;
+    private final String collection;
+    /** book_id -> metadata of every published book, ascending by id. */
+    private final SortedMap<Integer, BookMetadata> books;
 
-    IndexSnapshot(String version, Map<String, int[]> postings,
-                  Map<Integer, BookRecord> books, SortedSet<Integer> bookIds) {
+    public IndexSnapshot(int version, String collection, Collection<BookMetadata> publishedBooks) {
         this.version = version;
-        this.postings = Collections.unmodifiableMap(postings);
-        this.books = Collections.unmodifiableMap(books);
-        this.bookIds = Collections.unmodifiableSortedSet(bookIds);
+        this.collection = Objects.requireNonNull(collection, "collection");
+        TreeMap<Integer, BookMetadata> byId = new TreeMap<>();
+        for (BookMetadata book : publishedBooks) {
+            byId.put(book.bookId(), book);
+        }
+        this.books = Collections.unmodifiableSortedMap(byId);
     }
 
-    /** Version name as written in CURRENT, e.g. "v000001". */
-    public String version() {
+    /** Version of index_meta CURRENT this snapshot was built from, e.g. 42. */
+    public int version() {
         return version;
     }
 
-    /** Ids of the books containing the term, ascending; empty if the term is unknown. */
-    public List<Integer> postings(String term) {
-        int[] ids = postings.get(term);
-        return ids == null ? List.of() : Arrays.stream(ids).boxed().toList();
+    /** MongoDB collection with the posting lists of this version (CURRENT.collection). */
+    public String collection() {
+        return collection;
     }
 
-    /** Metadata of a book of this version; empty if the book is not in the published index. */
-    public Optional<BookRecord> book(int bookId) {
+    /** Is the book visible in this version? Books indexed after it are not. */
+    public boolean isPublished(int bookId) {
+        return books.containsKey(bookId);
+    }
+
+    /** Metadata of a published book; empty if it is not published in this version. */
+    public Optional<BookMetadata> book(int bookId) {
         return Optional.ofNullable(books.get(bookId));
     }
 
-    /** All book ids of this version, ascending. */
-    public SortedSet<Integer> bookIds() {
-        return bookIds;
+    /** Every published book, ascending by book_id. */
+    public Collection<BookMetadata> books() {
+        return books.values();
     }
 
     public int bookCount() {
-        return bookIds.size();
-    }
-
-    public int termCount() {
-        return postings.size();
+        return books.size();
     }
 }

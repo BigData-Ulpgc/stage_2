@@ -35,10 +35,6 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
-        </dependency>
     </dependencies>
 
     <build>
@@ -48,12 +44,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
             </plugin>
-            <!-- Regenerates the test fixture: mvn test-compile exec:java -Dexec.args="..." (see README) -->
+            <!-- Loads stage_1/sample_dataset into MongoDB: mvn test-compile exec:java -Dexec.args="..." (see README) -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>es.ulpgc.bigdata.search.fixture.SampleFixtureGenerator</mainClass>
+                    <mainClass>es.ulpgc.bigdata.search.fixture.SampleDatasetLoader</mainClass>
                     <classpathScope>test</classpathScope>
                 </configuration>
             </plugin>
