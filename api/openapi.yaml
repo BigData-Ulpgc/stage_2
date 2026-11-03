@@ -190,7 +190,8 @@ paths:
         **Provider:** Search Service. **Consumers:** front-end (book detail page).
 
         Only books contained in the published index version are visible; a book that has
-        been ingested but not yet published returns 404.
+        been ingested or indexed but not yet published returns 404. A `book_id` that is not a
+        non-negative integer returns 400 before the index is looked at.
       parameters:
         - name: book_id
           in: path
@@ -238,7 +239,7 @@ paths:
       summary: Filter values available in the published index
       description: |
         **Provider:** Search Service. **Consumers:** front-end (to fill the language selector
-        and the year range).
+        and the year range). Computed once per index version, when Search loads it.
       responses:
         '200':
           description: Available filter values.
@@ -350,6 +351,9 @@ components:
         books: { type: integer, description: Books in the published index. }
         languages:
           type: array
+          description: |
+            Languages present in the published index, most frequent first (ties by code).
+            Books whose language is not one of the supported codes are not counted.
           items:
             type: object
             required: [code, books]
@@ -358,6 +362,7 @@ components:
               books: { type: integer, example: 170 }
         years:
           type: object
+          description: Smallest and largest `year` of the published books; both null if no book has a year.
           required: [min, max]
           properties:
             min: { type: integer, nullable: true }
