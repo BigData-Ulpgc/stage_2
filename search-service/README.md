@@ -26,6 +26,22 @@ curl localhost:7003/status                      # {"service":"search-service","s
 The service starts even if MongoDB is down or nothing is published yet: `/status` answers with
 `index_version: null` and the API returns 503 until a version is loaded.
 
+## How a search is answered (DP-04)
+
+`GET /search?q=river&author=twain&offset=0&limit=20` (full contract in `../api/openapi.yaml`):
+
+1. `SearchQuery.parse` validates every parameter (400 with the common error format otherwise) and
+   tokenizes `q` with `Tokenizer.standard()`, the same tokenizer Indexing uses.
+2. The request takes the current snapshot once (503 `INDEX_NOT_READY` if there is none).
+3. `MongoPostingSource` reads the posting lists of all the terms with ONE query
+   (`{term: {$in: [...]}}`) on the snapshot's collection.
+4. `SearchEngine` walks the shortest list and keeps the ids every other list has (AND), drops
+   the ids not published in the snapshot, applies `author` / `language` / `year` on the snapshot
+   metadata in memory, and cuts the page. Results are sorted by `book_id`; `total` counts all
+   matches.
+
+If MongoDB does not answer, the response is 503 `STORAGE_UNAVAILABLE`.
+
 ## What Search reads from MongoDB
 
 ```
