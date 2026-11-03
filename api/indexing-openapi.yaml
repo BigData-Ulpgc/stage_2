@@ -1,0 +1,447 @@
+openapi: 3.0.3
+info:
+  title: Stage 2 Search Engine — Indexing Service API
+  version: 0.1.0
+  description: |
+    Internal API of the **Indexing Service**, plus its operational status endpoint. None of
+    these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
+    reached inside the Docker network (`http://indexing:7002`).
+
+    **Status: draft v0.1.0** (DR-05, plan v3.1). `POST /index/publish` answers 501 until DR-08
+    and `POST /index/rebuild` until DR-10; their contract is already the final one. The
+    inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
+    `api/openapi.yaml`.
+
+    ## Role in the workflow
+    In normal operation books are indexed through the Hazelcast `index-queue` (DR-06), not
+    through HTTP: the HTTP endpoints are for the Control Module (publication), for
+    administration (single update, rebuild) and for the functional validation. Both paths run
+    the same code.
+
+    1. Ingestion writes `<id>._READY` and puts the id in `index-queue`.
+    2. Indexing reads the book, saves its metadata (`books`) and its terms (`inverted_index`):
+       the book is **indexed**, but Search does not see it yet.
+    3. The Control Module calls `POST /index/publish` every M books or T seconds: the indexed
+       books become **published** in a new index version, and Search loads it.
+
+    ## Common rules
+    - All responses are JSON (`application/json; charset=utf-8`).
+    - **Errors** always use the `Error` schema of the Search API, with a machine-readable `code`:
+      `INVALID_PARAMETER` (400), `NOT_FOUND` (404), `REBUILD_IN_PROGRESS` (409),
+      `NOT_IMPLEMENTED` (501, temporary), `STORAGE_UNAVAILABLE` (503, MongoDB does not answer),
+      `INTERNAL_ERROR` (500).
+    - **Writes are serialized** inside the service: concurrent requests are answered correctly,
+      one write at a time (one writer per process; DR-09 adds the `index-writer` lock across
+      replicas).
+    - **Timeouts and retries (callers).** Connect timeout 2 s; request timeout 30 s for
+      `update` and `publish`, 5 s for the status endpoints. Every `POST` is safe to retry after
+      a timeout, a connection error or a 503 (see the idempotency notes of each one); use a
+      growing delay between retries (1 s, 2 s, 4 s…).
+  contact:
+    name: Daniel Rodríguez (Indexing Service, index publication contract)
+
+servers:
+  - url: http://indexing:7002
+    description: Inside the Docker network (Control Module)
+  - url: http://localhost:7002
+    description: One Indexing Service instance started directly (development, validation)
+
+tags:
+  - name: internal
+    description: Consumed by the Control Module or by an operator; never by the front-end.
+  - name: operational
+    description: Health and status checks, consumed by Docker healthchecks and the Control Module.
+
+paths:
+  /index/update/{book_id}:
+    post:
+      tags: [internal]
+      operationId: updateBook
+      summary: Index one book of the datalake
+      description: |
+        **Provider:** Indexing Service. **Consumers:** operators and the functional validation
+        (the Control Module assigns work through `index-queue`, not through this endpoint).
+
+        Reads the book from the datalake, extracts its metadata into the collection `books`
+        and adds its terms to the inverted index.
+
+        **Completion: synchronous.** A 200 means the book IS indexed (metadata and posting
+        lists written in MongoDB). It does **not** mean that Search can find it: the book
+        becomes visible with the next `POST /index/publish`.
+
+        **Idempotency.** Indexing the same book again changes nothing: metadata are replaced
+        by `_id` and posting lists never repeat an id. Two concurrent calls for the same book
+        both answer 200. After a timeout or a 503 the caller can simply call again.
+
+        **Readiness.** Only complete books are indexed: the book must have its `<id>._READY`
+        marker in the datalake (contract §6.2). A book that is missing or still being written
+        gives 404.
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          description: Project Gutenberg book id.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1342
+      responses:
+        '200':
+          description: The book is indexed (not yet published).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+              example:
+                book_id: 1342
+                index: updated
+                terms: 6210
+        '400':
+          $ref: '#/components/responses/InvalidBookId'
+        '404':
+          description: The book is not complete in the datalake (no `<id>._READY`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: NOT_FOUND, message: 'book 999999 is not ready in the datalake', field: book_id }
+        '409':
+          $ref: '#/components/responses/RebuildInProgress'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /index/publish:
+    post:
+      tags: [internal]
+      operationId: publishIndex
+      summary: Make the indexed books visible to Search as a new index version
+      description: |
+        **Provider:** Indexing Service. **Consumers:** Control Module (every `PUBLISH_BATCH`
+        books or `PUBLISH_INTERVAL_S` seconds).
+
+        Publishes version V+1 (contract §6.5): records the books indexed since version V in
+        `index_books` with version V+1, then switches the `CURRENT` document of `index_meta`
+        to V+1 in ONE atomic operation, and announces it with `IndexPublished` on the
+        Hazelcast topic `index-events`. The index itself is never copied.
+
+        **Completion: synchronous.** A 200 means `CURRENT` already points to the returned
+        version; each Search replica loads it when it receives the event (or, if the event is
+        lost, at its next check of `CURRENT`).
+
+        **Idempotency.** If no book was indexed since the last publication, no empty version
+        is created: the answer is 200 with the current version and `books_published: 0`. So a
+        retry after a lost response returns the version that the first call created.
+        Concurrent calls are serialized. A publication interrupted by a crash is completed or
+        undone when the service starts again.
+
+        **Until DR-08** this endpoint answers 501 `NOT_IMPLEMENTED`.
+      responses:
+        '200':
+          description: The returned version is the published one (`CURRENT`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResponse'
+              examples:
+                newVersion:
+                  summary: 13 new books published as version 43
+                  value:
+                    version: 43
+                    books_published: 13
+                    total_books: 200
+                    published_at: '2026-11-03T10:15:00Z'
+                nothingNew:
+                  summary: Nothing indexed since version 43, no new version
+                  value:
+                    version: 43
+                    books_published: 0
+                    total_books: 200
+                    published_at: '2026-11-03T10:15:00Z'
+        '409':
+          $ref: '#/components/responses/RebuildInProgress'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /index/rebuild:
+    post:
+      tags: [internal]
+      operationId: rebuildIndex
+      summary: Rebuild the whole index and metadata from the datalake (asynchronous)
+      description: |
+        **Provider:** Indexing Service. **Consumers:** operators (administration, after a
+        change of tokenizer or stopwords, or to recover from a damaged index).
+
+        Indexes every complete book of the datalake into a NEW collection
+        (`inverted_index_rNN`). When it finishes, `CURRENT` switches to the new collection in
+        ONE atomic operation, so searches keep working on the current index during the whole
+        rebuild and never see a half-built one. The old collection is dropped after a margin.
+
+        **Completion: asynchronous.** A rebuild of 100,000 books takes minutes, longer than an
+        HTTP timeout, so the request is only **accepted** (202) and the work runs in the
+        background. The caller observes progress, completion or failure in the `rebuild` field
+        of `GET /index/status` (`state`: `running` → `done` | `failed`).
+
+        **Duplicates and concurrency.** Only one rebuild runs at a time: a second call while
+        one is running gets 409 and does not start another. While a rebuild runs,
+        `POST /index/update` and `POST /index/publish` also answer 409 (retry later). A
+        failed rebuild leaves the current index untouched; calling again starts from scratch.
+
+        **Until DR-10** this endpoint answers 501 `NOT_IMPLEMENTED`.
+      responses:
+        '202':
+          description: The rebuild has started; follow it with `GET /index/status`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebuildStatus'
+              example:
+                state: running
+                started_at: '2026-11-03T10:20:00Z'
+                finished_at: null
+                processed: 0
+                total: 200
+                error: null
+        '409':
+          $ref: '#/components/responses/RebuildInProgress'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /index/status:
+    get:
+      tags: [internal]
+      operationId: getIndexStatus
+      summary: Statistics of the index and of the indexing process
+      description: |
+        **Provider:** Indexing Service. **Consumers:** Control Module (progress of a rebuild,
+        monitoring), operators and the functional validation.
+
+        Reads its numbers from MongoDB, so it answers 503 when MongoDB does not answer (unlike
+        `GET /status`). Read-only: safe to call at any time.
+      responses:
+        '200':
+          description: Current statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatus'
+              examples:
+                normal:
+                  summary: 200 books indexed, 187 of them published
+                  value:
+                    books_indexed: 200
+                    last_update: '2026-11-03T10:14:52Z'
+                    index_size_MB: 42.7
+                    published_version: 42
+                    books_published: 187
+                    rebuild: null
+                rebuilding:
+                  summary: A rebuild is running
+                  value:
+                    books_indexed: 200
+                    last_update: '2026-11-03T10:14:52Z'
+                    index_size_MB: 42.7
+                    published_version: 43
+                    books_published: 200
+                    rebuild:
+                      state: running
+                      started_at: '2026-11-03T10:20:00Z'
+                      finished_at: null
+                      processed: 85
+                      total: 200
+                      error: null
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /status:
+    get:
+      tags: [operational]
+      operationId: getStatus
+      summary: Liveness of this Indexing process
+      description: |
+        **Provider:** Indexing Service. **Consumers:** Docker healthcheck, Control Module.
+
+        Answers 200 while the process is running. It does NOT contact MongoDB on purpose: if
+        MongoDB is down, restarting the Indexing Service would not fix it, so the healthcheck
+        must not fail because of it. The state of the index is in `GET /index/status`.
+      responses:
+        '200':
+          description: The process is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+              example:
+                service: indexing-service
+                status: running
+
+components:
+  schemas:
+    UpdateResponse:
+      type: object
+      required: [book_id, index, terms]
+      properties:
+        book_id: { type: integer, example: 1342 }
+        index:
+          type: string
+          enum: [updated]
+          description: Always `updated` on success (the book is indexed, not yet published).
+        terms:
+          type: integer
+          minimum: 0
+          description: Number of distinct terms of the book added to the inverted index.
+          example: 6210
+
+    PublishResponse:
+      type: object
+      required: [version, books_published, total_books, published_at]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Version that `CURRENT` points to after the call (the same `index_version` that Search returns).
+          example: 43
+        books_published:
+          type: integer
+          minimum: 0
+          description: Books made visible by THIS call (0 if nothing new was indexed).
+        total_books:
+          type: integer
+          minimum: 0
+          description: Books visible in `version`.
+        published_at:
+          type: string
+          format: date-time
+          description: When `version` was published (UTC).
+
+    RebuildStatus:
+      type: object
+      required: [state, started_at, finished_at, processed, total, error]
+      properties:
+        state:
+          type: string
+          enum: [running, done, failed]
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time, nullable: true }
+        processed:
+          type: integer
+          minimum: 0
+          description: Books indexed so far into the new collection.
+        total:
+          type: integer
+          minimum: 0
+          description: Complete books found in the datalake when the rebuild started.
+        error:
+          type: string
+          nullable: true
+          description: Reason of the failure when `state` is `failed`.
+
+    IndexStatus:
+      type: object
+      required: [books_indexed, last_update, index_size_MB, published_version, books_published, rebuild]
+      properties:
+        books_indexed:
+          type: integer
+          minimum: 0
+          description: Books indexed (published or not).
+        last_update:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the last book was indexed (UTC); null if none yet.
+        index_size_MB:
+          type: number
+          minimum: 0
+          description: Size in MongoDB of the current inverted index collection, data plus indexes (MB).
+        published_version:
+          type: integer
+          nullable: true
+          description: Version that `CURRENT` points to; null if nothing has been published yet.
+        books_published:
+          type: integer
+          minimum: 0
+          description: Books visible in `published_version`.
+        rebuild:
+          nullable: true
+          description: Last rebuild started since the process began; null if none.
+          allOf:
+            - $ref: '#/components/schemas/RebuildStatus'
+
+    ServiceStatus:
+      type: object
+      required: [service, status]
+      properties:
+        service: { type: string, example: indexing-service }
+        status: { type: string, enum: [running] }
+
+    Error:
+      type: object
+      required: [error]
+      description: Same schema as the Search API (`api/openapi.yaml`).
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [INVALID_PARAMETER, NOT_FOUND, REBUILD_IN_PROGRESS, NOT_IMPLEMENTED, STORAGE_UNAVAILABLE, INTERNAL_ERROR]
+            message: { type: string, description: Human-readable explanation. }
+            field:
+              type: string
+              nullable: true
+              description: Parameter that caused the error, if any.
+
+  responses:
+    InvalidBookId:
+      description: '`book_id` is not a positive integer.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INVALID_PARAMETER, message: 'book_id must be a positive integer', field: book_id }
+    RebuildInProgress:
+      description: A rebuild is running; retry when `GET /index/status` shows it finished.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: REBUILD_IN_PROGRESS, message: 'a rebuild is running, retry later', field: null }
+    NotImplemented:
+      description: Temporary, until the task that implements the endpoint (DR-08 publish, DR-10 rebuild).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: NOT_IMPLEMENTED, message: 'POST /index/publish is not implemented yet (DR-08)', field: null }
+    StorageUnavailable:
+      description: MongoDB does not answer within the driver timeout; nothing was changed or the change is safe to repeat. Retry later.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: STORAGE_UNAVAILABLE, message: 'the index storage (MongoDB) does not answer', field: null }
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INTERNAL_ERROR, message: 'internal error', field: null }
