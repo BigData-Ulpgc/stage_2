@@ -109,8 +109,9 @@ should use the client in single-member routing mode (`ClusterRoutingConfig` with
 `RoutingMode.SINGLE_MEMBER`; the old `smartRouting=false` is deprecated in 5.7), because the members
 announce their Docker-internal addresses.
 
-The MongoDB cache is fixed on purpose: by default WiredTiger takes half of the RAM it sees,
-ignoring the container limit, and benchmark results would depend on the host. The `mongo` service
+The MongoDB cache is fixed on purpose: by default mongod sizes it from the container limit
+(50% of `MONGO_MEM_LIMIT` minus 1 GB, at least 256 MB), so raising the limit would also change the
+cache and the benchmark results would not be comparable. The `mongo` service
 also serves the MongoDB tests (`mvn -B verify` with it running), so the separate `mongo-test`
 container of the Build section is not needed; do not run both, they use the same host port.
 

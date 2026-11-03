@@ -8,8 +8,8 @@ info:
 
     **Status: draft v0.2.0** (DP-01, updated to plan v3.1: index and metadata in MongoDB).
     Internal endpoints of Ingestion, Indexing and the Control Module are added by their owners
-    in later versions; the full inventory of front-end, internal and operational endpoints is
-    `api/endpoints.md`.
+    in later versions, together with the full inventory of front-end, internal and operational
+    endpoints.
 
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
@@ -249,9 +249,7 @@ paths:
               example:
                 books: 187
                 languages:
-                  - { code: en, books: 170 }
-                  - { code: fr, books: 9 }
-                  - { code: es, books: 8 }
+                  - { code: en, books: 187 }
                 years: { min: 1991, max: 2026 }
                 index_version: 42
         '503':
