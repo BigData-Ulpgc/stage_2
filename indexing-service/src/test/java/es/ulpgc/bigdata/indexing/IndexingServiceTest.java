@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -55,6 +56,7 @@ class IndexingServiceTest {
     private RangeBasedDatalake datalake;
     private InMemoryMetadataRepository metadata;
     private SpyIndex index;
+    private InMemoryPublicationRepository publications;
     private IndexingService service;
     private final Tokenizer tokenizer = Tokenizer.standard();
 
@@ -63,7 +65,8 @@ class IndexingServiceTest {
         datalake = new RangeBasedDatalake(dataDir.resolve("datalake/range"));
         metadata = new InMemoryMetadataRepository();
         index = new SpyIndex();
-        service = new IndexingService(datalake, metadata, index, new MetadataParser(), tokenizer);
+        publications = new InMemoryPublicationRepository();
+        service = new IndexingService(datalake, metadata, index, publications, new MetadataParser(), tokenizer);
     }
 
     // --- What update writes --------------------------------------------------------
@@ -189,6 +192,77 @@ class IndexingServiceTest {
         assertEquals(threads * booksPerThread, metadata.count());
     }
 
+    // --- status (GET /index/status) ----------------------------------------------------
+
+    @Test
+    void statusSinNadaIndexadoNiPublicado() {
+        IndexStatus status = service.status();
+
+        assertEquals(0, status.booksIndexed());
+        assertNull(status.lastUpdate());
+        assertEquals(0, status.indexSizeBytes());
+        assertNull(status.publishedVersion());
+        assertEquals(0, status.booksPublished());
+    }
+
+    @Test
+    void statusTrasUnUpdateCuentaElLibroYApuntaLaHora() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        Instant before = Instant.now();
+
+        service.update(1342);
+        IndexStatus status = service.status();
+
+        assertEquals(1, status.booksIndexed());
+        assertNotNull(status.lastUpdate());
+        assertFalse(status.lastUpdate().isBefore(before));
+        assertFalse(status.lastUpdate().isAfter(Instant.now()));
+    }
+
+    @Test
+    void unUpdateFallidoNoCambiaLastUpdate() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        index.failNextFlushWith = new IllegalStateException("flush falla (simulado)");
+
+        assertThrows(IllegalStateException.class, () -> service.update(1342));
+
+        assertNull(service.status().lastUpdate(), "solo cuenta un update que terminó bien");
+    }
+
+    @Test
+    void statusLeeLaVersionPublicadaDeCurrent() {
+        publications.setCurrent(new Publication(42, 187));
+
+        IndexStatus status = service.status();
+
+        assertEquals(42, status.publishedVersion());
+        assertEquals(187, status.booksPublished());
+    }
+
+    @Test
+    void statusNoEsperaAUnUpdateQueTieneElLock() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        index.flushGate = new CountDownLatch(1);               // the update will stop inside flush
+        ExecutorService writer = Executors.newSingleThreadExecutor();
+        ExecutorService reader = Executors.newSingleThreadExecutor();
+        try {
+            Future<UpdateResult> update = writer.submit(() -> service.update(1342));
+            assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS), "el update no llegó al flush");
+
+            // The update holds the lock now. status must answer anyway.
+            Future<IndexStatus> status = reader.submit(service::status);
+            assertEquals(1, status.get(2, TimeUnit.SECONDS).booksIndexed(),
+                    "status no debe esperar al lock del índice");
+
+            index.flushGate.countDown();                       // let the update finish
+            assertEquals(1342, update.get(5, TimeUnit.SECONDS).bookId());
+        } finally {
+            index.flushGate.countDown();
+            writer.shutdownNow();
+            reader.shutdownNow();
+        }
+    }
+
     /**
      * InMemoryInvertedIndex plus a spy: counts flushes, can fail the next flush, and records
      * how many threads were inside addDocument/flush at the same time. The short sleep widens
@@ -202,6 +276,9 @@ class IndexingServiceTest {
         final AtomicInteger flushes = new AtomicInteger();
         /** If not null, the next flush throws it (once). */
         volatile RuntimeException failNextFlushWith = null;
+        /** If not null, flush counts down flushEntered and then waits until the test opens the gate. */
+        volatile CountDownLatch flushGate = null;
+        final CountDownLatch flushEntered = new CountDownLatch(1);
 
         private void enter() {
             int now = writersNow.incrementAndGet();
@@ -230,8 +307,15 @@ class IndexingServiceTest {
                     failNextFlushWith = null;
                     throw failure;
                 }
+                CountDownLatch gate = flushGate;
+                if (gate != null) {
+                    flushEntered.countDown();
+                    gate.await();
+                }
                 delegate.flush();
                 flushes.incrementAndGet();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } finally {
                 writersNow.decrementAndGet();
             }

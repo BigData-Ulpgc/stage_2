@@ -59,6 +59,7 @@ class IndexingServiceMongoTest {
         service = new IndexingService(datalake,
                 new MongoMetadataRepository(db, booksCollection),
                 new MongoInvertedIndex(db, indexCollection),
+                new MongoPublicationRepository(db),
                 new MetadataParser(), Tokenizer.standard());
     }
 
@@ -96,6 +97,20 @@ class IndexingServiceMongoTest {
         Document elizabeth = db.getCollection(indexCollection).find(new Document("term", "elizabeth")).first();
         assertNotNull(elizabeth);
         assertEquals(List.of(1342), elizabeth.getList("postings", Integer.class));
+    }
+
+    @Test
+    void statusContraMongoCuentaElLibroYMideElIndice() {
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+
+        service.update(1342);
+        IndexStatus status = service.status();
+
+        assertEquals(1, status.booksIndexed());
+        assertNotNull(status.lastUpdate());
+        assertTrue(status.indexSizeBytes() > 0, "la colección del índice existe y ocupa algo");
+        // published_version is not checked here: search_engine_test may hold a CURRENT written by
+        // Search's tests. MongoPublicationRepositoryTest checks it on a database of its own.
     }
 
     @Test

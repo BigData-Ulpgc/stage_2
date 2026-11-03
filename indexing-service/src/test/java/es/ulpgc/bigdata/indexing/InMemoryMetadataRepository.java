@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Fake MetadataRepository for the tests: a thread-safe map, so IndexingService can be tested
- * without MongoDB. failing(true) makes save behave like MongoDB being down.
+ * without MongoDB. failing(true) makes EVERY operation fail, as when MongoDB is down.
  */
 class InMemoryMetadataRepository implements MetadataRepository {
 
@@ -24,11 +24,15 @@ class InMemoryMetadataRepository implements MetadataRepository {
         this.failing = failing;
     }
 
-    @Override
-    public void save(BookMetadata metadata) {
+    private void failIfDown() {
         if (failing) {
             throw new MetadataRepositoryException("MongoDB no responde (simulado)", null);
         }
+    }
+
+    @Override
+    public void save(BookMetadata metadata) {
+        failIfDown();
         books.put(metadata.bookId(), metadata);
     }
 
@@ -39,6 +43,7 @@ class InMemoryMetadataRepository implements MetadataRepository {
 
     @Override
     public Optional<BookMetadata> findById(int bookId) {
+        failIfDown();
         return Optional.ofNullable(books.get(bookId));
     }
 
@@ -51,11 +56,13 @@ class InMemoryMetadataRepository implements MetadataRepository {
 
     @Override
     public long count() {
+        failIfDown();
         return books.size();
     }
 
     @Override
     public void clear() {
+        failIfDown();
         books.clear();
     }
 

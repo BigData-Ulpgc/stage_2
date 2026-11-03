@@ -13,8 +13,11 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -32,24 +35,33 @@ import java.util.concurrent.locks.ReentrantLock;
  * Errors are exceptions with a meaning; IndexingApi turns them into HTTP codes:
  *  - BookNotFoundException:                    the book is not complete in the datalake (404);
  *  - MongoException, MetadataRepositoryException: MongoDB does not answer (503);
- *  - UncheckedIOException:                     the book files could not be read (500).
+ *  - UncheckedIOException:                     the book files could not be read (500);
+ *  - IllegalStateException:                    CURRENT does not follow the contract (500).
  */
 public final class IndexingService {
 
     private final Datalake datalake;
     private final MetadataRepository metadata;
     private final InvertedIndex index;
+    private final PublicationRepository publications;
     private final MetadataParser parser;
     private final Tokenizer tokenizer;
 
     /** Only one thread at a time touches the inverted index. */
     private final ReentrantLock writeLock = new ReentrantLock();
 
+    /**
+     * End of the last successful update of THIS process; null if none. Several request threads
+     * write it, hence atomic. Provisional until DR-07, where index_log keeps it across restarts.
+     */
+    private final AtomicReference<Instant> lastUpdate = new AtomicReference<>();
+
     public IndexingService(Datalake datalake, MetadataRepository metadata, InvertedIndex index,
-                           MetadataParser parser, Tokenizer tokenizer) {
+                           PublicationRepository publications, MetadataParser parser, Tokenizer tokenizer) {
         this.datalake = Objects.requireNonNull(datalake, "datalake");
         this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.index = Objects.requireNonNull(index, "index");
+        this.publications = Objects.requireNonNull(publications, "publications");
         this.parser = Objects.requireNonNull(parser, "parser");
         this.tokenizer = Objects.requireNonNull(tokenizer, "tokenizer");
     }
@@ -92,7 +104,26 @@ public final class IndexingService {
         } finally {
             writeLock.unlock();                 // always, also when flush fails
         }
+        lastUpdate.set(Instant.now());          // only reached if everything was written
         return new UpdateResult(bookId, terms.size());
+    }
+
+    /**
+     * Statistics for GET /index/status, read from the stores. Without the lock: it only reads
+     * and never touches the pending map, so a status request never waits behind an update.
+     * The price: the numbers are read at slightly different moments (an update may land in
+     * between), which is fine for monitoring.
+     */
+    public IndexStatus status() {
+        long booksIndexed = metadata.count();                 // provisional until DR-07 (index_log)
+        long indexSizeBytes = index.diskUsageBytes();         // no fsync on the shared client
+        Optional<Publication> current = publications.current();
+        return new IndexStatus(
+                booksIndexed,
+                lastUpdate.get(),
+                indexSizeBytes,
+                current.map(Publication::version).orElse(null),
+                current.map(Publication::books).orElse(0L));
     }
 
     private static String read(Path file) {

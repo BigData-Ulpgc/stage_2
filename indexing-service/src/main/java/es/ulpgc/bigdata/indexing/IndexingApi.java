@@ -8,6 +8,7 @@ import io.javalin.http.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +42,7 @@ public final class IndexingApi {
     public Javalin create(String serviceName, int maxThreads) {
         Javalin app = ServiceServer.create(serviceName, maxThreads);
         app.post("/index/update/{book_id}", this::update);
+        app.get("/index/status", this::indexStatus);
         // Routes with their final contract, answering 501 until their task (D1).
         app.post("/index/publish", ctx -> {
             throw ApiException.notImplemented("POST /index/publish", "DR-08");
@@ -89,6 +91,33 @@ public final class IndexingApi {
             // not a number, or does not fit in an int: falls through to the 400
         }
         throw ApiException.invalid("book_id", "book_id must be a positive integer");
+    }
+
+    // ------------------------------------------------------------------
+    // GET /index/status
+    // ------------------------------------------------------------------
+
+    private static final double BYTES_PER_MB = 1024 * 1024;
+
+    /** Reads MongoDB, unlike GET /status: 503 if it does not answer. */
+    private void indexStatus(Context ctx) {
+        IndexStatus status = service.status();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("books_indexed", status.booksIndexed());
+        body.put("last_update", status.lastUpdate() == null
+                ? null
+                : status.lastUpdate().truncatedTo(ChronoUnit.SECONDS).toString());   // "2026-11-03T10:14:52Z"
+        body.put("index_size_MB", megabytes(status.indexSizeBytes()));
+        body.put("published_version", status.publishedVersion());
+        body.put("books_published", status.booksPublished());
+        body.put("rebuild", null);                                                     // until DR-10
+        ctx.json(body);
+    }
+
+    /** Bytes to MB (1,048,576 bytes) with one decimal: 44_774_195 -> 42.7. */
+    static double megabytes(long bytes) {
+        return Math.round(bytes / BYTES_PER_MB * 10) / 10.0;
     }
 
     // ------------------------------------------------------------------
