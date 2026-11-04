@@ -150,6 +150,8 @@ nginx (`scripts/nginx.conf`) does round-robin over the replicas of `search`, fou
 Docker, so scaling needs no other change. Each response has an `X-Served-By` header with the replica
 that answered. If a replica dies, nginx sends the request to another one.
 
+To record the CPU and memory of each container during an experiment, see `scripts/monitor.sh`.
+
 ## Service images
 
 All Java services use one multi-stage template, `docker/service.Dockerfile`, built from the
