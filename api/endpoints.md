@@ -9,7 +9,7 @@ path twice.
 |---|---|---|
 | Search Service | [`openapi.yaml`](openapi.yaml) | Daniel Perdomo |
 | Indexing Service | [`indexing-openapi.yaml`](indexing-openapi.yaml) | Daniel Rodríguez |
-| Ingestion Service | *pending (CF-06)* | Carlos Falcón |
+| Ingestion Service | [`ingestion-openapi.yaml`](ingestion-openapi.yaml) | Carlos Falcón |
 | Control Module | *pending (CF-09)* | Carlos Falcón |
 
 **Completion** says what a successful answer means: *done* (the work is finished when the
@@ -41,9 +41,9 @@ Consumed by another service or by an operator, never by the front-end.
 | Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | *501 until DR-08*; then done: `CURRENT` points to the new version |
 | Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | *501 until DR-10*; then accepted (202): follow `rebuild` in `GET /index/status` |
 | Indexing | `GET /index/status` | Control Module, operators | Books indexed and published, index size, rebuild progress | done (read-only) |
-| Ingestion | `POST /ingest/{book_id}` | *pending (CF-06)* | Download a book into the datalake | |
-| Ingestion | `GET /ingest/status/{book_id}` | *pending (CF-06)* | Whether a book is in the datalake | |
-| Ingestion | `GET /ingest/list` | *pending (CF-06)* | Books stored in the datalake | |
+| Ingestion | `POST /ingest/{book_id}` | operators, validation | Download a book, split it into header and body and store it in the datalake | done: stored (`downloaded`), or it already was (`already_available`) |
+| Ingestion | `GET /ingest/status/{book_id}` | operators, validation | Whether a book is complete in the datalake | done (read-only) |
+| Ingestion | `GET /ingest/list` | operators, validation | Every book complete in the datalake | done (read-only) |
 | Control | `POST /control/jobs` | *pending (CF-09)* | Seed books to ingest and index | |
 | Control | `GET /control/status` | *pending (CF-09)* | Queue lengths and books per state | |
 | Control | `GET /control/tasks/{book_id}` | *pending (CF-09)* | State of one book | |
@@ -55,7 +55,7 @@ Consumed by another service or by an operator, never by the front-end.
 |---|---|---|---|---|
 | every service | `GET /status` | Docker healthcheck, Control Module | Liveness of the process (it does not depend on MongoDB or Hazelcast) | done (read-only) |
 
-Search adds the loaded `index_version` to its `GET /status`.
+Search adds the loaded `index_version` to its `GET /status`, and Ingestion its book `source`.
 
 ## Interactions that are not HTTP
 
