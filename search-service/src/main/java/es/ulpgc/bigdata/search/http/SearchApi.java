@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.search.http;
 import com.mongodb.MongoException;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepositoryException;
+import es.ulpgc.bigdata.http.ApiException;
 import es.ulpgc.bigdata.http.ServiceServer;
 import es.ulpgc.bigdata.model.BookMetadata;
 import es.ulpgc.bigdata.search.index.IndexSnapshot;
@@ -27,8 +28,9 @@ import java.util.Objects;
  * Every handler takes the snapshot ONCE (snapshots.current()) and uses only that one, so
  * a response is computed from a single index version, which it returns as index_version.
  *
- * Errors: an ApiException becomes its status and the common error body; MongoDB not
- * answering becomes 503 STORAGE_UNAVAILABLE (the client may retry); anything else 500.
+ * Errors: ServiceServer already answers an ApiException (common) with its status and the
+ * common error body, an unknown route with 404 and anything unexpected with 500; here is only
+ * MongoDB not answering, which becomes 503 STORAGE_UNAVAILABLE (the client may retry).
  */
 public final class SearchApi {
 
@@ -50,13 +52,8 @@ public final class SearchApi {
         app.get("/search", this::search);
         app.get("/search/filters", this::filters);
         app.get("/books/{book_id}", this::book);
-        app.exception(ApiException.class, (e, ctx) -> error(ctx, e.status(), e.code(), e.getMessage(), e.field()));
         app.exception(MongoException.class, (e, ctx) -> storageUnavailable(ctx, e));
         app.exception(MetadataRepositoryException.class, (e, ctx) -> storageUnavailable(ctx, e));
-        app.exception(Exception.class, (e, ctx) -> {
-            LOG.error("Unexpected error on {} {}", ctx.method(), ctx.path(), e);
-            error(ctx, 500, "INTERNAL_ERROR", "internal error", null);
-        });
         return app;
     }
 
@@ -166,7 +163,12 @@ public final class SearchApi {
 
     /** The snapshot of this request; 503 INDEX_NOT_READY if nothing is published yet. */
     IndexSnapshot snapshot() {
-        return snapshots.current().orElseThrow(ApiException::indexNotReady);
+        return snapshots.current().orElseThrow(SearchApi::indexNotReady);
+    }
+
+    /** 503 INDEX_NOT_READY: no index version has been published (or loaded) yet. */
+    private static ApiException indexNotReady() {
+        return new ApiException(503, "INDEX_NOT_READY", "no index version has been published yet", null);
     }
 
     /** BookSummary of the contract. */
@@ -182,14 +184,6 @@ public final class SearchApi {
 
     private static void storageUnavailable(Context ctx, Exception e) {
         LOG.warn("MongoDB did not answer on {} {}: {}", ctx.method(), ctx.path(), e.getMessage());
-        error(ctx, 503, "STORAGE_UNAVAILABLE", "the index storage (MongoDB) does not answer", null);
-    }
-
-    private static void error(Context ctx, int status, String code, String message, String field) {
-        Map<String, Object> error = new LinkedHashMap<>();
-        error.put("code", code);
-        error.put("message", message);
-        error.put("field", field);
-        ctx.status(status).json(Map.of("error", error));
+        ServiceServer.writeError(ctx, 503, "STORAGE_UNAVAILABLE", "the index storage (MongoDB) does not answer", null);
     }
 }
