@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * AtomicReference: replacing the snapshot is a single atomic write, and every thread sees
  * the new one as soon as it is written (no locks, no half-built object visible).
- * SnapshotRefresher calls reload() every few seconds; a request never waits for it.
+ * SnapshotRefresher calls reload() every few seconds and when an IndexPublished event
+ * arrives; a request never waits for it.
  */
 public final class SnapshotHolder {
 
@@ -33,9 +34,9 @@ public final class SnapshotHolder {
      * the new one and swaps it in. It is built completely BEFORE the requests can see it, and
      * requests already running keep the snapshot they took.
      *
-     * synchronized: two simultaneous reloads (the periodic check and, later, the IndexPublished
-     * event) must not build the same version twice or leave an older one in place. It blocks
-     * only other reloads, because requests read the AtomicReference without any lock.
+     * synchronized: two simultaneous reloads must not build the same version twice or leave an
+     * older one in place. It blocks only other reloads, because requests read the
+     * AtomicReference without any lock.
      *
      * @return the version now served, or empty if nothing has been published yet
      * @throws RuntimeException if the read fails; the served snapshot stays as it was

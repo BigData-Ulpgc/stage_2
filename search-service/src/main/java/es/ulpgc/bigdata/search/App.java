@@ -4,12 +4,15 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.config.MongoSettings;
+import es.ulpgc.bigdata.coordination.Coordination;
+import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.datamart.metadata.MongoMetadataRepository;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.http.ServiceServer;
 import es.ulpgc.bigdata.search.http.SearchApi;
 import es.ulpgc.bigdata.search.index.IndexSnapshotLoader;
 import es.ulpgc.bigdata.search.index.MongoPostingSource;
+import es.ulpgc.bigdata.search.index.PublicationEvents;
 import es.ulpgc.bigdata.search.index.SnapshotHolder;
 import es.ulpgc.bigdata.search.index.SnapshotRefresher;
 import es.ulpgc.bigdata.search.query.SearchEngine;
@@ -29,8 +32,11 @@ import java.time.Duration;
  *   SEARCH_POLL_SECONDS  seconds between checks of the published version (default 5)
  *   MONGO_URI         MongoDB (default mongodb://localhost:27017; in Docker mongodb://mongo:27017)
  *   MONGO_DATABASE    database (default search_engine)
+ *   HZ_MEMBERS, HZ_CLUSTER_NAME  Hazelcast cluster that announces new versions (CoordinationSettings)
  *
- * Search mounts no volume and never writes: everything it needs is in MongoDB.
+ * Search mounts no volume and never writes: everything it needs is in MongoDB. Hazelcast only
+ * makes it react sooner to a publication: with the cluster down it keeps working on the
+ * periodic check.
  */
 public final class App {
 
@@ -47,6 +53,7 @@ public final class App {
         int threads = env.integerAtLeast("SEARCH_THREADS", ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
         int pollSeconds = env.integerAtLeast("SEARCH_POLL_SECONDS", DEFAULT_POLL_SECONDS, 1);
         MongoSettings mongo = MongoSettings.fromEnv(env);
+        CoordinationSettings coordination = CoordinationSettings.fromEnv(env);
 
         // One MongoClient per process: it is thread-safe and keeps its own connection pool.
         MongoClient client = mongo.openClient();
@@ -60,7 +67,12 @@ public final class App {
         server.start(port);
         SnapshotRefresher refresher = new SnapshotRefresher(snapshots, Duration.ofSeconds(pollSeconds));
         refresher.start();
+        // After the HTTP server: connecting blocks until the cluster answers, and /status must
+        // answer before that.
+        PublicationEvents events = new PublicationEvents(() -> Coordination.connect(coordination), refresher::wakeUp);
+        events.start();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            events.close();
             refresher.close();
             server.stop();
             client.close();
