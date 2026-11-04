@@ -60,6 +60,11 @@
                 <executions>
                     <execution>
                         <goals><goal>test-jar</goal></goals>
+                        <!-- Also with -Dmaven.test.skip=true (docker/service.Dockerfile): an empty
+                             test-jar, so that the services still resolve their test dependency. -->
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

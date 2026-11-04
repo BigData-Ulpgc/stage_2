@@ -38,7 +38,8 @@ class AppTest {
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
 
-    private Map<String, String> env(int workers) {
+    private Map<String, String> env(int workers) throws Exception {
+        Files.writeString(books.resolve("pg1.txt"), FakeSource.VALID_TEXT);    // a local folder must hold a book
         Map<String, String> env = new HashMap<>();
         env.put("INGESTION_PORT", "0");
         env.put("DATA_DIR", dataDir.toString());
