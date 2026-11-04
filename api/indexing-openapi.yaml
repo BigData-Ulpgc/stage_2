@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.2.0
+  version: 0.2.1
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.2.0** (DR-05 and its review follow-up, plan v3.3). `POST /index/publish`
+    **Status: draft v0.2.1** (DR-05 and its review follow-up, DR-07, plan v3.3). `POST /index/publish`
     answers 501 until DR-08 and `POST /index/rebuild` until DR-10; their contract is already the
     final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
@@ -20,8 +20,9 @@ info:
     the same code.
 
     1. Ingestion writes `<id>._READY` and puts the id in `index-queue`.
-    2. Indexing reads the book, saves its metadata (`books`) and its terms (`inverted_index`):
-       the book is **indexed**, but Search does not see it yet.
+    2. Indexing reads the book, saves its metadata (`books`) and its terms (`inverted_index`),
+       and last records it in `index_log`: the book is **indexed**, but Search does not see it
+       yet.
     3. The Control Module calls `POST /index/publish` every M books or T seconds: the indexed
        books become **published** in a new index version, and Search loads it.
 
@@ -66,16 +67,20 @@ paths:
         **Provider:** Indexing Service. **Consumers:** operators and the functional validation
         (the Control Module assigns work through `index-queue`, not through this endpoint).
 
-        Reads the book from the datalake, extracts its metadata into the collection `books`
-        and adds its terms to the inverted index.
+        Reads the book from the datalake, extracts its metadata into the collection `books`,
+        adds its terms to the inverted index and, **last**, records the book in `index_log`:
+        the evidence that the book is complete in the index, which the next publication reads.
 
-        **Completion: synchronous.** A 200 means the book IS indexed (metadata and posting
-        lists written in MongoDB). It does **not** mean that Search can find it: the book
-        becomes visible with the next `POST /index/publish`.
+        **Completion: synchronous.** A 200 means the book IS indexed (metadata, posting lists
+        and `index_log` written in MongoDB). It does **not** mean that Search can find it: the
+        book becomes visible with the next `POST /index/publish`. After a 503 part of the book
+        may be written, but it is not in `index_log`: it is neither counted nor published until
+        a retry completes it.
 
         **Idempotency.** Indexing the same book again changes nothing: metadata are replaced
-        by `_id` and posting lists never repeat an id. Two concurrent calls for the same book
-        both answer 200. After a timeout or a 503 the caller can simply call again.
+        by `_id`, posting lists never repeat an id and `index_log` has one entry per book (only
+        its time moves forward). Two concurrent calls for the same book both answer 200. After
+        a timeout or a 503 the caller can simply call again.
 
         **Readiness.** Only complete books are indexed; a book that is missing or still being
         written gives 404. **From DR-06** "complete" means that the book has its `<id>._READY`
@@ -145,8 +150,8 @@ paths:
         **Provider:** Indexing Service. **Consumers:** Control Module (every `PUBLISH_BATCH`
         books or `PUBLISH_INTERVAL_S` seconds).
 
-        Publishes version V+1 (contract §6.5): records the books indexed since version V in
-        `index_books` with version V+1, then switches the `CURRENT` document of `index_meta`
+        Publishes version V+1 (contract §6.5): records the books of `index_log` that are not
+        published yet in `index_books` with version V+1, then switches the `CURRENT` document of `index_meta`
         to V+1 in ONE atomic operation, and announces it with `IndexPublished` on the
         Hazelcast topic `index-events`. The index itself is never copied.
 
@@ -386,12 +391,18 @@ components:
         books_indexed:
           type: integer
           minimum: 0
-          description: Books indexed (published or not).
+          description: |
+            Books complete in the index, published or not: the books of `index_log`. A book
+            whose update failed halfway does not count. Kept in MongoDB, so it survives a
+            restart of the service.
         last_update:
           type: string
           format: date-time
           nullable: true
-          description: When the last book was indexed (UTC); null if none yet.
+          description: |
+            When a book was last indexed (UTC, to the second), re-indexing included: the latest
+            `indexed_at` of `index_log`; null if none yet. Kept in MongoDB, so it survives a
+            restart of the service.
         index_size_MB:
           type: number
           minimum: 0
