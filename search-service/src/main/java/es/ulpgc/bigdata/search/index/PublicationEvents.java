@@ -44,14 +44,28 @@ public final class PublicationEvents implements AutoCloseable {
     }
 
     private void connectAndSubscribe() {
+        Coordination coordination = null;
         try {
-            Coordination coordination = connector.get();
+            coordination = connector.get();
             coordination.subscribe(event -> onPublished.run());
             if (keep(coordination)) {
                 LOG.info("Listening to the index publications of Hazelcast");
             }
         } catch (RuntimeException e) {
             LOG.warn("Could not listen to Hazelcast, relying on the periodic check: {}", e.getMessage());
+            closeAfterFailure(coordination);
+        }
+    }
+
+    /** A client that is not going to be used must not keep its threads and its retries alive. */
+    private static void closeAfterFailure(Coordination coordination) {
+        if (coordination == null) {
+            return;
+        }
+        try {
+            coordination.close();
+        } catch (RuntimeException e) {
+            LOG.debug("Could not close the Hazelcast client: {}", e.getMessage());
         }
     }
 
