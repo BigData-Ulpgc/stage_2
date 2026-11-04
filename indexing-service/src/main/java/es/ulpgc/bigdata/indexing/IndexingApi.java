@@ -2,7 +2,9 @@ package es.ulpgc.bigdata.indexing;
 
 import com.mongodb.MongoException;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepositoryException;
+import es.ulpgc.bigdata.http.ApiException;
 import es.ulpgc.bigdata.http.ServiceServer;
+import es.ulpgc.bigdata.model.BookIds;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import org.slf4j.Logger;
@@ -15,16 +17,16 @@ import java.util.Objects;
 
 /**
  * The HTTP API of api/indexing-openapi.yaml on top of ServiceServer (common): JSON with
- * explicit nulls, explicit Jetty thread pool and GET /status, which never touches MongoDB (D4).
+ * explicit nulls, explicit Jetty thread pool, GET /status (which never touches MongoDB, D4)
+ * and the common error format.
  *
  * It only translates (D8): it validates the request, calls IndexingService and turns the
- * result into JSON, or the exception into the HTTP code of the contract:
- *  - ApiException                                 its own status and code (400, 501);
+ * result into JSON, or the exception into the HTTP code of the contract. ServiceServer already
+ * answers ApiException (400, 501), unknown routes (404) and unexpected errors (500, details
+ * only in the log); here are only the exceptions of this service:
  *  - BookNotFoundException                        404 NOT_FOUND;
  *  - MongoException, MetadataRepositoryException  503 STORAGE_UNAVAILABLE: temporary, and
- *                                                 update is idempotent, so retrying is safe;
- *  - anything else                                500 INTERNAL_ERROR, a bug of ours: the
- *                                                 details go to the log, never to the client.
+ *                                                 update is idempotent, so retrying is safe.
  * Same error format and codes as Search (D3). The messages of the responses are in English:
  * they are part of the public contract.
  */
@@ -45,23 +47,24 @@ public final class IndexingApi {
         app.get("/index/status", this::indexStatus);
         // Routes with their final contract, answering 501 until their task (D1).
         app.post("/index/publish", ctx -> {
-            throw ApiException.notImplemented("POST /index/publish", "DR-08");
+            throw notImplemented("POST /index/publish", "DR-08");
         });
         app.post("/index/rebuild", ctx -> {
-            throw ApiException.notImplemented("POST /index/rebuild", "DR-10");
+            throw notImplemented("POST /index/rebuild", "DR-10");
         });
 
-        // Javalin picks the most specific handler for the type of the exception.
-        app.exception(ApiException.class, (e, ctx) -> error(ctx, e.status(), e.code(), e.getMessage(), e.field()));
-        app.exception(BookNotFoundException.class, (e, ctx) -> error(ctx, 404, "NOT_FOUND",
+        // Javalin picks the most specific handler for the type of the exception, so these
+        // win over the 500 one of ServiceServer.
+        app.exception(BookNotFoundException.class, (e, ctx) -> ServiceServer.writeError(ctx, 404, "NOT_FOUND",
                 "book " + e.bookId() + " is not ready in the datalake", "book_id"));
         app.exception(MongoException.class, (e, ctx) -> storageUnavailable(ctx, e));
         app.exception(MetadataRepositoryException.class, (e, ctx) -> storageUnavailable(ctx, e));
-        app.exception(Exception.class, (e, ctx) -> {
-            LOG.error("Unexpected error on {} {}", ctx.method(), ctx.path(), e);
-            error(ctx, 500, "INTERNAL_ERROR", "internal error", null);
-        });
         return app;
+    }
+
+    /** 501 NOT_IMPLEMENTED: the route and its contract exist, the task that implements it does not yet. */
+    private static ApiException notImplemented(String route, String task) {
+        return new ApiException(501, "NOT_IMPLEMENTED", route + " is not implemented yet (" + task + ")", null);
     }
 
     // ------------------------------------------------------------------
@@ -80,18 +83,12 @@ public final class IndexingApi {
         ctx.json(body);
     }
 
-    /** A positive integer, as the contract says (minimum: 1). */
+    /** The canonical form of BookIds (common): 1..999,999,999, ASCII digits, no sign or leading zeros. */
     static int bookId(String text) {
-        try {
-            int id = Integer.parseInt(text);
-            if (id >= 1) {
-                return id;
-            }
-        } catch (NumberFormatException e) {
-            // not a number, or does not fit in an int: falls through to the 400
-        }
-        throw ApiException.invalid("book_id", "book_id must be a positive integer");
+        return BookIds.parse(text).orElseThrow(() -> ApiException.invalid("book_id", BOOK_ID_MESSAGE));
     }
+
+    static final String BOOK_ID_MESSAGE = "book_id must be a positive integer (1 to 999999999, digits only)";
 
     // ------------------------------------------------------------------
     // GET /index/status
@@ -126,14 +123,6 @@ public final class IndexingApi {
 
     private static void storageUnavailable(Context ctx, Exception e) {
         LOG.warn("MongoDB did not answer on {} {}: {}", ctx.method(), ctx.path(), e.getMessage());
-        error(ctx, 503, "STORAGE_UNAVAILABLE", "the index storage (MongoDB) does not answer", null);
-    }
-
-    private static void error(Context ctx, int status, String code, String message, String field) {
-        Map<String, Object> error = new LinkedHashMap<>();
-        error.put("code", code);
-        error.put("message", message);
-        error.put("field", field);
-        ctx.status(status).json(Map.of("error", error));
+        ServiceServer.writeError(ctx, 503, "STORAGE_UNAVAILABLE", "the index storage (MongoDB) does not answer", null);
     }
 }

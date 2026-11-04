@@ -73,12 +73,17 @@ class IndexingApiTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"abc", "0", "-5", "1.5", "99999999999"})
-    void unBookIdQueNoEsUnEnteroPositivoDa400(String bookId) throws Exception {
+    @ValueSource(strings = {"abc", "0", "-5", "1.5", "99999999999", "1000000000",
+            "%2B84",                        // +84
+            "0084",                         // ceros a la izquierda
+            "%D9%A1%D9%A2%D9%A3",           // ١٢٣, dígitos arábigos
+            "%2084"})                       // " 84"
+    void unBookIdQueNoEsCanonicoDa400(String bookId) throws Exception {
         HttpResponse<String> response = post("/index/update/" + bookId);
 
         assertEquals(400, response.statusCode());
-        assertError(response, "INVALID_PARAMETER", "book_id");
+        JsonObject error = assertError(response, "INVALID_PARAMETER", "book_id");
+        assertEquals(IndexingApi.BOOK_ID_MESSAGE, error.get("message").getAsString());
         assertEquals(0, index.flushes.get(), "no debe llegar al servicio");
     }
 
@@ -124,6 +129,23 @@ class IndexingApiTest {
         JsonObject error = assertError(response, "INTERNAL_ERROR", null);
         assertEquals("internal error", error.get("message").getAsString());
         assertFalse(response.body().contains("secreto"), "el detalle va al log, no al cliente");
+    }
+
+    // --- Unknown routes (ServiceServer, common) ---------------------------------------
+
+    @Test
+    void unaRutaQueNoExisteDa404ConElFormatoComun() throws Exception {
+        assertEquals(404, get("/index/nope").statusCode());
+        assertError(get("/index/nope"), "NOT_FOUND", null);
+    }
+
+    @Test
+    void unMetodoQueLaRutaNoTieneDa404ConElFormatoComun() throws Exception {
+        HttpResponse<String> response = get("/index/update/1342");          // es POST
+
+        assertEquals(404, response.statusCode());
+        assertError(response, "NOT_FOUND", null);
+        assertEquals(0, index.flushes.get());
     }
 
     // --- 501 until DR-08 / DR-10 ----------------------------------------------------

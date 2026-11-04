@@ -6,11 +6,14 @@ import es.ulpgc.bigdata.datamart.index.InvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepositoryException;
+import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookMetadata;
 import es.ulpgc.bigdata.model.RawBook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -122,9 +125,12 @@ class IndexingServiceTest {
         assertEquals(0, index.flushes.get());
     }
 
-    @Test
-    void unIdNegativoSeRechaza() {
-        assertThrows(IllegalArgumentException.class, () -> service.update(-1));
+    @ParameterizedTest
+    @ValueSource(ints = {Integer.MIN_VALUE, -1, 0, BookIds.MAX + 1, Integer.MAX_VALUE})
+    void unIdFueraDeRangoSeRechazaSinTocarNada(int bookId) {
+        assertThrows(IllegalArgumentException.class, () -> service.update(bookId));
+        assertEquals(0, metadata.count());
+        assertEquals(0, index.flushes.get());
     }
 
     // --- Failures --------------------------------------------------------------------

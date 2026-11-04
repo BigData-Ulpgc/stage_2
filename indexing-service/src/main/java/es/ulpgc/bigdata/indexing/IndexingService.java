@@ -5,6 +5,7 @@ import es.ulpgc.bigdata.datamart.index.InvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepository;
+import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookLocation;
 import es.ulpgc.bigdata.model.BookMetadata;
 
@@ -76,11 +77,13 @@ public final class IndexingService {
      * matter for consistency: if it fails halfway (metadata saved, postings not), nothing is
      * visible because only publish makes books visible, and the retry completes it.
      *
-     * @throws BookNotFoundException if the datalake does not have the book complete
+     * @throws BookNotFoundException    if the datalake does not have the book complete
+     * @throws IllegalArgumentException if bookId is not valid (BookIds): a bug of the caller,
+     *                                  the API already answers 400 before calling
      */
     public UpdateResult update(int bookId) {
-        if (bookId < 0) {
-            throw new IllegalArgumentException("book_id negativo: " + bookId);
+        if (!BookIds.isValid(bookId)) {
+            throw new IllegalArgumentException("book_id fuera de rango (1.." + BookIds.MAX + "): " + bookId);
         }
         // 1. Readiness is decided ONLY by the datalake (§6.2): header + body today, also the
         //    <id>._READY marker after DR-06, without changing this method.
