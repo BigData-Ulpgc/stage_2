@@ -1,9 +1,15 @@
-package es.ulpgc.bigdata.search.http;
+package es.ulpgc.bigdata.http;
 
 /**
- * An error the API answers with the common format of api/openapi.yaml:
- * <pre>{"error": {"code": "INVALID_PARAMETER", "message": "...", "field": "limit"}}</pre>
- * Thrown anywhere while handling a request; SearchApi turns it into the response.
+ * An error that an API answers with the common error format of every service
+ * (api/openapi.yaml, api/indexing-openapi.yaml):
+ * <pre>{"error": {"code": "INVALID_PARAMETER", "message": "...", "field": "book_id"}}</pre>
+ * Thrown anywhere while handling a request; the handler that ServiceServer installs turns it
+ * into the response, so a route only has to throw it.
+ *
+ * Only the factories that every service shares live here. A code that belongs to one service
+ * (Search's INDEX_NOT_READY, Indexing's NOT_IMPLEMENTED) is built in that service with the
+ * public constructor. The message is part of the public contract, so it is in English.
  */
 public final class ApiException extends RuntimeException {
 
@@ -11,6 +17,11 @@ public final class ApiException extends RuntimeException {
     private final String code;
     private final String field;
 
+    /**
+     * @param status HTTP status, e.g. 400
+     * @param code   machine-readable code of the contract, e.g. "INVALID_PARAMETER"
+     * @param field  request parameter that caused the error, or null
+     */
     public ApiException(int status, String code, String message, String field) {
         super(message);
         this.status = status;
@@ -26,11 +37,6 @@ public final class ApiException extends RuntimeException {
     /** 400 INVALID_PARAMETER: present but malformed or out of range. */
     public static ApiException invalid(String field, String message) {
         return new ApiException(400, "INVALID_PARAMETER", message, field);
-    }
-
-    /** 503 INDEX_NOT_READY: no index version has been published (or loaded) yet. */
-    public static ApiException indexNotReady() {
-        return new ApiException(503, "INDEX_NOT_READY", "no index version has been published yet", null);
     }
 
     public int status() {
