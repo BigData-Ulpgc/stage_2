@@ -120,10 +120,40 @@ cache and the benchmark results would not be comparable. The `mongo` service
 also serves the MongoDB tests (`mvn -B verify` with it running), so the separate `mongo-test`
 container of the Build section is not needed; do not run both, they use the same host port.
 
+## Run the whole system with Docker
+
+```bash
+docker compose up -d --build                                # everything, one replica of each
+docker compose ps                                           # all must show "(healthy)"
+curl "localhost:8080/search?q=whale"                        # the public API, through nginx
+docker compose up -d --scale search=3 --scale ingestion=2   # more replicas
+docker compose --profile monitoring up -d                   # also the Management Center (:8081)
+docker compose down                                         # stop; down -v also wipes MongoDB
+```
+
+| Service | Replicas | Published on the host | Datalake | Limits (`.env`) |
+|---|---|---|---|---|
+| `nginx` | 1 | 8080: the public API | none | `NGINX_CPUS`, `NGINX_MEM_LIMIT` |
+| `search` | 1-4 | none, only behind nginx | none | `SEARCH_CPUS`, `SEARCH_MEM_LIMIT` |
+| `indexing` | 1 | none | read-only | `INDEXING_CPUS`, `INDEXING_MEM_LIMIT` |
+| `ingestion` | 1-4 | none | read-write | `INGESTION_CPUS`, `INGESTION_MEM_LIMIT` |
+| `control` | 1 | 7000 | read-only | `CONTROL_CPUS`, `CONTROL_MEM_LIMIT` |
+| `hz-1`, `hz-2` | 2 | 5701, 5702 | none | `HZ_CPUS`, `HZ_MEM_LIMIT` |
+| `mongo` | 1 | 27017, only on 127.0.0.1 | none (volume `mongo-data`) | `MONGO_CPUS`, `MONGO_MEM_LIMIT` |
+| `management-center` | 0-1 (profile `monitoring`) | 8081 | none | `MC_CPUS`, `MC_MEM_LIMIT` |
+
+Every default is in `.env`; override one with a variable (`SEARCH_HTTP_THREADS=64 docker compose up -d`)
+or by editing the file. One replica of each adds up to about 5.7 GB of memory limits, so Docker needs
+at least that much. A new variable of a service goes in its `environment` block and in `.env`.
+
+nginx (`scripts/nginx.conf`) does round-robin over the replicas of `search`, found with the DNS of
+Docker, so scaling needs no other change. Each response has an `X-Served-By` header with the replica
+that answered. If a replica dies, nginx sends the request to another one.
+
 ## Service images
 
 All Java services use one multi-stage template, `docker/service.Dockerfile`, built from the
-repository root with the Maven module as an argument:
+repository root with the Maven module as an argument (Compose does it for you):
 
 ```bash
 docker build -f docker/service.Dockerfile --build-arg MODULE=search-service -t stage2/search-service .

@@ -1,0 +1,109 @@
+# Configuration of the Hazelcast members (owner: Carlos Falcón, CF-03).
+#
+# docker-compose.yml mounts this file in hz-1 and hz-2 (HAZELCAST_CONFIG). It replaces the
+# image default (config/hazelcast-docker.xml): only what is written here is configured, the
+# rest takes the Hazelcast defaults.
+#
+# Two values still come from docker-compose.yml as HZ_* environment variables, which Hazelcast
+# applies on top of this file:
+#   HZ_CLUSTERNAME             from .env (HZ_CLUSTER_NAME): one value shared with the services
+#   HZ_NETWORK_PUBLICADDRESS   different for each member (hz-1:5701, hz-2:5701)
+#
+# The structures below are the ones of the coordination contract, api/contracts/coordination.md.
+# Changing a name here means changing it there and in common/coordination (plan §7).
+
+hazelcast:
+  cluster-name: search-engine
+
+  properties:
+    # Listen on every interface of the container (as the image default does); without it the
+    # member binds only one address and the other member may not reach it.
+    hazelcast.socket.bind.any: true
+
+  network:
+    port:
+      port: 5701
+      auto-increment: false
+    join:
+      # Fixed member list by TCP/IP. No multicast: we must not join other groups' clusters on the
+      # university network. No auto-detection: it would also try multicast.
+      auto-detection:
+        enabled: false
+      multicast:
+        enabled: false
+      tcp-ip:
+        enabled: true
+        member-list:
+          - hz-1
+          - hz-2
+    # Health endpoint used by the Docker healthcheck and the CF-01 demo:
+    # GET /hazelcast/health/ready, /hazelcast/health (clusterSafe, migrationQueueSize).
+    rest-api:
+      enabled: true
+      endpoint-groups:
+        HEALTH_CHECK:
+          enabled: true
+
+  # Jet (stream processing and SQL engine) is enabled in the image default but nothing in the
+  # project uses it: queries on book-state use the predicate API, which does not need Jet.
+  # Disabled it starts 6-8 fewer threads per member (measured; the memory is the same).
+  jet:
+    enabled: false
+
+  map:
+    # State of each book (contract §3). BINARY is the default but it is written on purpose:
+    # replace(id, expected, next) then compares the serialized bytes, so the members can
+    # compare BookTask values without having our classes (contract §2).
+    book-state:
+      in-memory-format: BINARY
+      backup-count: 1
+      async-backup-count: 0
+      # The Control looks for expired leases every LEASE_CHECK_SECONDS with
+      # state IN ('INGESTING', 'INDEXING') AND leaseUntil < now (contract §4.2): the index on
+      # state avoids reading every book (100,000 in the scale experiment).
+      indexes:
+        - type: HASH
+          attributes:
+            - "state"
+      statistics-enabled: true
+    # Only its lock is used (index-writer, contract §5). The lock is copied to the backup too.
+    locks:
+      backup-count: 1
+    # Marker of an initialized cluster (contract §7).
+    coordination-meta:
+      backup-count: 1
+
+  queue:
+    # max-size 0 = unbounded: 100,000 ids are a few MB. A bound would block the Control in
+    # the middle of a seed instead of failing early.
+    ingest-queue:
+      max-size: 0
+      backup-count: 1
+      async-backup-count: 0
+      statistics-enabled: true
+    index-queue:
+      max-size: 0
+      backup-count: 1
+      async-backup-count: 0
+      statistics-enabled: true
+
+  reliable-topic:
+    # IndexPublished, one message per published version (contract §6). DISCARD_OLDEST: when
+    # the ringbuffer is full, Indexing overwrites the oldest message instead of blocking (the
+    # default, BLOCK, could stop a publication). Losing an old event is harmless: it is only a
+    # wake-up and Search also checks CURRENT periodically.
+    index-events:
+      topic-overload-policy: DISCARD_OLDEST
+      read-batch-size: 10
+      statistics-enabled: true
+
+  ringbuffer:
+    # Storage of the reliable topic above. Its ringbuffer is called _hz_rb_index-events inside
+    # Hazelcast, but its configuration is looked up by the TOPIC name: a "_hz_rb_index-events"
+    # entry here is silently ignored (measured). 1,000 versions are far more than a reader can
+    # fall behind; the default is 10,000.
+    index-events:
+      capacity: 1000
+      backup-count: 1
+      async-backup-count: 0
+      time-to-live-seconds: 0

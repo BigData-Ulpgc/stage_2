@@ -14,7 +14,8 @@ ARG MODULE
 WORKDIR /src
 COPY . .
 # -pl: only this module; -am: also the modules it depends on (e.g. common)
-RUN mvn -q -B -pl "${MODULE}" -am package -DskipTests
+# The cache mount keeps the Maven downloads between builds and images, outside the image.
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B -pl "${MODULE}" -am package -Dmaven.test.skip=true
 
 # ---- Stage 2: runtime image with only the JRE and the jar ----
 FROM eclipse-temurin:17-jre
