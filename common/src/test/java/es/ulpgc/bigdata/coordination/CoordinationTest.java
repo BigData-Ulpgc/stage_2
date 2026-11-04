@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.ServerSocket;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,6 +28,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
@@ -144,6 +148,8 @@ class CoordinationTest {
         assertTrue(coordination.claim(Stage.INGESTION, "w", SHORT).isEmpty());   // the duplicate of 1 is dropped
         assertEquals(0, coordination.queueSize(Stage.INGESTION));
         assertEquals(BookState.DOWNLOADED, state(1));
+        assertEquals(1, coordination.idsSkipped());
+        assertEquals(0, coordination.invalidIdsDropped());
     }
 
     @Test
@@ -152,6 +158,16 @@ class CoordinationTest {
         client.getQueue(CoordinationNames.INGEST_QUEUE).offer(555);  // not in book-state
         assertTrue(coordination.claim(Stage.INGESTION, "w", SHORT).isEmpty());
         assertEquals(0, coordination.queueSize(Stage.INGESTION));
+        assertEquals(1, coordination.invalidIdsDropped());           // 0: a bad id, someone's bug
+        assertEquals(1, coordination.idsSkipped());                  // 555: unknown book, harmless
+    }
+
+    @Test
+    void aClaimedBookIsNotCountedAsDropped() throws Exception {
+        coordination.seed(List.of(1));
+        claim(Stage.INGESTION);
+        assertEquals(0, coordination.invalidIdsDropped());
+        assertEquals(0, coordination.idsSkipped());
     }
 
     @Test
@@ -471,6 +487,43 @@ class CoordinationTest {
         coordination.publish(new IndexPublished(1, 1, 1, "2026-11-03T10:15:00Z"));
         coordination.publish(new IndexPublished(2, 1, 2, "2026-11-03T10:16:00Z"));
         assertTrue(got.await(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void anUnsubscribedListenerReceivesNothingMore() throws Exception {
+        CountDownLatch got = new CountDownLatch(1);
+        UUID registration = coordination.subscribe(e -> got.countDown());
+        assertTrue(coordination.unsubscribe(registration));
+        coordination.publish(new IndexPublished(1, 1, 1, "2026-11-03T10:15:00Z"));
+        assertFalse(got.await(2, TimeUnit.SECONDS));
+        assertFalse(coordination.unsubscribe(registration));          // already removed
+    }
+
+    /**
+     * What the index writer relies on (contract §5): false when the client loses the cluster,
+     * true when it is back. A cluster of its own, stopped and started again.
+     */
+    @Test
+    void theConnectionListenerSeesTheClusterGoAndComeBack() throws Exception {
+        String name = "connection-test-" + UUID.randomUUID();
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        HazelcastInstance member = HazelcastTestCluster.startStandaloneMember(name, port);
+        CoordinationSettings settings = new CoordinationSettings(List.of("127.0.0.1:" + port), name, 60, 3, 10);
+        HazelcastInstance own = settings.openClient();
+        BlockingQueue<Boolean> changes = new LinkedBlockingQueue<>();
+        try {
+            Coordination.on(own, settings, clock).onConnectionChange(changes::add);
+            member.shutdown();
+            assertEquals(Boolean.FALSE, changes.poll(30, TimeUnit.SECONDS), "no CLIENT_DISCONNECTED");
+            member = HazelcastTestCluster.startStandaloneMember(name, port);
+            assertEquals(Boolean.TRUE, changes.poll(60, TimeUnit.SECONDS), "no CLIENT_CONNECTED");
+        } finally {
+            own.shutdown();
+            member.shutdown();
+        }
     }
 
     @Test
