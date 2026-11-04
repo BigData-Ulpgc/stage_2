@@ -8,6 +8,7 @@ import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.datamart.index.MongoInvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
+import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MongoMetadataRepository;
 import es.ulpgc.bigdata.model.RawBook;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -40,6 +42,7 @@ class IndexingServiceMongoTest {
     private MongoDatabase db;
     private String booksCollection;
     private String indexCollection;
+    private String logCollection;
     private IndexingService service;
     private RangeBasedDatalake datalake;
 
@@ -55,10 +58,12 @@ class IndexingServiceMongoTest {
         long suffix = System.nanoTime();
         booksCollection = "books_" + suffix;
         indexCollection = "index_" + suffix;
+        logCollection = "index_log_" + suffix;
         datalake = new RangeBasedDatalake(dataDir.resolve("datalake/range"));
         service = new IndexingService(datalake,
                 new MongoMetadataRepository(db, booksCollection),
                 new MongoInvertedIndex(db, indexCollection),
+                new MongoIndexLog(db, logCollection),
                 new MongoPublicationRepository(db),
                 new MetadataParser(), Tokenizer.standard());
     }
@@ -77,6 +82,7 @@ class IndexingServiceMongoTest {
         if (db != null) {
             db.getCollection(booksCollection).drop();
             db.getCollection(indexCollection).drop();
+            db.getCollection(logCollection).drop();
         }
         client.close();
     }
@@ -97,6 +103,11 @@ class IndexingServiceMongoTest {
         Document elizabeth = db.getCollection(indexCollection).find(new Document("term", "elizabeth")).first();
         assertNotNull(elizabeth);
         assertEquals(List.of(1342), elizabeth.getList("postings", Integer.class));
+
+        Document logged = db.getCollection(logCollection).find(new Document("_id", 1342)).first();
+        assertNotNull(logged, "falta el libro en index_log");
+        assertEquals(Set.of("_id", "indexed_at"), logged.keySet());
+        assertInstanceOf(Date.class, logged.get("indexed_at"), "indexed_at es una fecha de MongoDB");
     }
 
     @Test
@@ -114,6 +125,26 @@ class IndexingServiceMongoTest {
     }
 
     @Test
+    void booksIndexedYLastUpdateSobrevivenAUnReinicio() {
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+        service.update(1342);
+        IndexStatus before = service.status();
+
+        // A new process: new objects on the same collections, nothing kept in memory.
+        IndexingService restarted = new IndexingService(datalake,
+                new MongoMetadataRepository(db, booksCollection),
+                new MongoInvertedIndex(db, indexCollection),
+                new MongoIndexLog(db, logCollection),
+                new MongoPublicationRepository(db),
+                new MetadataParser(), Tokenizer.standard());
+        IndexStatus after = restarted.status();
+
+        assertEquals(1, after.booksIndexed());
+        assertNotNull(after.lastUpdate());
+        assertEquals(before.lastUpdate(), after.lastUpdate());
+    }
+
+    @Test
     void indexarDosVecesNoDuplicaNadaEnMongo() {
         datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
 
@@ -125,5 +156,6 @@ class IndexingServiceMongoTest {
         Document elizabeth = db.getCollection(indexCollection).find(new Document("term", "elizabeth")).first();
         assertEquals(Set.of(1342), Set.copyOf(elizabeth.getList("postings", Integer.class)));
         assertEquals(1, elizabeth.getList("postings", Integer.class).size());
+        assertEquals(1, db.getCollection(logCollection).countDocuments());
     }
 }

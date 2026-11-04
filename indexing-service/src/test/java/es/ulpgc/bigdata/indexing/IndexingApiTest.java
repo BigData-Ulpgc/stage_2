@@ -36,6 +36,7 @@ class IndexingApiTest {
     private RangeBasedDatalake datalake;
     private InMemoryMetadataRepository metadata;
     private IndexingServiceTest.SpyIndex index;
+    private InMemoryIndexLog indexLog;
     private InMemoryPublicationRepository publications;
     private Javalin app;
 
@@ -44,8 +45,9 @@ class IndexingApiTest {
         datalake = new RangeBasedDatalake(dataDir.resolve("datalake/range"));
         metadata = new InMemoryMetadataRepository();
         index = new IndexingServiceTest.SpyIndex();
+        indexLog = new InMemoryIndexLog();
         publications = new InMemoryPublicationRepository();
-        IndexingService service = new IndexingService(datalake, metadata, index, publications,
+        IndexingService service = new IndexingService(datalake, metadata, index, indexLog, publications,
                 new MetadataParser(), Tokenizer.standard());
         app = new IndexingApi(service).create("indexing-service", 8).start(0);
     }
@@ -107,6 +109,7 @@ class IndexingApiTest {
         assertEquals("book 999 has no indexable terms", error.get("message").getAsString());
         assertEquals(0, metadata.count());
         assertEquals(0, index.flushes.get());
+        assertEquals(0, indexLog.count());
     }
 
     @Test
@@ -128,6 +131,17 @@ class IndexingApiTest {
         HttpResponse<String> response = post("/index/update/1342");
 
         assertEquals(503, response.statusCode());
+        assertError(response, "STORAGE_UNAVAILABLE", null);
+    }
+
+    @Test
+    void siElLogNoRespondeDa503() throws Exception {
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+        indexLog.failing(true);                               // MongoException, after the flush
+
+        HttpResponse<String> response = post("/index/update/1342");
+
+        assertEquals(503, response.statusCode(), "el libro no está completo: el cliente reintenta");
         assertError(response, "STORAGE_UNAVAILABLE", null);
     }
 
@@ -217,7 +231,7 @@ class IndexingApiTest {
 
     @Test
     void indexStatusDa503SiMongoNoRespondePeroStatusSigueA200() throws Exception {
-        metadata.failing(true);
+        indexLog.failing(true);                               // the first store /index/status reads
 
         HttpResponse<String> indexStatus = get("/index/status");
         HttpResponse<String> status = get("/status");
@@ -240,6 +254,7 @@ class IndexingApiTest {
     @Test
     void statusResponde200AunqueMongoNoResponda() throws Exception {
         metadata.failing(true);
+        indexLog.failing(true);
         index.failNextFlushWith = new MongoException("MongoDB no responde (simulado)");
 
         HttpResponse<String> response = http.send(
