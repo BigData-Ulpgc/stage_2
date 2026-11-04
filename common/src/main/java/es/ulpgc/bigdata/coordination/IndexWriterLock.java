@@ -21,8 +21,10 @@ import java.util.concurrent.TimeUnit;
  *       ({@link Coordination#onConnectionChange}): when the cluster is back the lock may be
  *       gone. Take it again before writing anything else.</li>
  *   <li>No fencing token: a writer that froze and comes back late is not stopped by
- *       Hazelcast. Its claims fail once the Control has requeued its books, and every write
- *       is idempotent, so the damage is limited to repeated work.</li>
+ *       Hazelcast. Its claims fail once the Control has requeued its books, and the writes of
+ *       indexing are idempotent, so for them the damage is limited to repeated work. A
+ *       publication is not idempotent: it uses the version of CURRENT as its fencing token
+ *       (contract §5, DR-08).</li>
  * </ul>
  */
 public final class IndexWriterLock {

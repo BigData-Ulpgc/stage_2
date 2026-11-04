@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -72,6 +73,16 @@ public final class Coordination implements AutoCloseable {
     private final Clock clock;
     private final boolean ownsClient;
     private final IMap<Integer, BookTask> books;
+    /** Ids taken from a queue and dropped by this instance (see claim). */
+    private final AtomicLong invalidIdsDropped = new AtomicLong();
+    private final AtomicLong idsSkipped = new AtomicLong();
+
+    /** What one poll of a claim did with the id it took, if any. */
+    private enum Drop { NONE, INVALID, NOT_WAITING }
+
+    private record Polled(Optional<Claim> claim, Drop drop) {
+        static final Polled NOTHING = new Polled(Optional.empty(), Drop.NONE);
+    }
 
     private Coordination(HazelcastInstance hz, CoordinationSettings settings, Clock clock, boolean ownsClient) {
         this.hz = Objects.requireNonNull(hz, "hz");
@@ -216,7 +227,8 @@ public final class Coordination implements AutoCloseable {
      * T2, T6: takes the next id of the stage's queue and claims it for {@code owner} with a
      * lease of LEASE_SECONDS. The poll and the claim are one transaction. An id whose entry
      * is not in the stage's waiting state (a duplicate, or a book someone else moved) is
-     * dropped from the queue and the next one is tried.
+     * dropped from the queue and the next one is tried. Both kinds of drop are counted:
+     * {@link #invalidIdsDropped()} and {@link #idsSkipped()}.
      *
      * @param owner a worker name, see {@link #owner(String, int)}
      * @param wait  how long to wait for an id when the queue is empty
@@ -231,34 +243,61 @@ public final class Coordination implements AutoCloseable {
                 throw new InterruptedException("interrupted while waiting for " + stage.queue());
             }
             long slice = Math.min(Math.max(deadline - System.nanoTime(), 0), MAX_POLL.toNanos());
-            Optional<Claim> claim = inTransaction(tx -> pollAndClaim(tx, stage, owner, slice));
+            Polled polled = inTransaction(tx -> pollAndClaim(tx, stage, owner, slice));
+            // Counted only here, after the commit: a rolled-back drop did not happen
+            if (polled.drop() == Drop.INVALID) {
+                invalidIdsDropped.incrementAndGet();
+            } else if (polled.drop() == Drop.NOT_WAITING) {
+                idsSkipped.incrementAndGet();
+            }
             boolean timeIsUp = deadline - System.nanoTime() <= 0;
-            if (claim.isPresent() || (timeIsUp && !Thread.currentThread().isInterrupted())) {
-                return claim;
+            if (polled.claim().isPresent() || (timeIsUp && !Thread.currentThread().isInterrupted())) {
+                return polled.claim();
             }
         }
     }
 
-    private Optional<Claim> pollAndClaim(TransactionContext tx, Stage stage, String owner, long waitNanos) {
+    private Polled pollAndClaim(TransactionContext tx, Stage stage, String owner, long waitNanos) {
         Integer id;
         try {
             id = tx.<Integer>getQueue(stage.queue()).poll(waitNanos, TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();         // claim() sees it after the commit
-            return Optional.empty();
+            return Polled.NOTHING;
         }
-        if (id == null || !BookIds.isValid(id)) {
-            return Optional.empty();                    // an invalid id leaves the queue with the commit
+        if (id == null) {
+            return Polled.NOTHING;
+        }
+        if (!BookIds.isValid(id)) {
+            return new Polled(Optional.empty(), Drop.INVALID);   // leaves the queue with the commit
         }
         TransactionalMap<Integer, BookTask> map = tx.getMap(CoordinationNames.BOOK_STATE);
         BookTask current = map.getForUpdate(id);        // locked for this transaction
         if (current == null || current.bookState() != stage.waiting()) {
-            return Optional.empty();
+            return new Polled(Optional.empty(), Drop.NOT_WAITING);
         }
         long now = now();
         BookTask claimed = current.claimed(stage, owner, now + leaseMillis(), now);
         map.set(id, claimed);
-        return Optional.of(new Claim(stage, claimed));
+        return new Polled(Optional.of(new Claim(stage, claimed)), Drop.NONE);
+    }
+
+    /**
+     * Ids that were not valid book ids, taken from a queue and dropped by this instance since
+     * it was created. Not 0 means a bug somewhere: someone offered a bad id to a queue. The
+     * services show it in GET /status (contract §2).
+     */
+    public long invalidIdsDropped() {
+        return invalidIdsDropped.get();
+    }
+
+    /**
+     * Ids taken from a queue whose book was not waiting (a duplicate, an unknown book, or one
+     * someone else moved), dropped by this instance since it was created. Expected and harmless
+     * (contract principle 3); a coordination metric (CF-12).
+     */
+    public long idsSkipped() {
+        return idsSkipped.get();
     }
 
     /**

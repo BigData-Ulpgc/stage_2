@@ -4,8 +4,9 @@
 Indexing Service, Search Service. **Implemented by:** `common/coordination` (CF-04); no
 service names a structure or builds a `BookTask` by hand.
 
-**Status: v1.1.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
-publication in §5, an interrupted T10 in §7, split-brain in §9). Implemented by
+**Status: v1.2.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
+publication in §5, an interrupted T10 in §7, split-brain in §9); v1.2 the review notes of #19
+(dropped ids are counted, not logged, §1 and §2). Implemented by
 `common/coordination` (CF-04). Changing anything in this file (names, fields, states,
 transitions) needs the approval of the other two members (plan §7). A change of the `BookTask`
 fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the stored
@@ -27,7 +28,7 @@ in MongoDB (§6.5). The inventory of all interactions is `api/endpoints.md`.
 3. **`book-state` is the truth, the queues are work to do.** An id can be in a queue twice or
    be in a queue while its state says something else: whoever takes it checks the state with an
    atomic claim and discards it if it is not the expected one. Duplicates in a queue are
-   therefore harmless.
+   therefore harmless; they are counted (`Coordination.idsSkipped()`, a coordination metric).
 4. **Every change is atomic.** A transition is a compare-and-set, `replace(id, expected, next)`:
    it succeeds only if the entry is still exactly the value the caller read. A transition that
    also moves the id to or from a queue runs in **one Hazelcast transaction** with that queue
@@ -46,8 +47,10 @@ in MongoDB (§6.5). The inventory of all interactions is `api/endpoints.md`.
 | `locks` | `IMap<String, String>`, key `index-writer` | lock of the single index writer (§5); the map stays empty, only its lock is used | Indexing | Indexing |
 | `coordination-meta` | `IMap<String, Long>`, key `initialized` | time (epoch ms) of the last full seed or recovery; its absence means the cluster lost its state (§7) | Control | Control |
 
-- Book ids are `int` from 1 to 999,999,999, the rule of `BookIds` in `common`. A consumer drops,
-  with a warning, an id that is not valid.
+- Book ids are `int` from 1 to 999,999,999, the rule of `BookIds` in `common`. A consumer drops
+  an id that is not valid and counts it (`Coordination.invalidIdsDropped()`, shown in the
+  `GET /status` of the service): not 0 means someone offered a bad id. The library does not log;
+  the service decides.
 - Values use Hazelcast **Compact serialization** (records of `common/coordination`). The members
   run the official image without our classes: they store, compare and query Compact data
   without them. That is why the transitions use `replace` and not an `EntryProcessor` (which
