@@ -70,7 +70,7 @@ public final class GutenbergClient implements BookSource {
         if (status == 404 || status == 410) {
             throw new BookNotFoundException(bookId, "HTTP " + status + " from " + uri);
         }
-        throw new SourceUnavailableException("HTTP " + status + " from " + uri);
+        throw new SourceUnavailableException("HTTP " + status + " from " + uri, status);
     }
 
     URI uriOf(int bookId) {

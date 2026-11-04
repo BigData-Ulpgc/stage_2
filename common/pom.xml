@@ -47,4 +47,22 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Also publishes the test support (testsupport: the embedded Hazelcast cluster, the
+                 MongoDB probe) as common-tests.jar, so the services' tests use the same one
+                 (<type>test-jar</type>, test scope) instead of copying it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <executions>
+                    <execution>
+                        <goals><goal>test-jar</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

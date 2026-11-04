@@ -119,6 +119,8 @@ class GutenbergClientTest {
             int book = id++;
             SourceUnavailableException e = assertThrows(SourceUnavailableException.class, () -> client().fetch(book));
             assertTrue(e.getMessage().contains("HTTP " + status), e.getMessage());
+            assertEquals(status, e.httpStatus());
+            assertEquals(status == 429 || status == 403, e.isThrottling());
         }
     }
 
