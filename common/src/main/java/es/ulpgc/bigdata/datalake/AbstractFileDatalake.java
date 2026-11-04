@@ -9,8 +9,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
@@ -21,8 +24,13 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
  * Each subclass only decides WHERE each book goes; HOW it is written and WHAT
  * counts as a saved book is defined here, only once.
  *
- * Definition of "saved book": header and body exist as regular
- * files with their final name. A .tmp never counts.
+ * Definition of "saved book" (contract §6.2, DR-06): its ready marker, its header and its
+ * body exist as regular files with their final name. The marker is written LAST, so a book
+ * whose save was interrupted (header without body, or both without marker) does not exist:
+ * Indexing never reads it and Ingestion writes it again. A .tmp never counts.
+ *
+ * The marker holds one line, the time of the save in ISO-8601 UTC to the second
+ * ("2026-11-04T10:15:00Z"), read by the recovery of the Control and by the metrics.
  */
 public abstract class AbstractFileDatalake implements Datalake {
 
@@ -34,8 +42,12 @@ public abstract class AbstractFileDatalake implements Datalake {
 
     protected final Path root;
 
-    protected AbstractFileDatalake(Path root) {
+    /** Time written in the ready marker; fixed in the tests. */
+    private final Clock clock;
+
+    protected AbstractFileDatalake(Path root, Clock clock) {
         this.root = Objects.requireNonNull(root, "root");
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     // ------------------------------------------------------------------
@@ -43,20 +55,31 @@ public abstract class AbstractFileDatalake implements Datalake {
     // ------------------------------------------------------------------
 
     /**
-     * Saves a book in the paths given by the subclass.
-     * Header first and body afterwards: a book only "exists" when both
-     * are in place, so a crash halfway leaves a NOT saved book.
+     * Saves a book in the paths given by the subclass: header, body and, LAST, the ready
+     * marker. A book only "exists" when the three are in place, so a crash halfway leaves a
+     * NOT saved book, which the next save writes again.
+     *
+     * A book that is already saved is never modified (§6.2): save writes nothing and returns
+     * its location, so Indexing never reads a book while it is being rewritten. "Saved" means
+     * complete: a book whose marker exists but whose body was lost is written again.
+     *
+     * Two saves of the same book at the same time are safe: each file is replaced atomically
+     * with a complete version (writeAtomically), and both write the same book.
      */
-    protected BookLocation writeBook(RawBook book, Path header, Path body) {
+    protected BookLocation writeBook(RawBook book, Path header, Path body, Path ready) {
         Objects.requireNonNull(book, "book");
         Objects.requireNonNull(book.header(), "header");
         Objects.requireNonNull(book.body(), "body");
         if (book.id() < 0) {
             throw new IllegalArgumentException("book_id negativo: " + book.id());
         }
+        if (isCompleteBook(header, body, ready)) {
+            return new BookLocation(book.id(), header, body);
+        }
         try {
             writeAtomically(header, book.header());
             writeAtomically(body, book.body());
+            writeAtomically(ready, clock.instant().truncatedTo(ChronoUnit.SECONDS) + "\n");
         } catch (IOException e) {
             throw new UncheckedIOException("No se pudo guardar el libro " + book.id(), e);
         }
@@ -65,11 +88,20 @@ public abstract class AbstractFileDatalake implements Datalake {
 
     /**
      * Writes content to target without anyone ever being able to see a half-written target:
-     * create directory -> write target.tmp -> move target.tmp to target.
+     * create directory -> write a temporary file -> move it to target.
+     *
+     * The temporary name is UNIQUE per call (target.&lt;uuid&gt;.tmp). With one fixed name, two
+     * threads or processes saving the same book at once (a manual POST /ingest and a worker,
+     * or a worker that lost its lease) would write into the same temporary file: one could
+     * move the other's half-written file to target, and the other would then fail. With one
+     * name each, every move is a complete file, and the last one wins.
+     *
+     * Not Files.createTempFile: it creates the file readable only by its owner (rw-------), and
+     * Indexing reads the books Ingestion writes, from another container.
      */
     static void writeAtomically(Path target, String content) throws IOException {
         Files.createDirectories(target.getParent());
-        Path tmp = target.resolveSibling(target.getFileName() + TMP_SUFFIX);
+        Path tmp = target.resolveSibling(target.getFileName() + "." + UUID.randomUUID() + TMP_SUFFIX);
         try {
             Files.writeString(tmp, content, StandardCharsets.UTF_8);
             try {
@@ -89,13 +121,16 @@ public abstract class AbstractFileDatalake implements Datalake {
     // Reading
     // ------------------------------------------------------------------
 
-    /** The only definition of "saved book", used by locate and listBookIds. */
-    protected static boolean isCompleteBook(Path header, Path body) {
-        return Files.isRegularFile(header) && Files.isRegularFile(body);
+    /**
+     * The only definition of "saved book", used by save, locate and listBookIds. The marker
+     * is checked first: it is the last file written, so without it the book is not there.
+     */
+    protected static boolean isCompleteBook(Path header, Path body, Path ready) {
+        return Files.isRegularFile(ready) && Files.isRegularFile(header) && Files.isRegularFile(body);
     }
 
-    protected static Optional<BookLocation> completeBook(int id, Path header, Path body) {
-        return isCompleteBook(header, body)
+    protected static Optional<BookLocation> completeBook(int id, Path header, Path body, Path ready) {
+        return isCompleteBook(header, body, ready)
                 ? Optional.of(new BookLocation(id, header, body))
                 : Optional.empty();
     }
@@ -105,7 +140,7 @@ public abstract class AbstractFileDatalake implements Datalake {
         return CANONICAL_ID.matcher(text).matches() ? Integer.parseInt(text) : null;
     }
 
-    /** ("1342.body.txt", ".body.txt") -> 1342 ; "1342.body.txt.tmp" -> null. */
+    /** ("1342._READY", "._READY") -> 1342 ; "1342._READY.tmp" -> null. */
     protected static Integer parseIdWithSuffix(String fileName, String suffix) {
         if (!fileName.endsWith(suffix)) {
             return null;

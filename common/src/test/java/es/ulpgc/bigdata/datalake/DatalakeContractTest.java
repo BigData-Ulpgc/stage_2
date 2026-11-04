@@ -110,6 +110,18 @@ class DatalakeContractTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("structures")
+    void unLibroGuardadoNoSeModifica(String name, Function<Path, Datalake> factory) throws IOException {
+        Datalake d = create(name, factory);
+        BookLocation first = d.save(new RawBook(1342, "H", "B"));
+
+        BookLocation second = d.save(new RawBook(1342, "H2", "B2"));
+
+        assertEquals(first, second);
+        assertEquals("B", Files.readString(d.locate(1342).orElseThrow().bodyPath(), StandardCharsets.UTF_8));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("structures")
     void libroSinHeaderDesaparece(String name, Function<Path, Datalake> factory) throws IOException {
         Datalake d = create(name, factory);
         d.save(new RawBook(1, "H", "B"));
@@ -228,6 +240,8 @@ class DatalakeContractTest {
         assertEquals(List.of(1342), d.listBookIds());
         assertEquals("B definitivo",
                 Files.readString(d.locate(1342).orElseThrow().bodyPath(), StandardCharsets.UTF_8));
-        assertFalse(Files.exists(Path.of(again.bodyPath() + ".tmp")));
+        // The abandoned temporary file is not reused (each write has its own name): it stays,
+        // ignored by the listing.
+        assertTrue(Files.exists(Path.of(again.bodyPath() + ".tmp")));
     }
 }
