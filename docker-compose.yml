@@ -7,17 +7,15 @@
 
 x-hazelcast-member: &hazelcast-member
   image: hazelcast/hazelcast:${HAZELCAST_VERSION}
+  # Cluster configuration (CF-03): discovery, backups, the index of book-state, queue and topic
+  # settings. Read-only: the members never write it.
+  volumes:
+    - ./hazelcast/hazelcast.yaml:/opt/hazelcast/config_ext/hazelcast.yaml:ro
   environment: &hazelcast-env
-    # Hazelcast reads any HZ_* variable as a configuration override (no YAML file needed yet;
-    # hazelcast/hazelcast.yaml from CF-03 can be mounted later and these lines removed).
+    HAZELCAST_CONFIG: /opt/hazelcast/config_ext/hazelcast.yaml
+    # Hazelcast applies any HZ_* variable on top of the file. The cluster name comes from .env
+    # so that members and services share one value.
     HZ_CLUSTERNAME: ${HZ_CLUSTER_NAME}
-    # No multicast: we must not join other groups' clusters on the university network.
-    HZ_NETWORK_JOIN_MULTICAST_ENABLED: "false"
-    HZ_NETWORK_JOIN_TCPIP_ENABLED: "true"
-    HZ_NETWORK_JOIN_TCPIP_MEMBERS: "hz-1,hz-2"
-    # Health endpoint used by the healthcheck: GET /hazelcast/health/ready
-    HZ_NETWORK_RESTAPI_ENABLED: "true"
-    HZ_NETWORK_RESTAPI_ENDPOINTGROUPS_HEALTHCHECK_ENABLED: "true"
     JAVA_OPTS: "-Xms${HZ_HEAP} -Xmx${HZ_HEAP}"
   healthcheck:
     test: ["CMD-SHELL", "curl -fs http://localhost:5701/hazelcast/health/ready || exit 1"]
