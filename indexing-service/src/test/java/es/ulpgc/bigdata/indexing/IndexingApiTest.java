@@ -97,6 +97,19 @@ class IndexingApiTest {
     }
 
     @Test
+    void unLibroSinTerminosDa422YNoEscribeNada() throws Exception {
+        datalake.save(new RawBook(999, IndexingServiceTest.HEADER_1342, "The and of... !!!"));
+
+        HttpResponse<String> response = post("/index/update/999");
+
+        assertEquals(422, response.statusCode());
+        JsonObject error = assertError(response, "EMPTY_BOOK", "book_id");
+        assertEquals("book 999 has no indexable terms", error.get("message").getAsString());
+        assertEquals(0, metadata.count());
+        assertEquals(0, index.flushes.get());
+    }
+
+    @Test
     void siLosMetadatosNoRespondenDa503() throws Exception {
         datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
         metadata.failing(true);                               // MetadataRepositoryException

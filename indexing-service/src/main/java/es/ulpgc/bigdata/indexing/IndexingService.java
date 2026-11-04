@@ -35,6 +35,7 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * Errors are exceptions with a meaning; IndexingApi turns them into HTTP codes:
  *  - BookNotFoundException:                    the book is not complete in the datalake (404);
+ *  - EmptyBookException:                       the book gives no term, nothing written (422);
  *  - MongoException, MetadataRepositoryException: MongoDB does not answer (503);
  *  - UncheckedIOException:                     the book files could not be read (500);
  *  - IllegalStateException:                    CURRENT does not follow the contract (500).
@@ -78,6 +79,7 @@ public final class IndexingService {
      * visible because only publish makes books visible, and the retry completes it.
      *
      * @throws BookNotFoundException    if the datalake does not have the book complete
+     * @throws EmptyBookException       if the body gives no term; nothing is written
      * @throws IllegalArgumentException if bookId is not valid (BookIds): a bug of the caller,
      *                                  the API already answers 400 before calling
      */
@@ -96,10 +98,16 @@ public final class IndexingService {
         BookMetadata book = parser.parse(location, header);
         Set<String> terms = tokenizer.uniqueTerms(body);
 
-        // 3. Metadata first, as in the plan; the repository is thread-safe.
+        // 3. A book without terms could never be found: reject it BEFORE writing anything, so
+        //    it leaves no metadata in books that a later publish could make visible.
+        if (terms.isEmpty()) {
+            throw new EmptyBookException(bookId);
+        }
+
+        // 4. Metadata first, as in the plan; the repository is thread-safe.
         metadata.save(book);
 
-        // 4. Posting lists: the inverted index is not thread-safe.
+        // 5. Posting lists: the inverted index is not thread-safe.
         writeLock.lock();
         try {
             index.addDocument(bookId, terms);

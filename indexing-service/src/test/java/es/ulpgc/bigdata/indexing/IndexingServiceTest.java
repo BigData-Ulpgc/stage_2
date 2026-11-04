@@ -126,6 +126,36 @@ class IndexingServiceTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {
+            "",                                             // cuerpo vacío
+            "   \n\n\t  ",                                 // solo espacios
+            "The and of, to: a! In? IS... it -- \"the\".",  // solo stopwords y puntuación
+            "Α β γ δ. Война и мир. 紅樓夢",                   // solo caracteres que el tokenizer no guarda
+            "a b c d e 1 2 3"                               // solo tokens de longitud 1
+    })
+    void unLibroSinTerminosDaEmptyBookYNoEscribeNada(String body) {
+        datalake.save(new RawBook(1342, HEADER_1342, body));
+
+        EmptyBookException e = assertThrows(EmptyBookException.class, () -> service.update(1342));
+
+        assertEquals(1342, e.bookId());
+        assertEquals(0, metadata.count(), "ni la ficha en books");
+        assertEquals(0, index.flushes.get(), "ni las posting lists");
+        assertNull(service.status().lastUpdate(), "no cuenta como update terminado");
+    }
+
+    @Test
+    void unSoloTerminoYaBastaParaIndexar() {
+        datalake.save(new RawBook(1342, HEADER_1342, "The whale."));
+
+        UpdateResult result = service.update(1342);
+
+        assertEquals(1, result.terms());
+        assertEquals(1, metadata.count());
+        assertEquals(1, index.flushes.get());
+    }
+
+    @ParameterizedTest
     @ValueSource(ints = {Integer.MIN_VALUE, -1, 0, BookIds.MAX + 1, Integer.MAX_VALUE})
     void unIdFueraDeRangoSeRechazaSinTocarNada(int bookId) {
         assertThrows(IllegalArgumentException.class, () -> service.update(bookId));

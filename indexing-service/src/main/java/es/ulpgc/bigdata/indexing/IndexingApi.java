@@ -25,6 +25,7 @@ import java.util.Objects;
  * answers ApiException (400, 501), unknown routes (404) and unexpected errors (500, details
  * only in the log); here are only the exceptions of this service:
  *  - BookNotFoundException                        404 NOT_FOUND;
+ *  - EmptyBookException                           422 EMPTY_BOOK: nothing was written;
  *  - MongoException, MetadataRepositoryException  503 STORAGE_UNAVAILABLE: temporary, and
  *                                                 update is idempotent, so retrying is safe.
  * Same error format and codes as Search (D3). The messages of the responses are in English:
@@ -57,6 +58,8 @@ public final class IndexingApi {
         // win over the 500 one of ServiceServer.
         app.exception(BookNotFoundException.class, (e, ctx) -> ServiceServer.writeError(ctx, 404, "NOT_FOUND",
                 "book " + e.bookId() + " is not ready in the datalake", "book_id"));
+        app.exception(EmptyBookException.class, (e, ctx) -> ServiceServer.writeError(ctx, 422, "EMPTY_BOOK",
+                "book " + e.bookId() + " has no indexable terms", "book_id"));
         app.exception(MongoException.class, (e, ctx) -> storageUnavailable(ctx, e));
         app.exception(MetadataRepositoryException.class, (e, ctx) -> storageUnavailable(ctx, e));
         return app;

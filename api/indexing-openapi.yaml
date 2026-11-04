@@ -82,9 +82,11 @@ paths:
         marker in the datalake (contract §6.2). Until then it means that both its header and
         its body exist.
 
-        **Empty books.** A book whose body gives no term at all (empty, or only stopwords and
-        punctuation) answers 422 `EMPTY_BOOK` and nothing is written: neither its metadata nor
-        its terms. Such a book could never be found by a search, so it must not be published.
+        **Empty books.** A book whose body gives no term at all answers 422 `EMPTY_BOOK` and
+        nothing is written: neither its metadata nor its terms. That happens when the body is
+        empty, has only stopwords and punctuation, or is written only in characters the
+        tokenizer does not keep (it keeps ASCII letters and digits, e.g. a book entirely in
+        Greek or Chinese). Such a book could never be found by a search, so it must not be published.
         Calling again gives the same answer until the book changes in the datalake.
       parameters:
         - name: book_id
