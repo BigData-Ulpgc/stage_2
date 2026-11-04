@@ -2,8 +2,8 @@ package es.ulpgc.bigdata.search.query;
 
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.LanguageCodes;
+import es.ulpgc.bigdata.http.ApiException;
 import es.ulpgc.bigdata.model.BookMetadata;
-import es.ulpgc.bigdata.search.http.ApiException;
 
 import java.util.List;
 import java.util.Locale;
