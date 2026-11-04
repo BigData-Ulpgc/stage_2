@@ -71,6 +71,10 @@ curl localhost:7012/status    # {"service":"indexing-service","status":"running"
 |---|---|---|
 | `CONTROL_PORT`, `INGESTION_PORT`, `INDEXING_PORT` | 7000, 7001, 7002 | HTTP port of each process |
 | `<SERVICE>_HTTP_THREADS` (`CONTROL_`, `INGESTION_`, `INDEXING_`) | 250 | Maximum Jetty request threads of the process (minimum 8) |
+| `INGESTION_SOURCE` | `gutenberg` | Where Ingestion gets the books: `gutenberg` (download) or `local` (files `pg<id>.txt` of a folder: the sample and synthetic datasets, offline benchmarks) |
+| `INGESTION_GUTENBERG_URL` | `https://www.gutenberg.org/cache/epub` | Base of the download URL `<base>/<id>/pg<id>.txt` |
+| `INGESTION_CONNECT_TIMEOUT_SECONDS`, `INGESTION_REQUEST_TIMEOUT_SECONDS` | 10, 30 | Timeouts of one download |
+| `INGESTION_LOCAL_DIR` | `sample_dataset/raw` | Folder of the `local` source; it must exist, or Ingestion does not start |
 
 The request thread pool is always set explicitly (`common` → `ServiceServer`): a Jetty
 `QueuedThreadPool` with max `<SERVICE>_HTTP_THREADS`, min 8, idle timeout 60 s. These are the
