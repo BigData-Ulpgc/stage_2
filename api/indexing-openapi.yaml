@@ -78,9 +78,9 @@ paths:
         both answer 200. After a timeout or a 503 the caller can simply call again.
 
         **Readiness.** Only complete books are indexed; a book that is missing or still being
-        written gives 404. **From DR-06** "complete" means that the book has its `<id>._READY`
-        marker in the datalake (contract §6.2). Until then it means that both its header and
-        its body exist.
+        written gives 404. "Complete" means that the book has its `<id>._READY` marker in the
+        datalake, which Ingestion writes after its header and body (contract §6.2). A datalake
+        written before DR-06 has no markers: its books give 404 until they are ingested again.
 
         **Empty books.** A book whose body gives no term at all answers 422 `EMPTY_BOOK` and
         nothing is written: neither its metadata nor its terms. That happens when the body is
@@ -114,7 +114,7 @@ paths:
         '400':
           $ref: '#/components/responses/InvalidBookId'
         '404':
-          description: The book is not complete in the datalake (from DR-06, no `<id>._READY`).
+          description: The book is not complete in the datalake (no `<id>._READY`).
           content:
             application/json:
               schema:
