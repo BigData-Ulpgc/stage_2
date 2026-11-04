@@ -353,6 +353,18 @@ class CoordinationTest {
     }
 
     @Test
+    void idsInListsTheBooksOfOneState() throws Exception {
+        coordination.seed(List.of(1, 2, 3));
+        coordination.complete(claim(Stage.INGESTION));
+        coordination.complete(claim(Stage.INDEXING));
+        coordination.complete(claim(Stage.INGESTION));
+        coordination.complete(claim(Stage.INDEXING));
+        assertEquals(Set.of(1, 2), coordination.idsIn(BookState.INDEXED));
+        assertEquals(Set.of(3), coordination.idsIn(BookState.PENDING));
+        assertEquals(Set.of(), coordination.idsIn(BookState.FAILED));
+    }
+
+    @Test
     void theInitializedMarkerSaysWhetherTheClusterKeptItsState() {
         assertFalse(coordination.isInitialized());
         coordination.markInitialized();

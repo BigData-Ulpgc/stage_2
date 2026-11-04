@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -178,6 +179,14 @@ public final class Coordination implements AutoCloseable {
             counts.put(state, books.aggregate(Aggregators.count(), Predicates.equal("state", state.name())));
         }
         return counts;
+    }
+
+    /**
+     * Ids of the books in one state, e.g. INDEXED for the repair of an interrupted T10
+     * (contract §7): Indexing compares them with index_books and calls markPublished.
+     */
+    public Set<Integer> idsIn(BookState state) {
+        return books.keySet(Predicates.equal("state", state.name()));
     }
 
     /** Ids waiting in the queue of the stage. */
