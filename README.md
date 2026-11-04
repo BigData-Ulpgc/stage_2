@@ -101,6 +101,7 @@ docker compose down -v        # stop and wipe MongoDB data (clean benchmark runs
 | Cluster name | `HZ_CLUSTER_NAME=search-engine` |
 | Members | `hz-1:5701`, `hz-2:5701` inside Docker; published on the host as `localhost:5701` and `localhost:5702` |
 | Discovery | TCP/IP with a fixed member list; multicast disabled |
+| Cluster configuration | `hazelcast/hazelcast.yaml`, mounted in both members: backups, the index of `book-state`, queue and topic settings (CF-03). Restart the members after changing it: `docker compose up -d --force-recreate hz-1 hz-2` |
 | Heap per member | `HZ_HEAP=512m` |
 | MongoDB image | `MONGO_VERSION=8.2.12` (same as Stage 1; driver version in the parent `pom.xml`) |
 | MongoDB memory | `MONGO_MEM_LIMIT=1g` container limit, `MONGO_CACHE_GB=0.25` WiredTiger cache |
