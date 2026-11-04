@@ -14,8 +14,12 @@ path twice.
 
 **Completion** says what a successful answer means: *done* (the work is finished when the
 response arrives) or *accepted* (the work continues in the background; the row says how to
-follow it). Only nginx (port 8080) and the Control Module (port 7000) are published outside
-Docker; the rest of the services are reached by name inside the Docker network.
+follow it). Rows marked *501 until DR-xx* already have their route and final contract, but
+answer 501 `NOT_IMPLEMENTED` until that task. Every service answers errors with the same `Error`
+schema, also for a route that does not exist (404 `NOT_FOUND`).
+
+Only nginx (port 8080) and the Control Module (port 7000) are published outside Docker; the
+rest of the services are reached by name inside the Docker network.
 
 ## Front-end
 
@@ -34,8 +38,8 @@ Consumed by another service or by an operator, never by the front-end.
 | Provider | Method and route | Consumers | Purpose | Completion |
 |---|---|---|---|---|
 | Indexing | `POST /index/update/{book_id}` | operators, validation | Index one complete book (metadata + posting lists) | done: indexed, visible after the next publish |
-| Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | done |
-| Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | accepted (202): follow `rebuild` in `GET /index/status` |
+| Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | *501 until DR-08*; then done: `CURRENT` points to the new version |
+| Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | *501 until DR-10*; then accepted (202): follow `rebuild` in `GET /index/status` |
 | Indexing | `GET /index/status` | Control Module, operators | Books indexed and published, index size, rebuild progress | done (read-only) |
 | Ingestion | `POST /ingest/{book_id}` | *pending (CF-06)* | Download a book into the datalake | |
 | Ingestion | `GET /ingest/status/{book_id}` | *pending (CF-06)* | Whether a book is in the datalake | |

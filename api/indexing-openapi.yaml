@@ -1,14 +1,15 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.1.0** (DR-05, plan v3.1). `POST /index/publish` answers 501 until DR-08
-    and `POST /index/rebuild` until DR-10; their contract is already the final one. The
+    **Status: draft v0.2.0** (DR-05 and its review follow-up, plan v3.3). `POST /index/publish`
+    answers 501 until DR-08 and `POST /index/rebuild` until DR-10; their contract is already the
+    final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
 
@@ -27,9 +28,12 @@ info:
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
     - **Errors** always use the `Error` schema of the Search API, with a machine-readable `code`:
-      `INVALID_PARAMETER` (400), `NOT_FOUND` (404), `REBUILD_IN_PROGRESS` (409),
-      `NOT_IMPLEMENTED` (501, temporary), `STORAGE_UNAVAILABLE` (503, MongoDB does not answer),
-      `INTERNAL_ERROR` (500).
+      `INVALID_PARAMETER` (400), `NOT_FOUND` (404), `REBUILD_IN_PROGRESS` (409, from DR-10),
+      `EMPTY_BOOK` (422), `NOT_IMPLEMENTED` (501, temporary), `STORAGE_UNAVAILABLE` (503,
+      MongoDB does not answer), `INTERNAL_ERROR` (500).
+    - **Unknown routes.** A route that does not exist (or a method that a route does not
+      have) answers 404 `NOT_FOUND` with the same `Error` schema and `field: null`, never
+      the web framework's own page. All services share this rule (`ServiceServer` in `common`).
     - **Writes are serialized** inside the service: concurrent requests are answered correctly,
       one write at a time (one writer per process; DR-09 adds the `index-writer` lock across
       replicas).
@@ -73,9 +77,15 @@ paths:
         by `_id` and posting lists never repeat an id. Two concurrent calls for the same book
         both answer 200. After a timeout or a 503 the caller can simply call again.
 
-        **Readiness.** Only complete books are indexed: the book must have its `<id>._READY`
-        marker in the datalake (contract §6.2). A book that is missing or still being written
-        gives 404.
+        **Readiness.** Only complete books are indexed; a book that is missing or still being
+        written gives 404. **From DR-06** "complete" means that the book has its `<id>._READY`
+        marker in the datalake (contract §6.2). Until then it means that both its header and
+        its body exist.
+
+        **Empty books.** A book whose body gives no term at all (empty, or only stopwords and
+        punctuation) answers 422 `EMPTY_BOOK` and nothing is written: neither its metadata nor
+        its terms. Such a book could never be found by a search, so it must not be published.
+        Calling again gives the same answer until the book changes in the datalake.
       parameters:
         - name: book_id
           in: path
@@ -99,7 +109,7 @@ paths:
         '400':
           $ref: '#/components/responses/InvalidBookId'
         '404':
-          description: The book is not complete in the datalake (no `<id>._READY`).
+          description: The book is not complete in the datalake (from DR-06, no `<id>._READY`).
           content:
             application/json:
               schema:
@@ -108,6 +118,14 @@ paths:
                 error: { code: NOT_FOUND, message: 'book 999999 is not ready in the datalake', field: book_id }
         '409':
           $ref: '#/components/responses/RebuildInProgress'
+        '422':
+          description: The book gives no term; nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: EMPTY_BOOK, message: 'book 999 has no indexable terms', field: book_id }
         '503':
           $ref: '#/components/responses/StorageUnavailable'
         '500':
@@ -190,7 +208,8 @@ paths:
 
         **Duplicates and concurrency.** Only one rebuild runs at a time: a second call while
         one is running gets 409 and does not start another. While a rebuild runs,
-        `POST /index/update` and `POST /index/publish` also answer 409 (retry later). A
+        `POST /index/update` and `POST /index/publish` also answer 409 (retry later; this
+        409 exists from DR-10, together with the rebuild). A
         failed rebuild leaves the current index untouched; calling again starts from scratch.
 
         **Until DR-10** this endpoint answers 501 `NOT_IMPLEMENTED`.
@@ -328,6 +347,13 @@ components:
 
     RebuildStatus:
       type: object
+      # nullable here, and not next to the $ref in IndexStatus.rebuild: in OpenAPI 3.0 the
+      # siblings of a $ref are ignored, and `nullable` next to `allOf` (without `type`) does
+      # not let null through either. POST /index/rebuild never answers null.
+      nullable: true
+      description: |
+        Progress of a rebuild. In `GET /index/status` it is null when no rebuild has been started
+        since the process began.
       required: [state, started_at, finished_at, processed, total, error]
       properties:
         state:
@@ -378,10 +404,8 @@ components:
           minimum: 0
           description: Books visible in `published_version`.
         rebuild:
-          nullable: true
-          description: Last rebuild started since the process began; null if none.
-          allOf:
-            - $ref: '#/components/schemas/RebuildStatus'
+          # Last rebuild started since the process began; null if none (see RebuildStatus).
+          $ref: '#/components/schemas/RebuildStatus'
 
     ServiceStatus:
       type: object
@@ -401,7 +425,7 @@ components:
           properties:
             code:
               type: string
-              enum: [INVALID_PARAMETER, NOT_FOUND, REBUILD_IN_PROGRESS, NOT_IMPLEMENTED, STORAGE_UNAVAILABLE, INTERNAL_ERROR]
+              enum: [INVALID_PARAMETER, NOT_FOUND, REBUILD_IN_PROGRESS, EMPTY_BOOK, NOT_IMPLEMENTED, STORAGE_UNAVAILABLE, INTERNAL_ERROR]
             message: { type: string, description: Human-readable explanation. }
             field:
               type: string
@@ -418,7 +442,7 @@ components:
           example:
             error: { code: INVALID_PARAMETER, message: 'book_id must be a positive integer', field: book_id }
     RebuildInProgress:
-      description: A rebuild is running; retry when `GET /index/status` shows it finished.
+      description: A rebuild is running; retry when `GET /index/status` shows it finished. From DR-10 (until then it is never returned).
       content:
         application/json:
           schema:
