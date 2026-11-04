@@ -6,10 +6,10 @@ import java.time.Instant;
  * What IndexingService.status returns, in raw units (bytes, Instant); IndexingApi turns it
  * into the JSON of GET /index/status (MB, ISO text).
  *
- * @param booksIndexed     books indexed, published or not. Provisional until DR-07: documents
- *                         of the metadata collection (index_log will make it exact)
- * @param lastUpdate       end of the last successful update; null if none. Provisional until
- *                         DR-07: kept in memory, so it is null again after a restart
+ * @param booksIndexed     books complete in the index, published or not: the books of the
+ *                         index log (DR-07). A book whose update failed halfway does not count
+ * @param lastUpdate       when a book was last indexed (the latest indexed_at of the index
+ *                         log); null if none. Persistent: it survives a restart
  * @param indexSizeBytes   data + indexes of the inverted index collection; approximate on a
  *                         shared client (up to one MongoDB checkpoint behind)
  * @param publishedVersion version CURRENT points to; null if nothing is published yet

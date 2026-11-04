@@ -4,7 +4,8 @@
   A plain library jar, not executable: no shade plugin and no main class.
   Stage 1 code migrated in DR-02: model, datalake (range), tokenizer + stopwords and inverted
   index (MongoDB). Metadata in MongoDB too since DR-04 (MongoMetadataRepository, collection
-  "books"). config holds Env, DataLayout and MongoSettings.
+  "books"). config holds Env, DataLayout and MongoSettings. coordination (CF-04) implements the
+  Hazelcast contract, api/contracts/coordination.md.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -33,6 +34,11 @@
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver-sync</artifactId>
+        </dependency>
+        <!-- Coordination (CF-04): the client, and in the tests two embedded members -->
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
         </dependency>
         <!-- A library does not choose the logging backend; each service adds slf4j-simple. -->
         <dependency>
