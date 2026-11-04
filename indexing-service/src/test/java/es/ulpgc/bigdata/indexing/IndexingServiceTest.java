@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -121,6 +122,19 @@ class IndexingServiceTest {
         BookNotFoundException e = assertThrows(BookNotFoundException.class, () -> service.update(999999));
 
         assertEquals(999999, e.bookId());
+        assertEquals(0, metadata.count());
+        assertEquals(0, index.flushes.get());
+    }
+
+    @Test
+    void unLibroSinMarcadorReadyDaNotFoundYNoEscribeNada() throws Exception {
+        // Header and body on disk, but no <id>._READY: Ingestion died before writing it (§6.2).
+        Path range = Files.createDirectories(dataDir.resolve("datalake/range/01000-01999"));
+        Files.writeString(range.resolve("1342.header.txt"), HEADER_1342);
+        Files.writeString(range.resolve("1342.body.txt"), BODY_1342);
+
+        assertThrows(BookNotFoundException.class, () -> service.update(1342));
+
         assertEquals(0, metadata.count());
         assertEquals(0, index.flushes.get());
     }
