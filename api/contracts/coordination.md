@@ -4,7 +4,9 @@
 Indexing Service, Search Service. **Implemented by:** `common/coordination` (CF-04); no
 service names a structure or builds a `BookTask` by hand.
 
-**Status: v1.0, proposal for review.** Changing anything in this file (names, fields, states,
+**Status: v1.1.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
+publication in §5, an interrupted T10 in §7, split-brain in §9). Implemented by
+`common/coordination` (CF-04). Changing anything in this file (names, fields, states,
 transitions) needs the approval of the other two members (plan §7). A change of the `BookTask`
 fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the stored
 entries keep the old format.
@@ -165,8 +167,13 @@ because it is not the book's fault: otherwise one outage would send every book i
   writing at once: when the cluster comes back the lock may be gone (§7). It takes the lock
   again before writing anything else.
 - There is no fencing token: a writer that froze and comes back late is not stopped by
-  Hazelcast. Every write is idempotent and its claims fail once the Control has requeued its
-  books, so the damage is limited to repeated work. To be stated in the report.
+  Hazelcast. Its claims fail once the Control has requeued its books, and the writes of
+  indexing are idempotent, so for them the damage is limited to repeated work. A publication
+  is not idempotent (a late writer could move `CURRENT` back and hide books), so it uses the
+  version itself as the fencing token (DR-08): `CURRENT` changes with
+  `updateOne({_id: "CURRENT", version: V}, {$set: {version: V+1, …}})`, the first version with
+  an `insertOne` that fails if it exists, and a publication whose update matches nothing is
+  aborted. To be stated in the report.
 
 ## 6. Event `index-events`
 
@@ -198,6 +205,7 @@ because it is not the book's fault: otherwise one outage would send every book i
 | Indexing dies while holding `index-writer` | The lock is released in 5–60 s and a standby replica takes over | Hazelcast |
 | The Control dies | Workers keep consuming the queues; leases are not reviewed and nothing is published until it restarts. Seeding is idempotent | Restart |
 | One Hazelcast member dies | Nothing is lost (backup). While only one member runs there is no copy; when it rejoins, the partitions migrate back in 1–4 s and the cluster is not *safe* meanwhile | Hazelcast |
+| Indexing dies after `CURRENT` switched but before T10 (cluster alive) | The books are visible but stay `INDEXED` in `book-state`; the recovery below does not run, `coordination-meta` is still there | Indexing (DR-08): at startup and before each publication it applies T10 again to the `INDEXED` books that are already in `index_books` |
 | **Both members die** (or the cluster restarts) | `book-state`, the queues, the lock and `coordination-meta` are lost; clients reconnect when it is back | Control: recovery below |
 
 **Recovery (CF-10).** The Control checks `coordination-meta.initialized` at startup and on every
@@ -228,7 +236,9 @@ Read by `common/coordination` from environment variables, with these defaults:
 ## 9. Limits
 
 - Everything in Hazelcast is lost if both members stop: hence principle 2 and §7.
-- `IMap.lock` has no fencing token (§5).
+- `IMap.lock` has no fencing token (§5). In a network partition (split-brain) each half of
+  the cluster could grant it; on one host with one Indexing replica this cannot happen, in
+  Stage 3 it can.
 - Leases compare clocks of different processes. On one host they share the clock; in Stage 3,
   on several machines, they need NTP, or a margin larger than the expected clock skew.
 - Transactions cost extra round trips per transition. Their cost is part of the coordination
