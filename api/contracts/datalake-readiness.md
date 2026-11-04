@@ -4,8 +4,9 @@
 Control Module (recovery, CF-10). **Implemented by:** `RangeBasedDatalake` in `common/datalake`
 (Daniel Rodríguez, DR-06 adds the `_READY` marker).
 
-**Status: v1.0, proposal for review.** Changing anything in this file needs the approval of the
-other two members (plan §7).
+**Status: v1.1, proposal for review.** v1.1 follows the code of DR-06 (#24): unique temporary
+names, and "ready" is the marker together with header and body. Changing anything in this file
+needs the approval of the other two members (plan §7).
 
 This contract covers what goes through the files of the datalake: how a book is stored and
 when it is ready to be indexed. It answers assignment §3.2.1 (*"expose a book as ready only
@@ -34,34 +35,43 @@ DATA_DIR/datalake/range/<START>-<END>/<id>._READY        readiness marker, writt
   `"datalake/..."` by hand.
 
 Why ranges and not one folder per book (Stage 1's `book`): with hundreds of thousands of books
-the root holds one entry per 1,000 ids and a range folder at most 3,000 files, and the folder of
+the root holds one entry per 1,000 ids and a range folder 3,000 files (plus any temporary file
+left by a crash), and the folder of
 a book is still computed from its id without listing anything.
 
 ## 2. Writing (Ingestion only)
 
-A book is written in this order, each file **atomically**: the content goes to `<file>.tmp` in
-the same folder, which is then moved onto `<file>` (`ATOMIC_MOVE`):
+A book is written in this order, each file **atomically**: the content goes to a temporary file
+with a unique name in the same folder (`<file>.<uuid>.tmp`), which is then moved onto `<file>`
+(`ATOMIC_MOVE`):
 
 1. `<id>.header.txt`
 2. `<id>.body.txt`
-3. `<id>._READY`, whose content is one line: the UTC instant of the ingestion in ISO-8601,
-   e.g. `2026-11-04T10:15:00Z` (read by the recovery of CF-10 and the metrics of CF-12).
+3. `<id>._READY`, whose content is one line: the UTC instant of the ingestion in ISO-8601 to the
+   second, e.g. `2026-11-04T10:15:00Z`. The recovery of CF-10 and the metrics of CF-12 read it
+   through `RangeBasedDatalake` (a `readyAt(id)` added when needed), never by its path.
 
 Rules:
 
-- **A book with `_READY` is never modified.** Saving it again writes nothing and returns where it
-  is (DR-06). The books of the datalake are immutable once ready: the index publication relies
-  on it (`coordination.md` §6, plan §6.5).
-- A failed or interrupted write leaves no `_READY`, so the book does not exist (§3). Writing it
-  again replaces the half-written files; a leftover `.tmp` is overwritten or ignored.
+- **A ready book (marker, header and body) is never modified.** Saving it again writes nothing
+  and returns where it is (DR-06). The books of the datalake are immutable once ready: the index
+  publication relies on it (`coordination.md` §6, plan §6.5).
+- A failed or interrupted write leaves the book not ready, so it does not exist (§3). Writing it
+  again replaces the half-written files. A leftover `.tmp` is never reused: every reader ignores
+  it.
+- The temporary name is unique per write so that two writes of the same file at once never
+  share one: with a fixed name, one could move the other's half-written file (found and fixed in
+  DR-06).
 - If the file system does not support an atomic move, the move is still done, non-atomically.
   This is the only case in which a reader could see a half-written header or body, and it is
   still never `_READY` before both are complete.
 
 ## 3. Readiness (everyone)
 
-**A book is in the datalake if and only if its `<id>._READY` exists.** Header and body without
-`_READY` are a write in progress or an interrupted one, and count as absent for every reader:
+**A book is in the datalake if and only if its `<id>._READY` exists, together with its header
+and body.** Header and body without `_READY` are a write in progress or an interrupted one, and
+a marker whose header or body was lost (deleted by hand, for instance) is a damaged book: both
+count as absent for every reader, and the next `save` writes the book again.
 
 | Who | Uses | Sees |
 |---|---|---|
@@ -80,10 +90,10 @@ offers the id to `index-queue`) only after `save` has returned, that is, after `
 
 | Failure | State of the datalake | What happens next |
 |---|---|---|
-| Ingestion dies while writing the header or the body | `.tmp` and maybe some of the files, no `_READY` | The book is absent; its lease expires and it is downloaded again, overwriting |
+| Ingestion dies while writing the header or the body | a `.tmp` and maybe some of the files, no `_READY` | The book is absent; its lease expires and it is downloaded again, overwriting. The `.tmp` stays, ignored |
 | It dies after the body and before `_READY` | header and body, no `_READY` | The same: absent, downloaded again |
 | It dies after `_READY` and before T3 | ready book | Lease expires; the next worker finds it ready (`already_available`) and completes T3 without downloading |
-| Two ingestions of the same book at once (`POST /ingest` and a worker) | the first to finish writes `_READY` | The second finds it ready and writes nothing, or both wrote identical files before either `_READY`; the result is one complete book |
+| Two ingestions of the same book at once (`POST /ingest` and a worker; two workers cannot, the claim prevents it) | both may write before either writes `_READY` | Each write goes through its own temporary file, so every move is a complete file and the last one wins: one complete book of the same text. The second can rewrite a book the first already made ready, and its marker then has the later time |
 | The disk is full or not writable | no `_READY` | `save` fails: 500 in `POST /ingest`, a transient failure of the attempt in the queue (`INTERNAL_ERROR`) |
 | A datalake written before DR-06 (no `_READY` at all) | header and body only | Every book counts as absent and is ingested again (one-off, when upgrading) |
 
