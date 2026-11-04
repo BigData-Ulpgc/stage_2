@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * AtomicReference: replacing the snapshot is a single atomic write, and every thread sees
  * the new one as soon as it is written (no locks, no half-built object visible).
- * DP-03 loads it when the service starts; DP-06 adds the reload on each publication.
+ * SnapshotRefresher calls reload() every few seconds; a request never waits for it.
  */
 public final class SnapshotHolder {
 
@@ -29,14 +29,23 @@ public final class SnapshotHolder {
     }
 
     /**
-     * Reads CURRENT from MongoDB and, if there is a version, swaps the new snapshot in.
-     * The new snapshot is built completely BEFORE it is published to the requests.
+     * Reads CURRENT from MongoDB and, only if it no longer matches the served snapshot, builds
+     * the new one and swaps it in. It is built completely BEFORE the requests can see it, and
+     * requests already running keep the snapshot they took.
+     *
+     * synchronized: two simultaneous reloads (the periodic check and, later, the IndexPublished
+     * event) must not build the same version twice or leave an older one in place. It blocks
+     * only other reloads, because requests read the AtomicReference without any lock.
      *
      * @return the version now served, or empty if nothing has been published yet
+     * @throws RuntimeException if the read fails; the served snapshot stays as it was
      */
-    public Optional<IndexSnapshot> reload() {
-        Optional<IndexSnapshot> loaded = loader.loadCurrent();
-        loaded.ifPresent(current::set);
+    public synchronized Optional<IndexSnapshot> reload() {
+        IndexSnapshot served = current.get();
+        loader.readCurrent()
+                .filter(published -> !published.isServedBy(served))
+                .map(published -> loader.load(published, served))
+                .ifPresent(current::set);
         return current();
     }
 

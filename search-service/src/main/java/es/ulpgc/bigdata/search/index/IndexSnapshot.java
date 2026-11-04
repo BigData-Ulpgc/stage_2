@@ -19,7 +19,7 @@ import java.util.TreeMap;
  * It is never modified after it is built. That is what makes concurrent requests safe
  * without locks: a request takes ONE snapshot when it starts and uses only that one, so a
  * response never mixes two versions. A new version is loaded into a NEW snapshot and swapped
- * in (SnapshotHolder; reload on publication in DP-06).
+ * in (SnapshotHolder, SnapshotRefresher).
  *
  * The posting lists are NOT here: they stay in MongoDB and each request reads only those of
  * its terms. The index may contain books that are indexed but not yet published; whoever
