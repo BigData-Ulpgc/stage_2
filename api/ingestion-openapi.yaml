@@ -1,0 +1,291 @@
+openapi: 3.0.3
+info:
+  title: Stage 2 Search Engine — Ingestion Service API
+  version: 0.1.0
+  description: |
+    Internal API of the **Ingestion Service** (assignment §3.2.1), plus its operational status
+    endpoint. None of these endpoints is public: nginx only exposes the Search Service, and the
+    Ingestion Service is reached inside the Docker network (`http://ingestion:7001`).
+
+    **Status: v0.1.0** (CF-06). The inventory of all endpoints of the system is
+    `api/endpoints.md`; the Search API is `api/openapi.yaml`, the Indexing API
+    `api/indexing-openapi.yaml`.
+
+    ## Role in the workflow
+    In normal operation books are downloaded through the Hazelcast `ingest-queue` (CF-08), not
+    through HTTP: the HTTP endpoints are for administration and for the functional validation.
+    Both paths run the same code (`IngestionService`).
+
+    1. The book is fetched from the configured source: Project Gutenberg
+       (`INGESTION_SOURCE=gutenberg`, `<base>/<id>/pg<id>.txt`) or a local folder of
+       `pg<id>.txt` files (`INGESTION_SOURCE=local`: the sample and the synthetic datasets).
+    2. The text is split into header and body at the `*** START OF` / `*** END OF` markers; the
+       footer is dropped.
+    3. Header and body are saved in the range datalake,
+       `DATA_DIR/datalake/range/<START>-<END>/<id>.header.txt` and `<id>.body.txt`, each with an
+       atomic write (temporary file + move). A book counts as in the datalake only when both
+       files are complete. From CF-07 a `<id>._READY` marker is written last and is what makes
+       the book available (plan §6.2).
+
+    ## Common rules
+    - All responses are JSON (`application/json; charset=utf-8`).
+    - **Errors** use the `Error` schema of the other services, with a machine-readable `code`:
+      `INVALID_PARAMETER` (400), `NOT_FOUND` (404: the source does not have the book, or the
+      route does not exist), `INVALID_BOOK` (422), `SOURCE_UNAVAILABLE` (502), `SOURCE_TIMEOUT`
+      (504), `INTERNAL_ERROR` (500, details only in the log).
+    - **Permanent vs transient.** 404 and 422 depend on the book: repeating the call gives the
+      same answer. 502 and 504 depend on the source: retrying later can succeed.
+    - **Timeouts and retries (callers).** Connect timeout 2 s; request timeout 40 s for
+      `POST /ingest/{book_id}` (one download may take up to `INGESTION_REQUEST_TIMEOUT_SECONDS`,
+      30 s by default), 5 s for the other endpoints. `POST /ingest/{book_id}` is safe to retry
+      after a timeout, a connection error, a 502 or a 504; use a growing delay between retries
+      (1 s, 2 s, 4 s…). Do not retry a 404 or a 422.
+  contact:
+    name: Carlos Falcón (Ingestion Service, Control Module, coordination)
+
+servers:
+  - url: http://ingestion:7001
+    description: Inside the Docker network (Control Module)
+  - url: http://localhost:7001
+    description: One Ingestion Service instance started directly (development, validation)
+
+tags:
+  - name: internal
+    description: Consumed by the Control Module or by an operator; never by the front-end.
+  - name: operational
+    description: Health and status checks, consumed by Docker healthchecks and the Control Module.
+
+paths:
+  /ingest/{book_id}:
+    post:
+      tags: [internal]
+      operationId: ingestBook
+      summary: Download a book, split it into header and body and store it in the datalake
+      description: |
+        **Provider:** Ingestion Service. **Consumers:** operators and the functional validation
+        (the Control Module assigns work through `ingest-queue`, not through this endpoint).
+
+        **Completion: synchronous.** A 200 means the book is complete in the datalake
+        (`downloaded`), or already was (`already_available`, nothing fetched or written).
+
+        **Idempotency.** Repeating the call never downloads a book twice once it is stored: the
+        answer is `already_available`. Two concurrent calls for the same new book may both
+        download it; every file is written atomically, so the datalake ends with one complete
+        copy and both calls answer 200. A failed call (404, 422, 502, 504) writes nothing.
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: The book is in the datalake.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+              examples:
+                downloaded:
+                  summary: Fetched from the source and stored now
+                  value: { book_id: 1342, status: downloaded, path: datalake/range/01000-01999/1342 }
+                alreadyAvailable:
+                  summary: Already stored, nothing fetched
+                  value: { book_id: 1342, status: already_available, path: datalake/range/01000-01999/1342 }
+        '400':
+          $ref: '#/components/responses/InvalidBookId'
+        '404':
+          description: The source does not have the book (Gutenberg answered 404 or 410, or no `pg<id>.txt` file). Permanent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: NOT_FOUND, message: 'book 999999 is not available at the source', field: book_id }
+        '422':
+          description: The source served the book but its text has no START/END markers, so it cannot be split. Permanent; nothing is written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: INVALID_BOOK, message: 'book 8 has no Project Gutenberg START/END markers', field: book_id }
+        '502':
+          description: The source failed (HTTP 5xx, 429, 403, connection error, read error). Transient; nothing is written, retrying later is safe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: SOURCE_UNAVAILABLE, message: 'HTTP 503 from https://www.gutenberg.org/cache/epub/9/pg9.txt', field: null }
+        '504':
+          description: The source did not answer within `INGESTION_REQUEST_TIMEOUT_SECONDS`. Transient; nothing is written, retrying later is safe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: SOURCE_TIMEOUT, message: 'timeout (30 s) downloading https://www.gutenberg.org/cache/epub/10/pg10.txt', field: null }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /ingest/status/{book_id}:
+    get:
+      tags: [internal]
+      operationId: ingestStatus
+      summary: Whether a book is complete in the datalake
+      description: |
+        **Provider:** Ingestion Service. **Consumers:** operators and the functional validation.
+        Read-only: it only looks at the datalake, never at the source. A book that is not stored
+        is not an error: 200 with `not_available`.
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: Whether the book is in the datalake.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestStatus'
+              examples:
+                available:
+                  value: { book_id: 1342, status: available, path: datalake/range/01000-01999/1342 }
+                notAvailable:
+                  value: { book_id: 84, status: not_available, path: null }
+        '400':
+          $ref: '#/components/responses/InvalidBookId'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /ingest/list:
+    get:
+      tags: [internal]
+      operationId: ingestList
+      summary: Every book complete in the datalake
+      description: |
+        **Provider:** Ingestion Service. **Consumers:** operators and the functional validation.
+        Read-only. Ids in ascending order, no pagination: with the 100,000-book synthetic dataset
+        the body is about 700 KB.
+      responses:
+        '200':
+          description: The books in the datalake.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestList'
+              example: { count: 3, books: [5, 1342, 2701] }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /status:
+    get:
+      tags: [operational]
+      operationId: serviceStatus
+      summary: Liveness of the process
+      description: |
+        **Provider:** every service. **Consumers:** Docker healthcheck, Control Module. It does
+        not touch the source, the datalake or Hazelcast: 200 while the process runs.
+      responses:
+        '200':
+          description: The process is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+              example: { service: ingestion-service, status: running, source: 'gutenberg https://www.gutenberg.org/cache/epub' }
+
+components:
+  parameters:
+    BookId:
+      name: book_id
+      in: path
+      required: true
+      description: Project Gutenberg id in canonical form (ASCII digits, no sign, no leading zeros).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 999999999
+        example: 1342
+
+  schemas:
+    IngestResponse:
+      type: object
+      required: [book_id, status, path]
+      properties:
+        book_id: { type: integer, example: 1342 }
+        status:
+          type: string
+          enum: [downloaded, already_available]
+          description: '`downloaded`: fetched and stored by this call. `already_available`: it was already stored.'
+        path:
+          type: string
+          description: Folder of the book relative to `DATA_DIR`, plus its id (`<folder>/<id>.header.txt` and `.body.txt` are its files).
+          example: datalake/range/01000-01999/1342
+
+    IngestStatus:
+      type: object
+      required: [book_id, status, path]
+      properties:
+        book_id: { type: integer, example: 1342 }
+        status:
+          type: string
+          enum: [available, not_available]
+        path:
+          type: string
+          nullable: true
+          description: As in `IngestResponse`; null when `not_available`.
+
+    IngestList:
+      type: object
+      required: [count, books]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of books in `books`.
+        books:
+          type: array
+          description: Ids in ascending order.
+          items: { type: integer, minimum: 1 }
+
+    ServiceStatus:
+      type: object
+      required: [service, status]
+      properties:
+        service: { type: string, example: ingestion-service }
+        status: { type: string, enum: [running] }
+        source:
+          type: string
+          description: The book source in use (`INGESTION_SOURCE`).
+
+    Error:
+      type: object
+      required: [error]
+      description: Same schema as the Search API (`api/openapi.yaml`).
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [INVALID_PARAMETER, NOT_FOUND, INVALID_BOOK, SOURCE_UNAVAILABLE, SOURCE_TIMEOUT, INTERNAL_ERROR]
+            message: { type: string, description: Human-readable explanation. }
+            field:
+              type: string
+              nullable: true
+              description: Parameter that caused the error, if any.
+
+  responses:
+    InvalidBookId:
+      description: '`book_id` is not a positive integer in canonical form (1 to 999999999, digits only).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INVALID_PARAMETER, message: 'book_id must be a positive integer (1 to 999999999, digits only)', field: book_id }
+    InternalError:
+      description: Unexpected error (for example the datalake cannot be written). The details are only in the log.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INTERNAL_ERROR, message: 'internal error', field: null }

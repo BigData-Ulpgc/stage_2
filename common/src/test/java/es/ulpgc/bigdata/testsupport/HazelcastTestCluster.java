@@ -70,6 +70,25 @@ public final class HazelcastTestCluster {
         return config;
     }
 
+    /**
+     * A one-member cluster of its own on a fixed port, for the tests that stop and restart the
+     * cluster (they cannot touch the shared one). No discovery at all: it never joins another.
+     */
+    public static HazelcastInstance startStandaloneMember(String name, int port) {
+        System.setProperty("hazelcast.logging.type", "jdk");
+        Logger.getLogger("com.hazelcast").setLevel(Level.WARNING);
+        Config config = new Config();
+        config.setClusterName(name);
+        config.setProperty("hazelcast.phone.home.enabled", "false");
+        config.getJetConfig().setEnabled(false);
+        config.getNetworkConfig().setPort(port).setPortAutoIncrement(false);
+        JoinConfig join = config.getNetworkConfig().getJoin();
+        join.getAutoDetectionConfig().setEnabled(false);
+        join.getMulticastConfig().setEnabled(false);
+        join.getTcpIpConfig().setEnabled(false);
+        return Hazelcast.newHazelcastInstance(config);
+    }
+
     /** Settings that point to the test members: lease 60 s, 3 attempts. */
     public static CoordinationSettings settings() {
         start();

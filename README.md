@@ -149,7 +149,7 @@ at least that much. A new variable of a service goes in its `environment` block 
 
 nginx (`scripts/nginx.conf`) does round-robin over the replicas of `search`, found with the DNS of
 Docker, so scaling needs no other change. Each response has an `X-Served-By` header with the replica
-that answered. If a replica dies, nginx sends the request to another one.
+that answered. If a replica dies, nginx sends the request to another one; a 503 is passed on to the client, not retried.
 
 To record the CPU and memory of each container during an experiment, see `scripts/monitor.sh`.
 

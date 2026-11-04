@@ -15,7 +15,7 @@
 # per container: they describe the kernel that runs Docker. On Linux that is the machine; on
 # Windows and macOS it is the Docker Desktop VM, the one that the experiment really loads.
 #
-# Requires bash 4.2 or newer and the Docker CLI. Under load the monitor itself uses a little CPU.
+# Requires bash and the Docker CLI. Under load the monitor itself uses a little CPU.
 
 set -euo pipefail
 
@@ -54,8 +54,7 @@ if ! docker inspect -f '{{.State.Running}}' "$host_container" 2>/dev/null | grep
     exit 1
 fi
 
-export TZ=UTC
-printf -v started '%(%Y%m%dT%H%M%SZ)T' -1
+started=$(date -u +%Y%m%dT%H%M%SZ)
 run_dir="$output/${label}_${started}"
 mkdir -p "$run_dir"
 containers_csv="$run_dir/containers.csv"
@@ -103,14 +102,18 @@ function percent(text) { gsub(/%/, "", text); return text ~ /^[0-9.]+$/ ? text :
 # One docker stats --no-stream per sample, not the continuous mode: on Windows the continuous
 # process could not be stopped from the script, and it kept writing after the end. A sample takes
 # Docker about a second or two, which sets the real period: compare the timestamps of the CSV.
+#
+# A sample can fail, for example when a replica disappears in the middle of it (the failure tests
+# kill replicas on purpose). That sample is lost and the recording goes on: "|| sleep 1" keeps
+# set -e from ending the loop, and avoids a tight loop if Docker stops answering.
 record_containers() {
     echo "timestamp,container,cpu_pct,mem_used_mib,mem_limit_mib,mem_pct,net_rx_mb,net_tx_mb,block_read_mb,block_write_mb,pids" > "$containers_csv"
     while true; do
-        printf -v now '%(%Y-%m-%dT%H:%M:%SZ)T' -1
+        now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
         docker stats --no-stream --format '{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.MemPerc}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}' 2>/dev/null \
             | awk "$to_numbers" | while IFS= read -r line; do
                 echo "$now,$line"
-            done
+            done || sleep 1
     done >> "$containers_csv"
 }
 
@@ -118,7 +121,7 @@ record_host() {
     echo "timestamp,load1,load5,load15,mem_total_mib,mem_available_mib" > "$host_csv"
     while true; do
         if figures=$(docker exec "$host_container" sh -c 'cat /proc/loadavg; grep -E "^(MemTotal|MemAvailable):" /proc/meminfo' 2>/dev/null); then
-            printf '%(%Y-%m-%dT%H:%M:%SZ)T,' -1
+            printf '%s,' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "$figures" | awk '
                 NR == 1 { load = $1 "," $2 "," $3 }
                 /^MemTotal/ { total = $2 / 1024 }
@@ -130,11 +133,12 @@ record_host() {
 }
 
 worker_pids=()
+sleep_pid=""
 stopped=false
 stop() {
     if [[ "$stopped" == true ]]; then return; fi
     stopped=true
-    kill "${worker_pids[@]}" 2>/dev/null || true
+    kill ${worker_pids[@]+"${worker_pids[@]}"} $sleep_pid 2>/dev/null || true
     wait 2>/dev/null || true
     echo "containers: $(( $(wc -l < "$containers_csv") - 1 )) lines, host: $(( $(wc -l < "$host_csv") - 1 )) lines, in $run_dir"
 }
@@ -147,8 +151,15 @@ record_host &
 worker_pids+=($!)
 
 echo "recording in $run_dir$([[ -n "$duration" ]] && echo " for $duration s" || echo ", Ctrl+C to stop")"
+# In the background, with wait: a signal stops the script at once, not when the sleep ends.
 if [[ -n "$duration" ]]; then
-    sleep "$duration"
+    sleep "$duration" &
+    sleep_pid=$!
+    wait "$sleep_pid" || true
 else
-    while true; do sleep 1; done
+    while true; do
+        sleep 1 &
+        sleep_pid=$!
+        wait "$sleep_pid" || true
+    done
 fi
