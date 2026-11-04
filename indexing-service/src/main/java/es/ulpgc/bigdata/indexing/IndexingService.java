@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.indexing;
 import es.ulpgc.bigdata.datalake.Datalake;
 import es.ulpgc.bigdata.datamart.index.InvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
+import es.ulpgc.bigdata.datamart.indexlog.IndexLog;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepository;
 import es.ulpgc.bigdata.model.BookIds;
@@ -15,10 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -33,10 +34,15 @@ import java.util.concurrent.locks.ReentrantLock;
  * writer thread with batches plus Hazelcast's index-writer lock, which also coordinates
  * different replicas.
  *
+ * Write order of an update (DR-07): metadata, posting lists, and LAST the index log. The log
+ * is the evidence that the book is complete in the index (publish, INDEXED and the recovery
+ * of the Control rely on it), so it is written only when everything else is.
+ *
  * Errors are exceptions with a meaning; IndexingApi turns them into HTTP codes:
  *  - BookNotFoundException:                    the book is not complete in the datalake (404);
  *  - EmptyBookException:                       the book gives no term, nothing written (422);
- *  - MongoException, MetadataRepositoryException: MongoDB does not answer (503);
+ *  - MongoException, MetadataRepositoryException: MongoDB does not answer (503), also when only
+ *                                              the index log failed: the retry completes it;
  *  - UncheckedIOException:                     the book files could not be read (500);
  *  - IllegalStateException:                    CURRENT does not follow the contract (500).
  */
@@ -45,6 +51,7 @@ public final class IndexingService {
     private final Datalake datalake;
     private final MetadataRepository metadata;
     private final InvertedIndex index;
+    private final IndexLog indexLog;
     private final PublicationRepository publications;
     private final MetadataParser parser;
     private final Tokenizer tokenizer;
@@ -52,31 +59,28 @@ public final class IndexingService {
     /** Only one thread at a time touches the inverted index. */
     private final ReentrantLock writeLock = new ReentrantLock();
 
-    /**
-     * End of the last successful update of THIS process; null if none. Several request threads
-     * write it, hence atomic. Provisional until DR-07, where index_log keeps it across restarts.
-     */
-    private final AtomicReference<Instant> lastUpdate = new AtomicReference<>();
-
     public IndexingService(Datalake datalake, MetadataRepository metadata, InvertedIndex index,
-                           PublicationRepository publications, MetadataParser parser, Tokenizer tokenizer) {
+                           IndexLog indexLog, PublicationRepository publications,
+                           MetadataParser parser, Tokenizer tokenizer) {
         this.datalake = Objects.requireNonNull(datalake, "datalake");
         this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.index = Objects.requireNonNull(index, "index");
+        this.indexLog = Objects.requireNonNull(indexLog, "indexLog");
         this.publications = Objects.requireNonNull(publications, "publications");
         this.parser = Objects.requireNonNull(parser, "parser");
         this.tokenizer = Objects.requireNonNull(tokenizer, "tokenizer");
     }
 
     /**
-     * Indexes one complete book of the datalake: its metadata into the metadata store and its
-     * terms into the inverted index. When it returns, both are written (synchronous, D2), but
-     * the book is not visible to Search until the next publish.
+     * Indexes one complete book of the datalake: its metadata into the metadata store, its
+     * terms into the inverted index and, last, the book into the index log. When it returns,
+     * all three are written (synchronous, D2), but the book is not visible to Search until the
+     * next publish.
      *
-     * Idempotent: metadata are replaced by book_id and posting lists never repeat an id, so
-     * repeating the call (after a timeout or a 503) is always safe. The write order does not
-     * matter for consistency: if it fails halfway (metadata saved, postings not), nothing is
-     * visible because only publish makes books visible, and the retry completes it.
+     * Idempotent: metadata are replaced by book_id, posting lists never repeat an id and the
+     * log has one entry per book, so repeating the call (after a timeout or a 503) is always
+     * safe. If it fails halfway, the book is not in the log yet: publish ignores it, it is not
+     * INDEXED, and the retry completes it. That is why the log goes last.
      *
      * @throws BookNotFoundException    if the datalake does not have the book complete
      * @throws EmptyBookException       if the body gives no term; nothing is written
@@ -115,7 +119,11 @@ public final class IndexingService {
         } finally {
             writeLock.unlock();                 // always, also when flush fails
         }
-        lastUpdate.set(Instant.now());          // only reached if everything was written
+
+        // 6. Only now is the book complete in the index: record it. Outside the lock (the order
+        //    is guaranteed because it is the same thread), so the lock lasts as before. DR-09
+        //    will pass the whole batch here.
+        indexLog.markIndexed(List.of(bookId), Instant.now());
         return new UpdateResult(bookId, terms.size());
     }
 
@@ -126,12 +134,13 @@ public final class IndexingService {
      * between), which is fine for monitoring.
      */
     public IndexStatus status() {
-        long booksIndexed = metadata.count();                 // provisional until DR-07 (index_log)
+        long booksIndexed = indexLog.count();                 // complete books only (DR-07)
+        Instant lastUpdate = indexLog.lastIndexedAt().orElse(null);
         long indexSizeBytes = index.diskUsageBytes();         // no fsync on the shared client
         Optional<Publication> current = publications.current();
         return new IndexStatus(
                 booksIndexed,
-                lastUpdate.get(),
+                lastUpdate,
                 indexSizeBytes,
                 current.map(Publication::version).orElse(null),
                 current.map(Publication::books).orElse(0L));
