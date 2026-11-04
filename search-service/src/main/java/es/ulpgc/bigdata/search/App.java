@@ -11,10 +11,13 @@ import es.ulpgc.bigdata.search.http.SearchApi;
 import es.ulpgc.bigdata.search.index.IndexSnapshotLoader;
 import es.ulpgc.bigdata.search.index.MongoPostingSource;
 import es.ulpgc.bigdata.search.index.SnapshotHolder;
+import es.ulpgc.bigdata.search.index.SnapshotRefresher;
 import es.ulpgc.bigdata.search.query.SearchEngine;
 import io.javalin.Javalin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
 
 /**
  * Entry point of the Search Service: loads the published index version from MongoDB and
@@ -23,6 +26,7 @@ import org.slf4j.LoggerFactory;
  * Configuration (environment variables):
  *   SEARCH_PORT       HTTP port (default 7003)
  *   SEARCH_THREADS    maximum Jetty request threads (default ServiceServer.DEFAULT_MAX_THREADS)
+ *   SEARCH_POLL_SECONDS  seconds between checks of the published version (default 5)
  *   MONGO_URI         MongoDB (default mongodb://localhost:27017; in Docker mongodb://mongo:27017)
  *   MONGO_DATABASE    database (default search_engine)
  *
@@ -31,6 +35,7 @@ import org.slf4j.LoggerFactory;
 public final class App {
 
     static final String SERVICE_NAME = "search-service";
+    private static final int DEFAULT_POLL_SECONDS = 5;
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
     private App() {
@@ -40,6 +45,7 @@ public final class App {
         Env env = Env.system();
         int port = env.port("SEARCH_PORT", 7003);
         int threads = env.integerAtLeast("SEARCH_THREADS", ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
+        int pollSeconds = env.integerAtLeast("SEARCH_POLL_SECONDS", DEFAULT_POLL_SECONDS, 1);
         MongoSettings mongo = MongoSettings.fromEnv(env);
 
         // One MongoClient per process: it is thread-safe and keeps its own connection pool.
@@ -52,7 +58,10 @@ public final class App {
         SearchApi api = new SearchApi(snapshots, new SearchEngine(new MongoPostingSource(database)), Tokenizer.standard());
         Javalin server = api.create(SERVICE_NAME, threads);
         server.start(port);
+        SnapshotRefresher refresher = new SnapshotRefresher(snapshots, Duration.ofSeconds(pollSeconds));
+        refresher.start();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            refresher.close();
             server.stop();
             client.close();
         }));
@@ -60,7 +69,7 @@ public final class App {
 
     /**
      * The service starts even if MongoDB is down or nothing is published yet: /status answers
-     * and the API returns 503 until a version is loaded (reload in DP-06).
+     * and the API returns 503 until SnapshotRefresher manages to load a version.
      */
     private static void loadFirstSnapshot(SnapshotHolder snapshots) {
         try {
