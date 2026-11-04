@@ -37,8 +37,12 @@ VALIDATE_URL=http://localhost:8080 VALIDATE_INDEXING_URL=http://localhost:7002 \
 
 Without `VALIDATE_URL`, `StackValidationTest` is skipped: a normal `mvn verify` needs no stack.
 
-The script ends with `passed N, failed 0, skipped M` and exit code 0. **SKIP** is an endpoint that
-does not exist yet (501, or a route the service does not have): it starts running when it arrives.
+The script ends with `passed N, failed 0, skipped M` and exit code 0. **SKIP** is an endpoint of
+the contract that answers 501: it starts running when it is implemented. Any other answer is a PASS
+or a FAIL, so a route that disappears does not go unnoticed. With `docker-compose` instead of
+`docker compose`, it is detected, or set with `COMPOSE="docker-compose"`.
+
+`theRepliesOfEveryReplicaAreTheSame` runs only with several replicas (`--scale search=2` or more).
 
 ## 3. Expected results
 
@@ -60,10 +64,13 @@ does not exist yet (501, or a route the service does not have): it starts runnin
 | Not published | `/books/999999` | 404 `NOT_FOUND` |
 | Invalid `book_id` | `/books/0`, `+84`, `0084`, `abc` | 400 `INVALID_PARAMETER` |
 | Filter values | `/search/filters` | 200, 15 books, `en`, years 1975 to 2008 |
-| Indexing: status | `GET /index/status` | 200, 15 books indexed and published |
+| Indexing: status | `GET /index/status` | 200, `books_indexed` and `books_published` 15 |
 | Indexing: update | `POST /index/update/abc`, `/999999` | 400 `INVALID_PARAMETER`, 404 `NOT_FOUND` |
 | Indexing: publish, rebuild | `POST /index/publish`, `/index/rebuild` | 501 until DR-08 and DR-10 |
-| Ingestion, Control | `GET /status` | 200; their other endpoints arrive with CF-06 and CF-09 |
+| Ingestion: errors | `POST /ingest/0084`, `GET /ingest/status/0084` | 400 `INVALID_PARAMETER` |
+| Ingestion: status | `GET /ingest/status/999999` | 200, `not_available` |
+| Ingestion: list | `GET /ingest/list` | 200, `count` and `books` |
+| Control | `GET /status` | 200; its other endpoints arrive with CF-09 |
 
 **Interactions that are not HTTP**, checked by the script: the 2 Hazelcast members form one cluster,
 Search serves the version of `CURRENT`, and Indexing and the Control cannot write in the datalake.

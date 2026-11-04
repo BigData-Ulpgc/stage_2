@@ -12,13 +12,20 @@
 # It does not change any data, except POST /index/publish once DR-08 exists: with nothing new to
 # publish, it creates no version.
 #
-# SKIP means an endpoint that does not exist yet: 501, or a route the service does not have. When
-# the endpoint arrives, the check runs without touching this script.
+# SKIP means an endpoint declared in its contract that answers 501 (not implemented yet). When it
+# is implemented, the check runs without touching this script. Any other answer is a PASS or a
+# FAIL: a route that disappears must not go unnoticed. Add the checks of an endpoint with it.
+#
+# COMPOSE selects the command: by default "docker compose", or "docker-compose" if the first is
+# not available.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
 base="${VALIDATE_URL:-http://localhost:8080}"
+if [[ -z "${COMPOSE:-}" ]]; then
+    if docker compose version >/dev/null 2>&1; then COMPOSE="docker compose"; else COMPOSE="docker-compose"; fi
+fi
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT
 passed=0; failed=0; skipped=0
@@ -39,7 +46,7 @@ call() {
         code=$(curl -s -g -m 20 -o "$body_file" -w '%{http_code}' -X "$1" "$base$2")
     else
         local output
-        output=$(docker compose exec -T "$3" curl -s -g -m 20 -w '\n%{http_code}' -X "$1" "http://localhost:$4$2" 2>/dev/null | tr -d '\r')
+        output=$($COMPOSE exec -T "$3" curl -s -g -m 20 -w '\n%{http_code}' -X "$1" "http://localhost:$4$2" 2>/dev/null | tr -d '\r')
         code="${output##*$'\n'}"
         printf '%s' "${output%$'\n'*}" > "$body_file"
     fi
@@ -69,11 +76,25 @@ expect() {
     fi
 }
 
-# pending: the same, but SKIP if the endpoint does not exist yet.
+# expect_error NAME STATUS CODE FIELD METHOD PATH [SERVICE PORT]: the common error format, with this
+# code and field (null: none). The field tells a missing book from a route that does not exist,
+# which is also a 404 NOT_FOUND.
+expect_error() {
+    local name="$1" status="$2" error_code="$3" field="$4" wanted; shift 4
+    call "$@"
+    if [[ "$field" == null ]]; then wanted='"field":null'; else wanted="\"field\":\"$field\""; fi
+    if [[ "$code" == "$status" && "$(cat "$body_file")" == *"\"code\":\"$error_code\""* && "$(cat "$body_file")" == *"$wanted"* ]]; then
+        report PASS "$name" "HTTP $code $error_code $wanted"
+    else
+        report FAIL "$name" "HTTP $code, expected $status $error_code $wanted: $(head -c 150 "$body_file")"
+    fi
+}
+
+# pending: like expect, but SKIP if the endpoint is declared and not implemented yet (501).
 pending() {
     local name="$1" status="$2" text="$3"; shift 3
     call "$@"
-    if [[ "$code" == 501 || ( "$code" == 404 && "$(cat "$body_file")" == *"no route"* ) ]]; then
+    if [[ "$code" == 501 ]]; then
         report SKIP "$name" "not implemented yet (HTTP $code)"
     elif [[ "$code" == "$status" && "$(cat "$body_file")" == *"$text"* ]]; then
         report PASS "$name" "HTTP $code $text"
@@ -124,46 +145,48 @@ search "offset beyond the end"            "q=river&offset=10"            10 ""
 search "default limit keeps every match"  "q=river"                      10 "46 74 76 84 98 174 345 1342 1661 2701"
 
 echo; echo "== Search: invalid parameters are a 400 and touch nothing"
-expect "q missing"                     400 MISSING_PARAMETER  GET "/search"
-expect "q with only stopwords"         400 INVALID_PARAMETER  GET "/search?q=the"
-expect "q is not valid percent-encoding" 400 INVALID_PARAMETER GET "/search?q=%ZZ"
-expect "language not supported"        400 INVALID_PARAMETER  GET "/search?q=whale&language=xx"
-expect "year is not 4 digits"          400 INVALID_PARAMETER  GET "/search?q=whale&year=99"
-expect "offset negative"               400 INVALID_PARAMETER  GET "/search?q=whale&offset=-1"
-expect "limit 0"                       400 INVALID_PARAMETER  GET "/search?q=whale&limit=0"
-expect "limit above the maximum"       400 INVALID_PARAMETER  GET "/search?q=whale&limit=101"
+expect_error "q missing"                     400 MISSING_PARAMETER q        GET "/search"
+expect_error "q with only stopwords"         400 INVALID_PARAMETER q        GET "/search?q=the"
+expect_error "q is not valid percent-encoding" 400 INVALID_PARAMETER null   GET "/search?q=%ZZ"
+expect_error "language not supported"        400 INVALID_PARAMETER language GET "/search?q=whale&language=xx"
+expect_error "year is not 4 digits"          400 INVALID_PARAMETER year     GET "/search?q=whale&year=99"
+expect_error "offset negative"               400 INVALID_PARAMETER offset   GET "/search?q=whale&offset=-1"
+expect_error "limit 0"                       400 INVALID_PARAMETER limit    GET "/search?q=whale&limit=0"
+expect_error "limit above the maximum"       400 INVALID_PARAMETER limit    GET "/search?q=whale&limit=101"
 
 echo; echo "== Search: a book and the filter values"
-expect "book published"                200 '"title":"Pride and Prejudice"' GET "/books/1342"
-expect "book not in the index"         404 NOT_FOUND          GET "/books/999999"
-expect "book_id 0"                     400 INVALID_PARAMETER  GET "/books/0"
-expect "book_id with a sign"           400 INVALID_PARAMETER  GET "/books/+84"
-expect "book_id with leading zeros"    400 INVALID_PARAMETER  GET "/books/0084"
-expect "book_id not a number"          400 INVALID_PARAMETER  GET "/books/abc"
-expect "languages and years"           200 '"years":{"min":1975,"max":2008}' GET "/search/filters"
-expect "a route that does not exist"   404 NOT_FOUND          GET "/nope"
-expect "status of the service"         200 '"service":"search-service"' GET "/status"
+expect       "book published"                200 '"title":"Pride and Prejudice"' GET "/books/1342"
+expect_error "book not in the index"         404 NOT_FOUND book_id          GET "/books/999999"
+expect_error "book_id 0"                     400 INVALID_PARAMETER book_id  GET "/books/0"
+expect_error "book_id with a sign"           400 INVALID_PARAMETER book_id  GET "/books/+84"
+expect_error "book_id with leading zeros"    400 INVALID_PARAMETER book_id  GET "/books/0084"
+expect_error "book_id not a number"          400 INVALID_PARAMETER book_id  GET "/books/abc"
+expect       "languages and years"           200 '"years":{"min":1975,"max":2008}' GET "/search/filters"
+expect_error "a route that does not exist"   404 NOT_FOUND null             GET "/nope"
+expect       "status of the service"         200 '"service":"search-service"' GET "/status"
 
 echo; echo "== Indexing (internal)"
-expect  "status"                       200 '"service":"indexing-service"' GET /status indexing 7002
-expect  "index status"                 200 '"books_published":15'  GET /index/status indexing 7002
-expect  "update: invalid id"           400 INVALID_PARAMETER  POST /index/update/abc indexing 7002
-expect  "update: a book not in the datalake" 404 NOT_FOUND    POST /index/update/999999 indexing 7002
-pending "publish with nothing new"     200 '"version"'        POST /index/publish indexing 7002
+expect       "status"                        200 '"service":"indexing-service"' GET /status indexing 7002
+expect       "index status: books published" 200 '"books_published":15,'   GET /index/status indexing 7002
+expect       "index status: books indexed"   200 '"books_indexed":15,'     GET /index/status indexing 7002
+expect_error "update: invalid id"            400 INVALID_PARAMETER book_id POST /index/update/abc indexing 7002
+expect_error "update: a book not in the datalake" 404 NOT_FOUND book_id    POST /index/update/999999 indexing 7002
+pending      "publish with nothing new"      200 '"version"'               POST /index/publish indexing 7002
 
 echo; echo "== Ingestion (internal)"
-expect  "status"                       200 '"service":"ingestion-service"' GET /status ingestion 7001
-pending "ingest: invalid id"           400 INVALID_PARAMETER  POST /ingest/0084 ingestion 7001
-pending "status of a book not stored"  200 not_available      GET /ingest/status/999999 ingestion 7001
-pending "list of stored books"         200 '"books"'          GET /ingest/list ingestion 7001
+expect       "status"                        200 '"service":"ingestion-service"' GET /status ingestion 7001
+expect_error "ingest: invalid id"            400 INVALID_PARAMETER book_id POST /ingest/0084 ingestion 7001
+expect_error "status: invalid id"            400 INVALID_PARAMETER book_id GET /ingest/status/0084 ingestion 7001
+expect       "status of a book not stored"   200 '"status":"not_available"' GET /ingest/status/999999 ingestion 7001
+expect       "list of stored books"          200 '"books":['               GET /ingest/list ingestion 7001
+expect_error "GET where only POST exists"    404 NOT_FOUND null            GET /ingest/1342 ingestion 7001
 
 echo; echo "== Control Module"
-expect  "status"                       200 '"service":"control-module"' GET /status control 7000
-pending "state of the system"          200 '{'                GET /control/status control 7000
+expect       "status"                        200 '"service":"control-module"' GET /status control 7000
 
 echo; echo "== Interactions that are not HTTP"
-health=$(docker compose exec -T search curl -s -m 10 http://hz-1:5701/hazelcast/health 2>/dev/null | tr -d '\r')
-if [[ "$health" == *'"clusterSize":2'* ]]; then
+health=$($COMPOSE exec -T search curl -s -m 10 http://hz-1:5701/hazelcast/health 2>/dev/null | tr -d '\r')
+if [[ "$health" == *'"clusterSize":2}'* ]]; then
     report PASS "Hazelcast: the 2 members form one cluster" "clusterSize 2"
 else
     report FAIL "Hazelcast: the 2 members form one cluster" "$health"
@@ -177,12 +200,18 @@ if [[ -n "$search_version" && "$search_version" == "$indexing_version" ]]; then
 else
     report FAIL "MongoDB: Search serves the version of CURRENT" "Search '$search_version', Indexing '$indexing_version'"
 fi
+# PASS only if the container answers and the write fails BECAUSE the file system is read-only.
 for service in indexing control; do
-    if docker compose exec -T "$service" sh -c 'touch /data/datalake/.validate' >/dev/null 2>&1; then
-        docker compose exec -T "$service" rm -f /data/datalake/.validate >/dev/null 2>&1
-        report FAIL "datalake: $service cannot write" "it could write"
+    name="datalake: $service cannot write"
+    if ! $COMPOSE exec -T "$service" true >/dev/null 2>&1; then
+        report FAIL "$name" "the container does not answer"
+    elif output=$($COMPOSE exec -T "$service" sh -c 'touch /data/datalake/.validate' 2>&1); then
+        $COMPOSE exec -T "$service" rm -f /data/datalake/.validate >/dev/null 2>&1
+        report FAIL "$name" "it could write"
+    elif [[ "$output" == *"Read-only file system"* ]]; then
+        report PASS "$name" "read-only"
     else
-        report PASS "datalake: $service cannot write" "read-only"
+        report FAIL "$name" "unexpected error: $output"
     fi
 done
 

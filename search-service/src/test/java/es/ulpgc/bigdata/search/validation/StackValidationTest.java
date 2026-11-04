@@ -202,12 +202,17 @@ class StackValidationTest {
         assertTrue(get("/status").raw().headers().firstValue("X-Served-By").isPresent());
     }
 
+    /** Only with several replicas (--scale search=N); with one it would prove nothing. */
     @Test
     void theRepliesOfEveryReplicaAreTheSame() throws Exception {
+        Set<String> replicas = new TreeSet<>();
         Set<String> bodies = new TreeSet<>();
         for (int i = 0; i < 12; i++) {
-            bodies.add(get("/search?q=whale").body());
+            Response response = get("/search?q=whale");
+            replicas.add(response.raw().headers().firstValue("X-Served-By").orElse(""));
+            bodies.add(response.body());
         }
+        assumeTrue(replicas.size() >= 2, "only one replica answered: " + replicas);
         assertEquals(1, bodies.size(), "the same query gave different answers: " + bodies);
     }
 
@@ -228,6 +233,7 @@ class StackValidationTest {
 
         JsonObject status = send("GET", INDEXING + "/index/status", null).json();
         assertEquals(15, status.get("books_published").getAsInt());
+        assertEquals(15, status.get("books_indexed").getAsInt());
         assertEquals(get("/status").json().get("index_version").getAsInt(), status.get("published_version").getAsInt());
 
         assertError(send("POST", INDEXING + "/index/update/abc", null), 400, "INVALID_PARAMETER", "book_id");
