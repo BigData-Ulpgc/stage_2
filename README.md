@@ -153,6 +153,8 @@ that answered. If a replica dies, nginx sends the request to another one.
 
 To record the CPU and memory of each container during an experiment, see `scripts/monitor.sh`.
 
+To check every API on the running stack, with the expected results, see `http/README.md`.
+
 ## Service images
 
 All Java services use one multi-stage template, `docker/service.Dockerfile`, built from the

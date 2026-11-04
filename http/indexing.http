@@ -1,0 +1,26 @@
+# Internal API of the Indexing Service (contract: api/indexing-openapi.yaml).
+# Needs docker-compose.validation.yml, which publishes the port. How to run: http/README.md.
+
+### Status of the service
+# Expected: 200, indexing-service
+GET {{indexing}}/status
+
+### Status of the index
+# Expected: 200, books_indexed 15, published_version 1, books_published 15
+GET {{indexing}}/index/status
+
+### Index a book: not in the datalake
+# Expected: 404 NOT_FOUND
+POST {{indexing}}/index/update/999999
+
+### Index a book: invalid id
+# Expected: 400 INVALID_PARAMETER, field book_id
+POST {{indexing}}/index/update/abc
+
+### Publish: not implemented until DR-08
+# Expected: 501 NOT_IMPLEMENTED
+POST {{indexing}}/index/publish
+
+### Rebuild: not implemented until DR-10
+# Expected: 501 NOT_IMPLEMENTED
+POST {{indexing}}/index/rebuild
