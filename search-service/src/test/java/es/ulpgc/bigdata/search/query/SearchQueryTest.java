@@ -1,9 +1,9 @@
 package es.ulpgc.bigdata.search.query;
 
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
+import es.ulpgc.bigdata.http.ApiException;
 import es.ulpgc.bigdata.model.BookMetadata;
 import es.ulpgc.bigdata.model.YearSource;
-import es.ulpgc.bigdata.search.http.ApiException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

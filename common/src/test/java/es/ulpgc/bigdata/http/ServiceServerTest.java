@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,8 +74,111 @@ class ServiceServerTest {
         assertThrows(IllegalArgumentException.class, () -> ServiceServer.create("test-service", 2));
     }
 
+    // ------------------------------------------------------------------
+    // Common error format
+    // ------------------------------------------------------------------
+
+    @Test
+    void anUnknownRouteAnswers404WithTheCommonFormat() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS).start(0);
+
+        HttpResponse<String> response = get("/does/not/exist");
+
+        JsonObject error = assertError(response, 404, "NOT_FOUND");
+        assertTrue(error.get("field").isJsonNull());
+        assertTrue(error.get("message").getAsString().contains("/does/not/exist"));
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("application/json"));
+    }
+
+    @Test
+    void aMethodTheRouteDoesNotHaveAlsoAnswers404() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS).start(0);
+
+        assertError(send("POST", "/status"), 404, "NOT_FOUND");      // only GET /status exists
+    }
+
+    @Test
+    void anApiExceptionAnswersItsOwnStatusCodeAndField() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.get("/items/{id}", ctx -> {
+            throw ApiException.invalid("id", "id must be a positive integer");
+        });
+        app.start(0);
+
+        JsonObject error = assertError(get("/items/abc"), 400, "INVALID_PARAMETER");
+        assertEquals("id", error.get("field").getAsString());
+        assertEquals("id must be a positive integer", error.get("message").getAsString());
+    }
+
+    @Test
+    void aRouteThatAnswers404OnPurposeKeepsItsOwnBody() throws Exception {
+        // The trap of app.error(404, ...): it would replace this body with the "no route" one.
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.get("/books/{id}", ctx -> {
+            throw new ApiException(404, "NOT_FOUND", "book 84 is not in the published index", "book_id");
+        });
+        app.start(0);
+
+        JsonObject error = assertError(get("/books/84"), 404, "NOT_FOUND");
+        assertEquals("book 84 is not in the published index", error.get("message").getAsString());
+        assertEquals("book_id", error.get("field").getAsString());
+    }
+
+    @Test
+    void anUnexpectedExceptionAnswers500WithoutItsDetails() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.get("/boom", ctx -> {
+            throw new IllegalStateException("secret detail: /home/user/data");
+        });
+        app.start(0);
+
+        HttpResponse<String> response = get("/boom");
+
+        JsonObject error = assertError(response, 500, "INTERNAL_ERROR");
+        assertEquals("internal error", error.get("message").getAsString());
+        assertFalse(response.body().contains("secret"));
+    }
+
+    @Test
+    void aServiceHandlerForItsOwnExceptionWinsOverThe500One() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.get("/storage", ctx -> {
+            throw new UnsupportedOperationException("database down");   // stands for MongoException
+        });
+        app.exception(UnsupportedOperationException.class, (e, ctx) ->
+                ServiceServer.writeError(ctx, 503, "STORAGE_UNAVAILABLE", "the storage does not answer", null));
+        app.start(0);
+
+        JsonObject error = assertError(get("/storage"), 503, "STORAGE_UNAVAILABLE");
+        assertTrue(error.get("field").isJsonNull());
+    }
+
+    @Test
+    void statusStillWorksWithTheErrorHandlers() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS).start(0);
+
+        assertEquals(200, get("/status").statusCode());
+    }
+
+    /** Checks status and code, and that the body has exactly the three fields of the contract. */
+    private static JsonObject assertError(HttpResponse<String> response, int status, String code) {
+        assertEquals(status, response.statusCode(), response.body());
+        JsonObject body = JsonParser.parseString(response.body()).getAsJsonObject();
+        assertEquals(1, body.size(), response.body());
+        JsonObject error = body.getAsJsonObject("error");
+        assertEquals(code, error.get("code").getAsString());
+        assertEquals(3, error.size(), "code, message and field (field may be null): " + response.body());
+        return error;
+    }
+
     private HttpResponse<String> get(String path) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + path)).GET().build();
+        return send("GET", path);
+    }
+
+    private HttpResponse<String> send(String method, String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + path))
+                .method(method, HttpRequest.BodyPublishers.noBody())
+                .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 }
