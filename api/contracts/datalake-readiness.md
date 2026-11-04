@@ -102,6 +102,9 @@ offers the id to `index-queue`) only after `save` has returned, that is, after `
 - Readiness depends on the local file system and on atomic moves within one folder: true on
   the single Stage 2 host and on a Docker volume. In Stage 3, with the datalake on several
   machines, the marker has to live in shared storage or be replaced (report §8).
+- The marker protects against the death of a process, not against a power cut or a crash of the
+  operating system: no file is forced to disk (`fsync`), so after such a crash a `_READY` could
+  survive while its header or body did not. Accepted for Stage 2; to be stated in the report.
 - `listBookIds()` lists every range folder of the datalake, so its cost grows with the number of
   books (measured in the scale experiments, DR-13): it is for administration, rebuilds and
   recovery, never for the path of a single book (`locate` is computed from the id).
