@@ -60,7 +60,7 @@ Those contracts are documented separately:
 
 | Contract | Between | Where |
 |---|---|---|
-| `book-state`, `ingest-queue`, `index-queue`, `index-events` (`IndexPublished`), lock `index-writer` | Control, Ingestion, Indexing, Search | `api/contracts/coordination.md` *(pending, CF-02)*; plan §6.1 |
+| `book-state`, `ingest-queue`, `index-queue`, `index-events` (`IndexPublished`), lock `index-writer` (`IMap.lock`, not CP), `coordination-meta` | Control, Ingestion, Indexing, Search | [`api/contracts/coordination.md`](contracts/coordination.md) (CF-02) |
 | Datalake by ranges and `<id>._READY` | Ingestion → Indexing | plan §6.2 |
 | Collection `books` (metadata) | Indexing → Search | plan §6.3 |
 | `inverted_index`, `index_books`, `index_meta` (`CURRENT`), `index_publications` | Indexing → Search, Control | plan §6.5 |
