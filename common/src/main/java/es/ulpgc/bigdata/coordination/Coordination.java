@@ -12,6 +12,7 @@ import com.hazelcast.transaction.TransactionContext;
 import com.hazelcast.transaction.TransactionOptions;
 import com.hazelcast.transaction.TransactionalMap;
 import com.hazelcast.transaction.TransactionalQueue;
+import es.ulpgc.bigdata.model.BookIds;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -62,9 +63,6 @@ public final class Coordination implements AutoCloseable {
      * again in a new transaction, so no transaction gets near its 2 minute timeout.
      */
     static final Duration MAX_POLL = Duration.ofSeconds(10);
-    /** Same rule as BookIds (common.model, DR-05): ids from 1 to 999,999,999. */
-    static final int MAX_BOOK_ID = 999_999_999;
-
     /** TWO_PHASE (the default) survives the crash of a member during the commit. */
     private static final TransactionOptions TRANSACTIONS = new TransactionOptions()
             .setTransactionType(TransactionOptions.TransactionType.TWO_PHASE);
@@ -83,7 +81,10 @@ public final class Coordination implements AutoCloseable {
         this.books = hz.getMap(CoordinationNames.BOOK_STATE);
     }
 
-    /** Opens its own client (CoordinationSettings.openClient); close() shuts it down. */
+    /**
+     * Opens its own client (CoordinationSettings.openClient); close() shuts it down. Blocks until
+     * the cluster answers: call it after starting the HTTP server, in the background.
+     */
     public static Coordination connect(CoordinationSettings settings) {
         return new Coordination(settings.openClient(), settings, Clock.systemUTC(), true);
     }
@@ -110,7 +111,7 @@ public final class Coordination implements AutoCloseable {
     public int seed(Collection<Integer> ids) {
         List<Integer> distinct = new ArrayList<>(new LinkedHashSet<>(ids));
         for (int id : distinct) {
-            if (!isValidId(id)) {
+            if (!BookIds.isValid(id)) {
                 throw new IllegalArgumentException("invalid book id: " + id);
             }
         }
@@ -246,7 +247,7 @@ public final class Coordination implements AutoCloseable {
             Thread.currentThread().interrupt();         // claim() sees it after the commit
             return Optional.empty();
         }
-        if (id == null || !isValidId(id)) {
+        if (id == null || !BookIds.isValid(id)) {
             return Optional.empty();                    // an invalid id leaves the queue with the commit
         }
         TransactionalMap<Integer, BookTask> map = tx.getMap(CoordinationNames.BOOK_STATE);
@@ -281,6 +282,11 @@ public final class Coordination implements AutoCloseable {
      * T4, T5, T8, T9: the attempt failed. PERMANENT codes and the last attempt send the book to
      * FAILED; other codes requeue it with one more attempt; OUTAGE requeues it without
      * counting (contract §4.3).
+     *
+     * <p>After an OUTAGE the caller must WAIT before its next {@link #claim}, with a growing
+     * delay while the outage lasts (contract §4.3). The book is back in the queue at once and
+     * the attempt is not counted, so a worker that claims again immediately spins in a hot
+     * loop of claim, fail, claim for as long as MongoDB is down.
      */
     public FailOutcome fail(Claim claim, ErrorCode code, String message) {
         return fail(claim.stage(), claim.task(), code, message);
@@ -431,10 +437,6 @@ public final class Coordination implements AutoCloseable {
 
     private long leaseMillis() {
         return TimeUnit.SECONDS.toMillis(settings.leaseSeconds());
-    }
-
-    static boolean isValidId(int id) {
-        return id >= 1 && id <= MAX_BOOK_ID;
     }
 
     private static String hostname() {

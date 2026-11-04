@@ -70,6 +70,12 @@ public record CoordinationSettings(List<String> members, String clusterName, int
      *
      * If the cluster is down the client keeps retrying (Hazelcast default: no connect
      * timeout), so a service survives a restart of the cluster (contract §7).
+     *
+     * <p><b>This call does not return until the cluster answers</b> (measured: still waiting
+     * after 150 s with no member listening). A service must therefore start its HTTP server
+     * first and connect in the background, so that GET /status answers while the cluster is
+     * still down: /status does not depend on Hazelcast (api/endpoints.md), and the Docker
+     * healthcheck would otherwise mark the container as unhealthy.
      */
     public HazelcastInstance openClient() {
         ClientConfig config = new ClientConfig();
