@@ -38,6 +38,7 @@ All versions (Java 17, Javalin 6.1.3, Gson, Hazelcast, JUnit, JMH) are fixed onc
 | `datalake` | `Datalake`, `AbstractFileDatalake` (atomic write), `RangeBasedDatalake` | Stage 1, unchanged; only the `range` structure |
 | `datamart.index` | `Tokenizer` (+ `standard()` with the packaged `stopwords.txt`), `InvertedIndex`, `InMemoryInvertedIndex`, `MongoInvertedIndex` | Stage 1, unchanged |
 | `datamart.metadata` | `MetadataParser`, `LanguageCodes`, `MetadataRepository`, `MongoMetadataRepository` | Stage 1 parser and interface; ISO language, year rule, `Creator` fallback and MongoDB in DR-04 |
+| `coordination` | `Coordination` (every transition of `api/contracts/coordination.md`), `CoordinationSettings` (`HZ_*`, leases), `BookTask`, `IndexPublished`, `IndexWriterLock` | Stage 2 (CF-04) |
 
 Storage chosen for Stage 2 (goal: hundreds of thousands of books):
 

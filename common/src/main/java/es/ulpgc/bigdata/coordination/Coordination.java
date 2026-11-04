@@ -1,0 +1,473 @@
+package es.ulpgc.bigdata.coordination;
+
+import com.hazelcast.aggregation.Aggregators;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.LifecycleEvent.LifecycleState;
+import com.hazelcast.map.IMap;
+import com.hazelcast.query.Predicate;
+import com.hazelcast.query.Predicates;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.ReliableMessageListener;
+import com.hazelcast.transaction.TransactionContext;
+import com.hazelcast.transaction.TransactionOptions;
+import com.hazelcast.transaction.TransactionalMap;
+import com.hazelcast.transaction.TransactionalQueue;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+/**
+ * The coordination contract (api/contracts/coordination.md) as code: every transition T1-T11
+ * of §4.1 is one method here, so no service touches the Hazelcast structures directly.
+ *
+ * How each transition is made atomic:
+ * <ul>
+ *   <li>A map change is a compare-and-set, replace(id, expected, next): it succeeds only if the
+ *       entry is still exactly the value the caller read. The members compare the serialized
+ *       bytes, so they need no class of ours (no EntryProcessor).</li>
+ *   <li>A map change that also moves the id to or from a queue runs in ONE transaction with
+ *       that queue operation (seed + offer, poll + claim, completion + offer, retry + offer). If
+ *       the process dies before the commit, neither happens: a polled id goes back to its queue
+ *       and no book is left in a state with no queue entry.</li>
+ * </ul>
+ *
+ * Thread-safe: one instance per process, shared by all its workers. The methods do not log
+ * (common leaves logging to each service): they return what happened.
+ */
+public final class Coordination implements AutoCloseable {
+
+    /** Books seeded per transaction: one transaction per book would make a 100,000-book seed slow. */
+    static final int SEED_BATCH = 1_000;
+    /** Ids read per call when marking a publication (T10). */
+    static final int PUBLISH_BATCH = 1_000;
+    /**
+     * Longest wait of one poll inside a claim transaction. A claim that may wait longer polls
+     * again in a new transaction, so no transaction gets near its 2 minute timeout.
+     */
+    static final Duration MAX_POLL = Duration.ofSeconds(10);
+    /** Same rule as BookIds (common.model, DR-05): ids from 1 to 999,999,999. */
+    static final int MAX_BOOK_ID = 999_999_999;
+
+    /** TWO_PHASE (the default) survives the crash of a member during the commit. */
+    private static final TransactionOptions TRANSACTIONS = new TransactionOptions()
+            .setTransactionType(TransactionOptions.TransactionType.TWO_PHASE);
+
+    private final HazelcastInstance hz;
+    private final CoordinationSettings settings;
+    private final Clock clock;
+    private final boolean ownsClient;
+    private final IMap<Integer, BookTask> books;
+
+    private Coordination(HazelcastInstance hz, CoordinationSettings settings, Clock clock, boolean ownsClient) {
+        this.hz = Objects.requireNonNull(hz, "hz");
+        this.settings = Objects.requireNonNull(settings, "settings");
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.ownsClient = ownsClient;
+        this.books = hz.getMap(CoordinationNames.BOOK_STATE);
+    }
+
+    /** Opens its own client (CoordinationSettings.openClient); close() shuts it down. */
+    public static Coordination connect(CoordinationSettings settings) {
+        return new Coordination(settings.openClient(), settings, Clock.systemUTC(), true);
+    }
+
+    /** On a client the caller owns (shared, or a test cluster); close() leaves it open. */
+    public static Coordination on(HazelcastInstance hz, CoordinationSettings settings, Clock clock) {
+        return new Coordination(hz, settings, clock, false);
+    }
+
+    public CoordinationSettings settings() {
+        return settings;
+    }
+
+    // --- Control Module ------------------------------------------------------------------
+
+    /**
+     * T1: puts every id that book-state does not know yet as PENDING and offers it to
+     * ingest-queue. An id already present is left as it is, whatever its state, so seeding
+     * again never duplicates anything. Runs in transactions of {@link #SEED_BATCH} books.
+     *
+     * @return how many ids were new
+     * @throws IllegalArgumentException if an id is not a valid book id (nothing is seeded)
+     */
+    public int seed(Collection<Integer> ids) {
+        List<Integer> distinct = new ArrayList<>(new LinkedHashSet<>(ids));
+        for (int id : distinct) {
+            if (!isValidId(id)) {
+                throw new IllegalArgumentException("invalid book id: " + id);
+            }
+        }
+        int added = 0;
+        for (int from = 0; from < distinct.size(); from += SEED_BATCH) {
+            List<Integer> batch = distinct.subList(from, Math.min(from + SEED_BATCH, distinct.size()));
+            long now = now();
+            added += inTransaction(tx -> {
+                TransactionalMap<Integer, BookTask> map = tx.getMap(CoordinationNames.BOOK_STATE);
+                TransactionalQueue<Integer> queue = tx.getQueue(CoordinationNames.INGEST_QUEUE);
+                int n = 0;
+                for (int id : batch) {
+                    if (map.putIfAbsent(id, BookTask.pending(id, now)) == null) {
+                        queue.offer(id);
+                        n++;
+                    }
+                }
+                return n;
+            });
+        }
+        return added;
+    }
+
+    /**
+     * The expired-lease check of the Control (contract §4.2), every LEASE_CHECK_SECONDS:
+     * books INGESTING or INDEXING whose lease has expired go back to their queue (T4, T8) or,
+     * with no attempts left, to FAILED (T5, T9), with lastError LEASE_EXPIRED.
+     *
+     * @return how many books were requeued or failed
+     */
+    public int requeueExpiredLeases() {
+        Predicate<Integer, BookTask> expired = Predicates.and(
+                Predicates.in("state", BookState.INGESTING.name(), BookState.INDEXING.name()),
+                Predicates.lessThan("leaseUntil", now()));
+        int changed = 0;
+        for (BookTask task : books.values(expired)) {
+            String message = "lease of " + task.owner() + " expired at " + Instant.ofEpochMilli(task.leaseUntil());
+            if (fail(Stage.ofWorking(task.bookState()), task, ErrorCode.LEASE_EXPIRED, message) != FailOutcome.LEASE_LOST) {
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * T11, POST /control/retry-failed: every FAILED book goes back to the start of the stage
+     * that failed, with its attempts reset (lastError is kept).
+     *
+     * @return how many books were requeued
+     */
+    public int retryFailed() {
+        int requeued = 0;
+        for (BookTask task : books.values(Predicates.equal("state", BookState.FAILED.name()))) {
+            Stage stage = Stage.valueOf(task.failedStage());
+            if (replaceAndOffer(task, task.retried(now()), stage.queue())) {
+                requeued++;
+            }
+        }
+        return requeued;
+    }
+
+    /** Books per state, every state present (0 if none): GET /control/status. */
+    public Map<BookState, Long> countByState() {
+        Map<BookState, Long> counts = new EnumMap<>(BookState.class);
+        for (BookState state : BookState.values()) {
+            counts.put(state, books.aggregate(Aggregators.count(), Predicates.equal("state", state.name())));
+        }
+        return counts;
+    }
+
+    /** Ids waiting in the queue of the stage. */
+    public int queueSize(Stage stage) {
+        return hz.getQueue(stage.queue()).size();
+    }
+
+    /** The state of one book: GET /control/tasks/{id}. */
+    public Optional<BookTask> task(int bookId) {
+        return Optional.ofNullable(books.get(bookId));
+    }
+
+    /** False when the cluster has lost its state and the Control must recover it (contract §7). */
+    public boolean isInitialized() {
+        return hz.getMap(CoordinationNames.COORDINATION_META).containsKey(CoordinationNames.INITIALIZED);
+    }
+
+    /** Written by the Control after a full seed or recovery. */
+    public void markInitialized() {
+        hz.<String, Long>getMap(CoordinationNames.COORDINATION_META).set(CoordinationNames.INITIALIZED, now());
+    }
+
+    // --- Workers (Ingestion, Indexing) ---------------------------------------------------
+
+    /**
+     * T2, T6: takes the next id of the stage's queue and claims it for {@code owner} with a
+     * lease of LEASE_SECONDS. The poll and the claim are one transaction. An id whose entry
+     * is not in the stage's waiting state (a duplicate, or a book someone else moved) is
+     * dropped from the queue and the next one is tried.
+     *
+     * @param owner a worker name, see {@link #owner(String, int)}
+     * @param wait  how long to wait for an id when the queue is empty
+     * @return empty if no id could be claimed within {@code wait}
+     */
+    public Optional<Claim> claim(Stage stage, String owner, Duration wait) throws InterruptedException {
+        Objects.requireNonNull(owner, "owner");
+        long deadline = System.nanoTime() + wait.toNanos();
+        while (true) {
+            // Before opening a transaction; pollAndClaim sets the flag again if its poll is interrupted
+            if (Thread.interrupted()) {
+                throw new InterruptedException("interrupted while waiting for " + stage.queue());
+            }
+            long slice = Math.min(Math.max(deadline - System.nanoTime(), 0), MAX_POLL.toNanos());
+            Optional<Claim> claim = inTransaction(tx -> pollAndClaim(tx, stage, owner, slice));
+            boolean timeIsUp = deadline - System.nanoTime() <= 0;
+            if (claim.isPresent() || (timeIsUp && !Thread.currentThread().isInterrupted())) {
+                return claim;
+            }
+        }
+    }
+
+    private Optional<Claim> pollAndClaim(TransactionContext tx, Stage stage, String owner, long waitNanos) {
+        Integer id;
+        try {
+            id = tx.<Integer>getQueue(stage.queue()).poll(waitNanos, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();         // claim() sees it after the commit
+            return Optional.empty();
+        }
+        if (id == null || !isValidId(id)) {
+            return Optional.empty();                    // an invalid id leaves the queue with the commit
+        }
+        TransactionalMap<Integer, BookTask> map = tx.getMap(CoordinationNames.BOOK_STATE);
+        BookTask current = map.getForUpdate(id);        // locked for this transaction
+        if (current == null || current.bookState() != stage.waiting()) {
+            return Optional.empty();
+        }
+        long now = now();
+        BookTask claimed = current.claimed(stage, owner, now + leaseMillis(), now);
+        map.set(id, claimed);
+        return Optional.of(new Claim(stage, claimed));
+    }
+
+    /**
+     * T3, T7: the stage is complete. Call it only when the evidence is persistent (contract
+     * principle 2): {@code <id>._READY} exists (INGESTION), or index_log has the book
+     * (INDEXING). A completed ingestion offers the id to index-queue in the same transaction.
+     *
+     * @return false if the worker had lost the book (requeued after its lease expired): it
+     *         must drop it, whatever it wrote is harmless because every write is idempotent
+     */
+    public boolean complete(Claim claim) {
+        Stage stage = claim.stage();
+        if (stage == Stage.INGESTION) {
+            return replaceAndOffer(claim.task(), claim.task().completed(stage, now(), true),
+                    Stage.INDEXING.queue());
+        }
+        return books.replace(claim.bookId(), claim.task(), claim.task().completed(stage, now(), false));
+    }
+
+    /**
+     * T4, T5, T8, T9: the attempt failed. PERMANENT codes and the last attempt send the book to
+     * FAILED; other codes requeue it with one more attempt; OUTAGE requeues it without
+     * counting (contract §4.3).
+     */
+    public FailOutcome fail(Claim claim, ErrorCode code, String message) {
+        return fail(claim.stage(), claim.task(), code, message);
+    }
+
+    /** A longer lease for the same claim; empty if the book was lost meanwhile. */
+    public Optional<Claim> renew(Claim claim) {
+        BookTask renewed = claim.task().renewed(now() + leaseMillis());
+        return books.replace(claim.bookId(), claim.task(), renewed)
+                ? Optional.of(new Claim(claim.stage(), renewed))
+                : Optional.empty();
+    }
+
+    /**
+     * {@code <service>-<hostname>/w<n>}, e.g. ingestion-3f2a1c9e/w2. Inside Docker the
+     * hostname is the container id, so the owner says which replica and which worker.
+     */
+    public static String owner(String service, int worker) {
+        return service + "-" + hostname() + "/w" + worker;
+    }
+
+    // --- Index publication (Indexing, Search) --------------------------------------------
+
+    /**
+     * T10: the books that were INDEXED become PUBLISHED. Call it after CURRENT points to the
+     * new version. Ids that are not INDEXED in book-state (unknown, or indexed through
+     * POST /index/update) are left alone.
+     *
+     * @return how many books were marked
+     */
+    public int markPublished(Collection<Integer> ids) {
+        List<Integer> all = new ArrayList<>(new HashSet<>(ids));
+        int marked = 0;
+        for (int from = 0; from < all.size(); from += PUBLISH_BATCH) {
+            List<Integer> batch = all.subList(from, Math.min(from + PUBLISH_BATCH, all.size()));
+            for (BookTask task : books.getAll(new HashSet<>(batch)).values()) {
+                if (task.bookState() == BookState.INDEXED && books.replace(task.bookId(), task, task.published())) {
+                    marked++;
+                }
+            }
+        }
+        return marked;
+    }
+
+    /** Announces a new version on index-events (contract §6). */
+    public void publish(IndexPublished event) {
+        hz.<IndexPublished>getReliableTopic(CoordinationNames.INDEX_EVENTS).publish(event);
+    }
+
+    /**
+     * Calls {@code listener} for every IndexPublished from now on. A listener that throws keeps
+     * receiving, and one that falls behind skips the lost messages instead of stopping: the
+     * event is only a wake-up (Search also checks CURRENT periodically).
+     *
+     * @return the id for {@link #unsubscribe(UUID)}
+     */
+    public UUID subscribe(Consumer<IndexPublished> listener) {
+        return hz.<IndexPublished>getReliableTopic(CoordinationNames.INDEX_EVENTS)
+                .addMessageListener(new WakeUpListener(Objects.requireNonNull(listener, "listener")));
+    }
+
+    public boolean unsubscribe(UUID registration) {
+        return hz.getReliableTopic(CoordinationNames.INDEX_EVENTS).removeMessageListener(registration);
+    }
+
+    /** The lock of the single index writer (contract §5). */
+    public IndexWriterLock indexWriterLock() {
+        return new IndexWriterLock(hz.getMap(CoordinationNames.LOCKS));
+    }
+
+    /**
+     * Calls {@code listener} with false when the client loses the cluster and with true when it
+     * is connected again. The index writer stops writing on false (contract §5).
+     */
+    public UUID onConnectionChange(Consumer<Boolean> listener) {
+        Objects.requireNonNull(listener, "listener");
+        return hz.getLifecycleService().addLifecycleListener(event -> {
+            if (event.getState() == LifecycleState.CLIENT_CONNECTED) {
+                listener.accept(true);
+            } else if (event.getState() == LifecycleState.CLIENT_DISCONNECTED) {
+                listener.accept(false);
+            }
+        });
+    }
+
+    /** Shuts the client down if this instance opened it ({@link #connect}). */
+    @Override
+    public void close() {
+        if (ownsClient) {
+            hz.shutdown();
+        }
+    }
+
+    // --- Internals -----------------------------------------------------------------------
+
+    private FailOutcome fail(Stage stage, BookTask expected, ErrorCode code, String message) {
+        String error = BookTask.error(code, message);
+        int attempts = code.kind() == ErrorCode.Kind.OUTAGE ? expected.attempts() : expected.attempts() + 1;
+        if (code.kind() == ErrorCode.Kind.PERMANENT || attempts >= settings.maxAttempts()) {
+            return books.replace(expected.bookId(), expected, expected.failed(stage, attempts, error))
+                    ? FailOutcome.FAILED
+                    : FailOutcome.LEASE_LOST;
+        }
+        return replaceAndOffer(expected, expected.requeued(stage, attempts, error, now()), stage.queue())
+                ? FailOutcome.REQUEUED
+                : FailOutcome.LEASE_LOST;
+    }
+
+    /** replace(expected, next) and, only if it succeeded, offer the id: one transaction. */
+    private boolean replaceAndOffer(BookTask expected, BookTask next, String queue) {
+        return inTransaction(tx -> {
+            TransactionalMap<Integer, BookTask> map = tx.getMap(CoordinationNames.BOOK_STATE);
+            if (!map.replace(next.bookId(), expected, next)) {
+                return false;
+            }
+            tx.<Integer>getQueue(queue).offer(next.bookId());
+            return true;
+        });
+    }
+
+    /** Runs {@code work} in a transaction: committed if it returns, rolled back if it throws. */
+    private <T> T inTransaction(Function<TransactionContext, T> work) {
+        TransactionContext tx = hz.newTransactionContext(TRANSACTIONS);
+        tx.beginTransaction();
+        T result;
+        try {
+            result = work.apply(tx);
+        } catch (RuntimeException | Error e) {
+            tx.rollbackTransaction();
+            throw e;
+        }
+        try {
+            tx.commitTransaction();
+        } catch (RuntimeException e) {
+            try {
+                tx.rollbackTransaction();             // what Hazelcast recommends after a failed commit
+            } catch (RuntimeException rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        }
+        return result;
+    }
+
+    private long now() {
+        return clock.millis();
+    }
+
+    private long leaseMillis() {
+        return TimeUnit.SECONDS.toMillis(settings.leaseSeconds());
+    }
+
+    static boolean isValidId(int id) {
+        return id >= 1 && id <= MAX_BOOK_ID;
+    }
+
+    private static String hostname() {
+        String fromEnv = System.getenv("HOSTNAME");         // set by Docker: the container id
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv.strip();
+        }
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (IOException e) {
+            return "localhost";
+        }
+    }
+
+    /** Adapts a plain listener to the reliable topic with the behaviour of {@link #subscribe}. */
+    private record WakeUpListener(Consumer<IndexPublished> target) implements ReliableMessageListener<IndexPublished> {
+
+        @Override
+        public void onMessage(Message<IndexPublished> message) {
+            target.accept(message.getMessageObject());
+        }
+
+        /** -1: start with the next message published, not with old ones. */
+        @Override
+        public long retrieveInitialSequence() {
+            return -1;
+        }
+
+        @Override
+        public void storeSequence(long sequence) {
+        }
+
+        /** A reader that fell behind the ringbuffer skips to the oldest message left. */
+        @Override
+        public boolean isLossTolerant() {
+            return true;
+        }
+
+        /** An exception thrown by the listener does not stop the subscription. */
+        @Override
+        public boolean isTerminal(Throwable failure) {
+            return false;
+        }
+    }
+}
