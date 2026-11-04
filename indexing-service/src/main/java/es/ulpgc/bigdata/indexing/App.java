@@ -8,6 +8,7 @@ import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.config.MongoSettings;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
+import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MongoMetadataRepository;
 import es.ulpgc.bigdata.http.ServiceServer;
@@ -33,10 +34,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   MONGO_COLLECTION       inverted_index
  * </pre>
  *
- * One MongoClient per process (D6): App creates it, shares its database with the three
- * repositories and closes it when the service stops ("who creates, closes"). No constructor
- * talks to MongoDB, so the service starts even if MongoDB is down: GET /status answers and the
- * endpoints that need MongoDB answer 503 until it comes back (D4).
+ * One MongoClient per process (D6): App creates it, shares its database with the four
+ * repositories (books, inverted_index, index_log, index_meta) and closes it when the service
+ * stops ("who creates, closes"). No constructor talks to MongoDB, so the service starts even
+ * if MongoDB is down: GET /status answers and the endpoints that need MongoDB answer 503 until
+ * it comes back (D4).
  */
 public final class App {
 
@@ -76,6 +78,7 @@ public final class App {
                     new RangeBasedDatalake(layout.datalakeDir()),
                     new MongoMetadataRepository(db),
                     mongo.openIndex(client),                 // shared client: does not own it
+                    new MongoIndexLog(db),
                     new MongoPublicationRepository(db),
                     new MetadataParser(),
                     Tokenizer.standard());

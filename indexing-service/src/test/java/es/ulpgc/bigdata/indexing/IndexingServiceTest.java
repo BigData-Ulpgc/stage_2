@@ -9,6 +9,7 @@ import es.ulpgc.bigdata.datamart.metadata.MetadataRepositoryException;
 import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookMetadata;
 import es.ulpgc.bigdata.model.RawBook;
+import com.mongodb.MongoException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -17,6 +18,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -31,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * IndexingService without MongoDB or Docker: a real datalake in a temporary folder, the
- * in-memory inverted index and a fake metadata repository.
+ * in-memory inverted index and fakes of the metadata repository and the index log.
  */
 class IndexingServiceTest {
 
@@ -59,6 +61,7 @@ class IndexingServiceTest {
     private RangeBasedDatalake datalake;
     private InMemoryMetadataRepository metadata;
     private SpyIndex index;
+    private InMemoryIndexLog indexLog;
     private InMemoryPublicationRepository publications;
     private IndexingService service;
     private final Tokenizer tokenizer = Tokenizer.standard();
@@ -68,8 +71,14 @@ class IndexingServiceTest {
         datalake = new RangeBasedDatalake(dataDir.resolve("datalake/range"));
         metadata = new InMemoryMetadataRepository();
         index = new SpyIndex();
+        indexLog = new InMemoryIndexLog();
         publications = new InMemoryPublicationRepository();
-        service = new IndexingService(datalake, metadata, index, publications, new MetadataParser(), tokenizer);
+        service = newService();
+    }
+
+    /** A service on the same stores: calling it again is what a restart of the process sees. */
+    private IndexingService newService() {
+        return new IndexingService(datalake, metadata, index, indexLog, publications, new MetadataParser(), tokenizer);
     }
 
     // --- What update writes --------------------------------------------------------
@@ -91,6 +100,8 @@ class IndexingServiceTest {
         assertEquals("Jane Austen", book.author());
         assertEquals("en", book.language());
         assertEquals(1998, book.year());
+
+        assertTrue(indexLog.contains(1342), "y, lo último, la prueba de que está entero en el índice");
     }
 
     @Test
@@ -112,6 +123,7 @@ class IndexingServiceTest {
         assertEquals(first, second);
         assertEquals(List.of(1342), index.postings("elizabeth"));
         assertEquals(1, metadata.count());
+        assertEquals(1, indexLog.count(), "un libro reindexado sigue siendo un libro");
     }
 
     // --- Books that are not ready --------------------------------------------------
@@ -123,6 +135,7 @@ class IndexingServiceTest {
         assertEquals(999999, e.bookId());
         assertEquals(0, metadata.count());
         assertEquals(0, index.flushes.get());
+        assertEquals(0, indexLog.count());
     }
 
     @ParameterizedTest
@@ -141,6 +154,7 @@ class IndexingServiceTest {
         assertEquals(1342, e.bookId());
         assertEquals(0, metadata.count(), "ni la ficha en books");
         assertEquals(0, index.flushes.get(), "ni las posting lists");
+        assertEquals(0, indexLog.count(), "ni index_log: DR-08 no lo publicará");
         assertNull(service.status().lastUpdate(), "no cuenta como update terminado");
     }
 
@@ -161,6 +175,7 @@ class IndexingServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.update(bookId));
         assertEquals(0, metadata.count());
         assertEquals(0, index.flushes.get());
+        assertEquals(0, indexLog.count());
     }
 
     // --- Failures --------------------------------------------------------------------
@@ -173,6 +188,37 @@ class IndexingServiceTest {
         assertThrows(MetadataRepositoryException.class, () -> service.update(1342));
 
         assertEquals(List.of(), index.postings("elizabeth"), "metadatos primero: el índice no se tocó");
+        assertEquals(0, indexLog.count());
+    }
+
+    @Test
+    void siFallaElFlushElLibroNoEntraEnElLog() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        index.failNextFlushWith = new MongoException("flush falla (simulado)");
+
+        assertThrows(MongoException.class, () -> service.update(1342));
+
+        assertTrue(metadata.findById(1342).isPresent(), "la ficha ya se guardó");
+        assertFalse(indexLog.contains(1342),
+                "sin posting lists no hay prueba: el log va DESPUÉS del flush, y DR-08 no lo publicará");
+    }
+
+    @Test
+    void siFallaElLogElUpdateFallaYElReintentoLoCompleta() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        indexLog.failing(true);
+
+        assertThrows(MongoException.class, () -> service.update(1342), "la API responde 503");
+
+        // The book is in the index, but without evidence it does not count and is not published.
+        assertEquals(List.of(1342), index.postings("elizabeth"));
+        indexLog.failing(false);
+        assertEquals(0, service.status().booksIndexed());
+
+        service.update(1342);                               // the retry (idempotent)
+
+        assertEquals(1, service.status().booksIndexed());
+        assertEquals(List.of(1342), index.postings("elizabeth"), "sin duplicados en el índice");
     }
 
     @Test
@@ -226,6 +272,7 @@ class IndexingServiceTest {
         assertEquals(1, index.maxWritersAtOnce.get(), "dos hilos escribieron en el índice a la vez");
         assertEquals(threads * booksPerThread, index.postings("shared").size());
         assertEquals(threads * booksPerThread, metadata.count());
+        assertEquals(threads * booksPerThread, indexLog.count());
     }
 
     // --- status (GET /index/status) ----------------------------------------------------
@@ -251,7 +298,8 @@ class IndexingServiceTest {
 
         assertEquals(1, status.booksIndexed());
         assertNotNull(status.lastUpdate());
-        assertFalse(status.lastUpdate().isBefore(before));
+        // The log keeps milliseconds, as a MongoDB date.
+        assertFalse(status.lastUpdate().isBefore(before.truncatedTo(ChronoUnit.MILLIS)));
         assertFalse(status.lastUpdate().isAfter(Instant.now()));
     }
 
@@ -262,7 +310,53 @@ class IndexingServiceTest {
 
         assertThrows(IllegalStateException.class, () -> service.update(1342));
 
-        assertNull(service.status().lastUpdate(), "solo cuenta un update que terminó bien");
+        IndexStatus status = service.status();
+        assertNull(status.lastUpdate(), "solo cuenta un update que terminó bien");
+        assertEquals(0, status.booksIndexed());
+    }
+
+    @Test
+    void statusCuentaLosLibrosDelLogNoLasFichas() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        service.update(1342);
+        // A book whose update stopped after saving its metadata: it is in books, not in the index.
+        metadata.save(new BookMetadata(84, "Frankenstein", "Mary Shelley", "en", null, null, null, null, null));
+
+        assertEquals(2, metadata.count());
+        assertEquals(1, service.status().booksIndexed(), "solo los libros enteros en el índice");
+    }
+
+    @Test
+    void statusSobreviveAUnReinicio() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        service.update(1342);
+        IndexStatus before = service.status();
+
+        IndexStatus after = newService().status();          // another process on the same stores
+
+        assertEquals(1, after.booksIndexed());
+        assertNotNull(after.lastUpdate(), "antes de DR-07 volvía a null al reiniciar");
+        assertEquals(before.lastUpdate(), after.lastUpdate());
+    }
+
+    @Test
+    void reindexarUnLibroAdelantaLastUpdate() throws InterruptedException {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        service.update(1342);
+        Instant first = service.status().lastUpdate();
+        Thread.sleep(5);                                    // the log keeps milliseconds
+
+        service.update(1342);
+
+        assertTrue(service.status().lastUpdate().isAfter(first), "reindexar cuenta como indexar");
+        assertEquals(1, service.status().booksIndexed());
+    }
+
+    @Test
+    void statusConMongoCaidoFallaConMongoException() {
+        indexLog.failing(true);
+
+        assertThrows(MongoException.class, service::status, "la API responde 503");
     }
 
     @Test
@@ -285,13 +379,15 @@ class IndexingServiceTest {
             Future<UpdateResult> update = writer.submit(() -> service.update(1342));
             assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS), "el update no llegó al flush");
 
-            // The update holds the lock now. status must answer anyway.
+            // The update holds the lock now. status must answer anyway, and the book does not
+            // count yet: its posting lists are not written, so it is not in the log.
             Future<IndexStatus> status = reader.submit(service::status);
-            assertEquals(1, status.get(2, TimeUnit.SECONDS).booksIndexed(),
-                    "status no debe esperar al lock del índice");
+            assertEquals(0, status.get(2, TimeUnit.SECONDS).booksIndexed(),
+                    "status no debe esperar al lock del índice, ni contar un libro a medias");
 
             index.flushGate.countDown();                       // let the update finish
             assertEquals(1342, update.get(5, TimeUnit.SECONDS).bookId());
+            assertEquals(1, service.status().booksIndexed());
         } finally {
             index.flushGate.countDown();
             writer.shutdownNow();
