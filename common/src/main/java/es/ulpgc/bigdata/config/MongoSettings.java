@@ -57,8 +57,20 @@ public record MongoSettings(String uri, String database, String collection) {
                 .build());
     }
 
-    /** Opens the index; fails within a few seconds if MongoDB does not answer. */
+    /**
+     * Opens the index with its OWN client (tests, benchmarks); fails within a few seconds if
+     * MongoDB does not answer. Closing the index closes that client.
+     */
     public MongoInvertedIndex openIndex() {
         return new MongoInvertedIndex(uri, database, collection);
+    }
+
+    /**
+     * Opens the index on the client of the service (see openClient), in this database and
+     * collection. Closing the index leaves the client open: whoever created it closes it.
+     */
+    public MongoInvertedIndex openIndex(MongoClient client) {
+        Objects.requireNonNull(client, "client");
+        return new MongoInvertedIndex(client.getDatabase(database), collection);
     }
 }
