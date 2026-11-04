@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.http;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.javalin.Javalin;
+import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
 import io.javalin.json.JavalinGson;
 import io.javalin.router.EndpointNotFound;
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -78,8 +80,19 @@ public final class ServiceServer {
      */
     public static Javalin create(String serviceName, int maxThreads,
                                  Supplier<Map<String, Object>> extraStatus) {
+        return create(serviceName, maxThreads, extraStatus, config -> { });
+    }
+
+    /**
+     * @param extraConfig what only this service needs in the server configuration, e.g. the CORS
+     *                    rules of the Search Service
+     */
+    public static Javalin create(String serviceName, int maxThreads,
+                                 Supplier<Map<String, Object>> extraStatus,
+                                 Consumer<JavalinConfig> extraConfig) {
         Objects.requireNonNull(serviceName, "serviceName");
         Objects.requireNonNull(extraStatus, "extraStatus");
+        Objects.requireNonNull(extraConfig, "extraConfig");
         if (maxThreads < MIN_THREADS) {
             throw new IllegalArgumentException("maxThreads must be >= " + MIN_THREADS + ", got " + maxThreads);
         }
@@ -91,6 +104,7 @@ public final class ServiceServer {
             QueuedThreadPool pool = new QueuedThreadPool(maxThreads, MIN_THREADS, IDLE_TIMEOUT_MS);
             pool.setName(serviceName + "-http");
             config.jetty.threadPool = pool;
+            extraConfig.accept(config);
         });
 
         app.get("/status", ctx -> {

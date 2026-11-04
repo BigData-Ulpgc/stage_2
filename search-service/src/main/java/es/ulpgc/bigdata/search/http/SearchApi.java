@@ -5,6 +5,7 @@ import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepositoryException;
 import es.ulpgc.bigdata.http.ApiException;
 import es.ulpgc.bigdata.http.ServiceServer;
+import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookMetadata;
 import es.ulpgc.bigdata.search.index.IndexSnapshot;
 import es.ulpgc.bigdata.search.index.SnapshotHolder;
@@ -48,7 +49,12 @@ public final class SearchApi {
 
     /** The server with every route and error handler; the caller calls start(port). */
     public Javalin create(String serviceName, int maxThreads) {
-        Javalin app = ServiceServer.create(serviceName, maxThreads, snapshots::status);
+        return create(serviceName, maxThreads, CorsPolicy.NONE);
+    }
+
+    /** The same, with the origins that may call the API from a browser. */
+    public Javalin create(String serviceName, int maxThreads, CorsPolicy cors) {
+        Javalin app = ServiceServer.create(serviceName, maxThreads, snapshots::status, cors::applyTo);
         app.get("/search", this::search);
         app.get("/search/filters", this::filters);
         app.get("/books/{book_id}", this::book);
@@ -62,7 +68,7 @@ public final class SearchApi {
     // ------------------------------------------------------------------
 
     private void search(Context ctx) {
-        SearchQuery query = SearchQuery.parse(ctx.queryParamMap(), tokenizer);   // 400 before touching anything
+        SearchQuery query = SearchQuery.parse(queryParams(ctx), tokenizer);      // 400 before touching anything
         IndexSnapshot snapshot = snapshot();
         SearchEngine.Result result = engine.search(snapshot, query);
 
@@ -79,6 +85,15 @@ public final class SearchApi {
         }
         body.put("results", results);
         ctx.json(body);
+    }
+
+    /** The decoded parameters; 400 if the query string is not valid percent-encoding (q=%ZZ). */
+    private static Map<String, List<String>> queryParams(Context ctx) {
+        try {
+            return ctx.queryParamMap();
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(400, "INVALID_PARAMETER", "the query string is not valid percent-encoding", null);
+        }
     }
 
     /** Only the filters present in the request, as received (year as a number). */
@@ -117,16 +132,10 @@ public final class SearchApi {
         ctx.json(body);
     }
 
+    /** The canonical form of BookIds (common), the same rule as Ingestion and Indexing. */
     private static int bookId(String text) {
-        try {
-            int id = Integer.parseInt(text);
-            if (id >= 0) {
-                return id;
-            }
-        } catch (NumberFormatException e) {
-            // falls through to the 400
-        }
-        throw ApiException.invalid("book_id", "book_id must be a non-negative integer");
+        return BookIds.parse(text).orElseThrow(() -> ApiException.invalid("book_id",
+                "book_id must be a positive integer (1 to " + BookIds.MAX + ", digits only)"));
     }
 
     // ------------------------------------------------------------------

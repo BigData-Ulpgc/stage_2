@@ -19,8 +19,10 @@ curl localhost:7003/status                      # {"service":"search-service","s
 | Variable | Default | Meaning |
 |---|---|---|
 | `SEARCH_PORT` | `7003` | HTTP port |
-| `SEARCH_THREADS` | `250` (Javalin's default, made explicit) | maximum Jetty request threads |
+| `SEARCH_HTTP_THREADS` | `250` (Javalin's default, made explicit) | maximum Jetty request threads |
+| `SEARCH_MONGO_POOL_SIZE` | `50` | maximum MongoDB connections of a replica; a request that waits more than 5 s for one answers 503 |
 | `SEARCH_POLL_SECONDS` | `5` | seconds between checks of `CURRENT`, the backup of the event |
+| `CORS_ORIGINS` | none | origins allowed from a browser: comma-separated (`http://localhost:3000`) or `*` |
 | `HZ_MEMBERS`, `HZ_CLUSTER_NAME` | `localhost:5701,localhost:5702`, `search-engine` | Hazelcast cluster that announces new versions |
 | `MONGO_URI` | `mongodb://localhost:27017` | in Docker: `mongodb://mongo:27017` |
 | `MONGO_DATABASE` | `search_engine` | database with the index and the metadata |
@@ -43,8 +45,12 @@ case an event is lost or the cluster is down.
    (`{term: {$in: [...]}}`) on the snapshot's collection.
 4. `SearchEngine` walks the shortest list and keeps the ids every other list has (AND), drops
    the ids not published in the snapshot, applies `author` / `language` / `year` on the snapshot
-   metadata in memory, and cuts the page. Results are sorted by `book_id`; `total` counts all
-   matches.
+   metadata in memory, orders the matches and cuts the page. `total` counts all matches.
+
+The order is `ResultRanking`: today ascending `book_id`, deterministic and documented in the
+contract. Another ranking is one new implementation passed to `SearchEngine`; neither the search
+nor the API change. A ranking by relevance would also need term frequencies, which the posting
+lists do not store.
 
 If MongoDB does not answer, the response is 503 `STORAGE_UNAVAILABLE`.
 
