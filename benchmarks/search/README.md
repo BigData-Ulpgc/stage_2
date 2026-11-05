@@ -78,7 +78,7 @@ memory with `scripts/monitor.sh`, and stops everything at the end. One factor ch
 Search, which would hide the effect of the replicas. `nginx0.5` measures that limit on its own.
 
 **Requirements:** the same as JMH, plus Docker with Compose and curl, and `stage_1` next to `stage_2`
-(or `DATASET_DIR=/path/to/sample_dataset/book`). With all the limits, it uses up to 12 CPUs and about
+(or `DATASET_DIR=/path/to/sample_dataset/book`). With 4 replicas, the limits add up to 14 CPUs and about
 7 GB. Port 8080 must be free.
 
 ```bash
