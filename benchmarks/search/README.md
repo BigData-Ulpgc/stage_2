@@ -60,3 +60,44 @@ The score is the mean time per search in microseconds, with its 99.9 % error. Ea
 **Limitation:** each term is assigned to books at random and independently, while real words tend to
 appear together. The results compare the cost of each step; they do not predict the response time of
 real queries.
+
+## Load tests: the system under concurrent requests
+
+`LoadGenerator.java` sends `GET /search` through nginx with the queries of `shared/queries.txt`.
+`run-load.sh` starts the system, loads the dataset, repeats each configuration 3 times, records CPU and
+memory with `scripts/monitor.sh`, and stops everything at the end. One factor changes at a time:
+
+| Experiment | What changes | Fixed |
+|---|---|---|
+| `clients` | 1, 8, 32, 128, 256 clients with 1, 2 and 4 replicas | 250 threads, pool of 50, nginx with 2 CPUs |
+| `threads` | 16 and 64 Jetty threads, with the same clients | 1 replica, pool of 50, nginx with 2 CPUs |
+| `pool` | 10 and 100 MongoDB connections, with 32, 128 and 256 clients | 1 replica, 250 threads, nginx with 2 CPUs |
+| `nginx0.5` | nginx with 0.5 CPUs, with 32, 128 and 256 clients | 1 replica, 250 threads, pool of 50 |
+
+**Why nginx has 2 CPUs here:** the deployment gives it 0.5, and with that limit it saturates before
+Search, which would hide the effect of the replicas. `nginx0.5` measures that limit on its own.
+
+**Requirements:** the same as JMH, plus Docker with Compose and curl, and `stage_1` next to `stage_2`
+(or `DATASET_DIR=/path/to/sample_dataset/book`). With all the limits, it uses up to 12 CPUs and about
+7 GB. Port 8080 must be free.
+
+```bash
+# 1. Check that it works (about 3 minutes; these numbers are not valid)
+bash benchmarks/search/run-load.sh --smoke
+
+# 2. The real run (about 1 h 45 min, on an idle machine)
+bash benchmarks/search/run-load.sh
+```
+
+The loader **empties** the database it receives, so the script uses its own, `search_benchmark`, and
+deletes it at the end. The script ends with `docker compose down`.
+
+**What to hand in:** `git add benchmarks/search/results/load` and push, as with JMH. In
+`summary.csv`, `http_errors`, `wrong_results` and `connection_errors` must be 0, or the run must be
+reported as it is. `requests_per_replica` shows how nginx shared the load.
+
+**Limitations:**
+- The generator runs on the same machine as the system, so it competes with it for CPU.
+- It is a closed loop: under saturation, clients wait instead of queuing more requests, so latencies are
+  lower than with requests arriving at a fixed rate.
+- With the sample dataset the index has 15 books. The large index depends on DR-16.
