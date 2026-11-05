@@ -19,6 +19,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -55,6 +57,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * (CoordinationSettings.openClient), and GET /status must answer meanwhile, so it runs after
  * the server, in the background; /status shows "coordination": connecting, connected or
  * disconnected. Without Hazelcast the service publishes anyway (HazelcastPublicationNotifier).
+ *
+ * Once connected, the same thread starts the index writer (DR-06b, IndexingWriter): the
+ * consumer of index-queue, active while this replica holds the lock index-writer and a
+ * standby otherwise. /status shows what it does in "writer" (null until connected).
  */
 public final class App {
 
@@ -103,8 +109,9 @@ public final class App {
             // The first version uses MONGO_COLLECTION; later ones keep the one of CURRENT (D8).
             HazelcastPublicationNotifier notifier = new HazelcastPublicationNotifier(publications);
             Publisher publisher = new Publisher(publications, mongo.collection(), Clock.systemUTC(), notifier);
+            AtomicReference<IndexingWriter> writer = new AtomicReference<>();
             Javalin server = new IndexingApi(service, publisher)
-                    .create(SERVICE_NAME, httpThreads, () -> Map.of("coordination", notifier.state()))
+                    .create(SERVICE_NAME, httpThreads, () -> extraStatus(notifier, writer.get()))
                     .start(port);
 
             // Hosts only, never the whole URI: in production it may carry user and password.
@@ -112,13 +119,21 @@ public final class App {
                     SERVICE_NAME, server.port(), layout.datalakeDir().toAbsolutePath(),
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
             startRecovery(publisher);
-            RunningService running = new RunningService(server, client);
-            running.connectInBackground(coordination, notifier);
+            RunningService running = new RunningService(server, client, writer);
+            running.connectInBackground(coordination, notifier, service);
             return running;
         } catch (RuntimeException e) {
             client.close();                                  // the start failed: do not leave it open
             throw e;
         }
+    }
+
+    /** The fields of GET /status beyond service and status: cheap, never MongoDB. */
+    private static Map<String, Object> extraStatus(HazelcastPublicationNotifier notifier, IndexingWriter writer) {
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("coordination", notifier.state());
+        status.put("writer", writer == null ? null : writer.status());
+        return status;
     }
 
     /** D2, D3: daemon, so it never keeps the JVM alive; close() makes it fail if still running. */
@@ -139,35 +154,55 @@ public final class App {
 
     /**
      * The running service. close() stops it in order: first the HTTP server (no new requests),
-     * then the Hazelcast client, then the MongoClient those requests use. Closing twice does
-     * nothing (the shutdown hook and a test may both call it).
+     * then the index writer (after its current book, see WRITER_GRACE), then the Hazelcast
+     * client, then the MongoClient they use. Closing twice does nothing (the shutdown hook and
+     * a test may both call it).
      */
     public static final class RunningService implements AutoCloseable {
 
+        /**
+         * How long close() waits for the writer to finish its book; then it is interrupted, and
+         * its book stays INDEXING until the Control requeues it (contract §7).
+         */
+        static final Duration WRITER_GRACE = Duration.ofSeconds(10);
+
         private final Javalin server;
         private final MongoClient client;
+        private final AtomicReference<IndexingWriter> writer;
         private final AtomicReference<Coordination> coordination = new AtomicReference<>();
         private final AtomicBoolean closed = new AtomicBoolean(false);
+        private Thread writerThread;                         // guarded by this
 
-        private RunningService(Javalin server, MongoClient client) {
+        private RunningService(Javalin server, MongoClient client, AtomicReference<IndexingWriter> writer) {
             this.server = server;
             this.client = client;
+            this.writer = writer;
         }
 
         /** D2: daemon, so a JVM that stops does not wait for a cluster that never answers. */
-        private void connectInBackground(CoordinationSettings settings, HazelcastPublicationNotifier notifier) {
+        private void connectInBackground(CoordinationSettings settings, HazelcastPublicationNotifier notifier,
+                                         IndexingService service) {
             Thread connector = new Thread(() -> {
+                Coordination connected;
                 try {
-                    Coordination connected = Coordination.connect(settings);       // blocks
-                    if (!adopt(connected)) {
-                        return;                                  // closed while connecting
-                    }
+                    connected = Coordination.connect(settings);                    // blocks
+                } catch (RuntimeException e) {
+                    LOG.warn("Hazelcast: {} (no writer and no notifications until the next start)", e.toString());
+                    return;
+                }
+                if (!adopt(connected)) {
+                    return;                                      // closed while connecting
+                }
+                try {
                     int marked = notifier.connected(connected);
                     LOG.info("connected to Hazelcast {} · {} books PUBLISHED by the repair at start",
                             settings.members(), marked);
                 } catch (RuntimeException e) {
-                    LOG.warn("Hazelcast: {} (the publications are not notified until the next start)", e.toString());
+                    // MongoDB down at start, for example: the next publication repairs the states.
+                    LOG.warn("connected to Hazelcast {}, but the repair of the states failed: {}",
+                            settings.members(), e.toString());
                 }
+                startWriter(connected, service);
             }, SERVICE_NAME + "-connect");
             connector.setDaemon(true);
             connector.start();
@@ -181,6 +216,41 @@ public final class App {
                 return false;
             }
             return true;
+        }
+
+        /** D6, D9: the writer starts as soon as there is a cluster, unless the service already stopped. */
+        private synchronized void startWriter(Coordination connected, IndexingService service) {
+            if (closed.get()) {
+                return;
+            }
+            IndexingWriter started = new IndexingWriter(connected, service,
+                    Coordination.owner("indexing", 0), d -> Thread.sleep(d.toMillis()));
+            connected.onConnectionChange(started::connectionChanged);
+            writerThread = new Thread(started, SERVICE_NAME + "-writer");
+            writer.set(started);
+            writerThread.start();
+        }
+
+        /** Asks the writer to stop after its book, waits WRITER_GRACE, then interrupts it. */
+        private void stopWriter() {
+            IndexingWriter running;
+            Thread thread;
+            synchronized (this) {
+                running = writer.get();
+                thread = writerThread;
+            }
+            if (running == null) {
+                return;
+            }
+            running.stop();
+            try {
+                thread.join(WRITER_GRACE.toMillis());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            if (thread.isAlive()) {
+                thread.interrupt();
+            }
         }
 
         /** The real port, also when it was started with port 0. */
@@ -198,6 +268,7 @@ public final class App {
                 server.stop();
             } finally {
                 try {
+                    stopWriter();
                     Coordination connected = coordination.getAndSet(null);
                     if (connected != null) {
                         connected.close();
