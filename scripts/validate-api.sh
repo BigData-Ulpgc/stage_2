@@ -9,8 +9,8 @@
 #
 # The expected results are those of the 15 books of the sample dataset. The public API is called
 # through nginx and the internal ones inside the Docker network, as the services call each other.
-# It does not change any data, except POST /index/publish once DR-08 exists: with nothing new to
-# publish, it creates no version.
+# Run it right after loading the dataset. It does not change any data, except POST /index/publish
+# once DR-08 exists: with nothing new to publish, it creates no version, which the script checks.
 #
 # SKIP means an endpoint declared in its contract that answers 501 (not implemented yet). When it
 # is implemented, the check runs without touching this script. Any other answer is a PASS or a
@@ -48,6 +48,7 @@ call() {
         local output
         output=$($COMPOSE exec -T "$3" curl -s -g -m 20 -w '\n%{http_code}' -X "$1" "http://localhost:$4$2" 2>/dev/null | tr -d '\r')
         code="${output##*$'\n'}"
+        code="${code:-000}"       # the container does not answer
         printf '%s' "${output%$'\n'*}" > "$body_file"
     fi
 }
@@ -171,7 +172,8 @@ expect       "index status: books published" 200 '"books_published":15,'   GET /
 expect       "index status: books indexed"   200 '"books_indexed":15,'     GET /index/status indexing 7002
 expect_error "update: invalid id"            400 INVALID_PARAMETER book_id POST /index/update/abc indexing 7002
 expect_error "update: a book not in the datalake" 404 NOT_FOUND book_id    POST /index/update/999999 indexing 7002
-pending      "publish with nothing new"      200 '"version"'               POST /index/publish indexing 7002
+pending      "publish with nothing new"      200 '"books_published":0,'    POST /index/publish indexing 7002
+expect       "publish created no new version" 200 '"published_version":1,' GET /index/status indexing 7002
 
 echo; echo "== Ingestion (internal)"
 expect       "status"                        200 '"service":"ingestion-service"' GET /status ingestion 7001

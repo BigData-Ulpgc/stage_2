@@ -18,7 +18,8 @@ POST {{indexing}}/index/update/999999
 POST {{indexing}}/index/update/abc
 
 ### Publish: not implemented until DR-08
-# Expected: 501 NOT_IMPLEMENTED
+# Expected: 501 NOT_IMPLEMENTED. After DR-08, right after loading the dataset:
+# 200, version 1, books_published 0, total_books 15, and no new version
 POST {{indexing}}/index/publish
 
 ### Rebuild: not implemented until DR-10
