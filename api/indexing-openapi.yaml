@@ -1,22 +1,25 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.4.0** (DR-05 and its review follow-up, DR-07, DR-08a, DR-08b, plan v3.3).
+    **Status: draft v0.5.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b, plan v3.3).
     `POST /index/rebuild` answers 501 until DR-10; its contract is already the final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
 
     ## Role in the workflow
-    In normal operation books are indexed through the Hazelcast `index-queue` (DR-06), not
-    through HTTP: the HTTP endpoints are for the Control Module (publication), for
-    administration (single update, rebuild) and for the functional validation. Both paths run
-    the same code.
+    In normal operation books are indexed through the Hazelcast `index-queue`, not through
+    HTTP: the HTTP endpoints are for the Control Module (publication), for administration
+    (single update, rebuild) and for the functional validation. Both paths run the same code.
+    The queue is consumed by the **index writer** of the replica that holds the lock
+    `index-writer` (coordination contract §5); the other replicas wait as standbys. It claims
+    each book (`INDEXING`), indexes it and marks it `INDEXED` once it is in `index_log`; failures
+    follow the codes of the contract (§4.3). The HTTP update does not change `book-state`.
 
     1. Ingestion writes `<id>._READY` and puts the id in `index-queue`.
     2. Indexing reads the book, saves its metadata (`books`) and its terms (`inverted_index`),
@@ -34,9 +37,9 @@ info:
     - **Unknown routes.** A route that does not exist (or a method that a route does not
       have) answers 404 `NOT_FOUND` with the same `Error` schema and `field: null`, never
       the web framework's own page. All services share this rule (`ServiceServer` in `common`).
-    - **Writes are serialized** inside the service: concurrent requests are answered correctly,
-      one write at a time (one writer per process; DR-09 adds the `index-writer` lock across
-      replicas).
+    - **Writes are serialized** inside the service: concurrent requests and the index writer
+      are answered correctly, one write at a time. Across replicas, only the holder of
+      `index-writer` consumes the queue; the writes of indexing are idempotent.
     - **Timeouts and retries (callers).** Connect timeout 2 s; request timeout 30 s for
       `update` and `publish`, 5 s for the status endpoints. Every `POST` is safe to retry after
       a timeout, a connection error or a 503 (see the idempotency notes of each one); use a
@@ -337,6 +340,15 @@ paths:
                 service: indexing-service
                 status: running
                 coordination: connected
+                writer:
+                  role: active
+                  indexed: 187
+                  requeued: 2
+                  failed: 1
+                  lease_lost: 0
+                  outage_pauses: 0
+                  invalid_ids_dropped: 0
+                  ids_skipped: 0
 
 components:
   schemas:
@@ -449,7 +461,7 @@ components:
 
     ServiceStatus:
       type: object
-      required: [service, status, coordination]
+      required: [service, status, coordination, writer]
       properties:
         service: { type: string, example: indexing-service }
         status: { type: string, enum: [running] }
@@ -459,6 +471,30 @@ components:
           description: |
             Connection to Hazelcast, used to mark the published books and announce each version.
             `connecting` until the cluster first answers (the service keeps working meanwhile).
+        writer:
+          $ref: '#/components/schemas/WriterStatus'
+
+    WriterStatus:
+      type: object
+      nullable: true
+      description: |
+        The consumer of `index-queue` of this replica, counting since the process started; null
+        until the service has connected to Hazelcast once.
+      required: [role, indexed, requeued, failed, lease_lost, outage_pauses, invalid_ids_dropped, ids_skipped]
+      properties:
+        role:
+          type: string
+          enum: [standby, active, stopped]
+          description: |
+            `active` while this replica holds the lock `index-writer` and consumes the queue;
+            `standby` while another replica holds it (or the cluster is not connected).
+        indexed: { type: integer, description: "Books indexed and marked INDEXED (T7)." }
+        requeued: { type: integer, description: "Failed attempts sent back to the queue (T8)." }
+        failed: { type: integer, description: "Books sent to FAILED (T9), permanent error or no attempts left." }
+        lease_lost: { type: integer, description: "Books dropped because the Control had requeued them meanwhile." }
+        outage_pauses: { type: integer, description: "Pauses because MongoDB did not answer (STORAGE_UNAVAILABLE, not counted as an attempt)." }
+        invalid_ids_dropped: { type: integer, description: "Invalid ids taken from the queue and dropped; not 0 means someone offered a bad id (contract §2)." }
+        ids_skipped: { type: integer, description: "Ids taken from the queue whose book was not DOWNLOADED (duplicates); harmless." }
 
     Error:
       type: object
