@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.datalake;
 
+import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookLocation;
 import es.ulpgc.bigdata.model.RawBook;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -76,6 +78,54 @@ class RangeBasedDatalakeTest {
     @Test
     void idNegativoSeRechaza() {
         assertThrows(IllegalArgumentException.class, () -> RangeBasedDatalake.rangeFolder(-5));
+    }
+
+    // ------------------------------------------------------------------
+    // The ids are those of BookIds (1 to 999,999,999), as in the APIs
+    // ------------------------------------------------------------------
+
+    @ParameterizedTest
+    @ValueSource(ints = {-5, 0, BookIds.MAX + 1, Integer.MAX_VALUE})
+    void saveRechazaLosIdsFueraDeBookIdsSinEscribirNada(int id) {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> datalake.save(new RawBook(id, "H", "B")));
+
+        assertTrue(e.getMessage().contains(String.valueOf(id)), e.getMessage());
+        assertFalse(Files.exists(rangeRoot), "no crea ni la carpeta");
+    }
+
+    @Test
+    void elMayorIdValidoSeGuardaYSeLista() {
+        datalake.save(new RawBook(BookIds.MAX, "H", "B"));
+
+        assertTrue(datalake.locate(BookIds.MAX).isPresent());
+        assertEquals(List.of(BookIds.MAX), datalake.listBookIds());
+    }
+
+    @Test
+    void elIdUnoSeGuardaYSeLista() {
+        datalake.save(new RawBook(1, "H", "B"));
+
+        assertEquals(List.of(1), datalake.listBookIds());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {-5, 0, BookIds.MAX + 1})
+    void locateDeUnIdFueraDeBookIdsNoEncuentraNada(int id) {
+        assertTrue(datalake.locate(id).isEmpty());
+    }
+
+    @Test
+    void unLibroConId0PuestoAManoNoSeLista() throws IOException {
+        // A datalake written before this change could have one: it is not a valid book.
+        datalake.save(new RawBook(84, "H", "B"));
+        Path dir = rangeRoot.resolve("00000-00999");
+        Files.writeString(dir.resolve("0.header.txt"), "x");
+        Files.writeString(dir.resolve("0.body.txt"), "x");
+        Files.writeString(dir.resolve("0._READY"), "x");
+
+        assertEquals(List.of(84), datalake.listBookIds());
+        assertTrue(datalake.locate(0).isEmpty());
     }
 
     @Test

@@ -170,7 +170,7 @@ class DatalakeContractTest {
     @MethodSource("structures")
     void listadoYLocateSonCoherentes(String name, Function<Path, Datalake> factory) throws IOException {
         Datalake d = create(name, factory);
-        for (int id = 0; id < 30; id++) {
+        for (int id = 1; id <= 30; id++) {             // from 1: the ids of BookIds
             d.save(new RawBook(id * 137, "H", "B"));
         }
         Files.delete(d.locate(137).orElseThrow().bodyPath());
@@ -202,7 +202,7 @@ class DatalakeContractTest {
     void listaOrdenadaConMuchosLibrosDesordenados(String name, Function<Path, Datalake> factory) {
         Datalake d = create(name, factory);
         List<Integer> ids = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 1; i <= 100; i++) {
             ids.add(i * 37);                        // spread across several ranges
         }
         Collections.shuffle(ids, new Random(42));   // fixed seed: always the same shuffle
