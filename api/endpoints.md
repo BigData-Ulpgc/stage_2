@@ -10,7 +10,7 @@ path twice.
 | Search Service | [`openapi.yaml`](openapi.yaml) | Daniel Perdomo |
 | Indexing Service | [`indexing-openapi.yaml`](indexing-openapi.yaml) | Daniel Rodríguez |
 | Ingestion Service | [`ingestion-openapi.yaml`](ingestion-openapi.yaml) | Carlos Falcón |
-| Control Module | *pending (CF-09)* | Carlos Falcón |
+| Control Module | [`control-openapi.yaml`](control-openapi.yaml) | Carlos Falcón |
 
 **Completion** says what a successful answer means: *done* (the work is finished when the
 response arrives) or *accepted* (the work continues in the background; the row says how to
@@ -44,10 +44,10 @@ Consumed by another service or by an operator, never by the front-end.
 | Ingestion | `POST /ingest/{book_id}` | operators, validation | Download a book, split it into header and body and store it in the datalake | done: stored (`downloaded`), or it already was (`already_available`) |
 | Ingestion | `GET /ingest/status/{book_id}` | operators, validation | Whether a book is complete in the datalake | done (read-only) |
 | Ingestion | `GET /ingest/list` | operators, validation | Every book complete in the datalake | done (read-only) |
-| Control | `POST /control/jobs` | *pending (CF-09)* | Seed books to ingest and index | |
-| Control | `GET /control/status` | *pending (CF-09)* | Queue lengths and books per state | |
-| Control | `GET /control/tasks/{book_id}` | *pending (CF-09)* | State of one book | |
-| Control | `POST /control/retry-failed` | *pending (CF-09)* | Put the FAILED books back in their queue | |
+| Control | `POST /control/jobs` | operators, validation, benchmarks | Seed books to ingest, index and publish (`{"book_ids": [...]}`, up to 100,000) | accepted (202): follow `GET /control/status` and `GET /control/tasks/{book_id}` |
+| Control | `GET /control/status` | operators, validation, benchmarks | Books per state, queue lengths, last publication, expired-lease check | done (read-only) |
+| Control | `GET /control/tasks/{book_id}` | operators, validation | State of one book (its `book-state` entry) | done (read-only) |
+| Control | `POST /control/retry-failed` | operators | Put the FAILED books back in the queue of the stage that failed (T11) | accepted: the books are back in their queue |
 
 ## Operational
 
@@ -57,7 +57,8 @@ Consumed by another service or by an operator, never by the front-end.
 
 Search adds the loaded `index_version` to its `GET /status`, and Ingestion its book `source`,
 its `coordination` (`connecting` until the cluster answers: `/status` never waits for it) and
-what its `ingest-queue` workers did.
+what its `ingest-queue` workers did. The Control adds its `coordination` too; its `/control`
+routes answer 503 `COORDINATION_UNAVAILABLE` while it is not `connected`.
 
 ## Interactions that are not HTTP
 
