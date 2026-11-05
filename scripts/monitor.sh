@@ -19,6 +19,9 @@
 
 set -euo pipefail
 
+# Decimal points in the CSV: with a Spanish locale, the awk of Ubuntu (mawk) writes 1,500.
+export LC_ALL=C
+
 label="run"
 output="benchmarks/search/monitor"
 duration=""

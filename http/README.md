@@ -37,7 +37,8 @@ VALIDATE_URL=http://localhost:8080 VALIDATE_INDEXING_URL=http://localhost:7002 \
 
 Without `VALIDATE_URL`, `StackValidationTest` is skipped: a normal `mvn verify` needs no stack.
 
-The script ends with `passed N, failed 0, skipped M` and exit code 0. **SKIP** is an endpoint of
+Run it right after loading the dataset: if the pipeline has indexed other books, `POST /index/publish`
+would create a new version. The script ends with `passed N, failed 0, skipped M` and exit code 0. **SKIP** is an endpoint of
 the contract that answers 501: it starts running when it is implemented. Any other answer is a PASS
 or a FAIL, so a route that disappears does not go unnoticed. With `docker-compose` instead of
 `docker compose`, it is detected, or set with `COMPOSE="docker-compose"`.
@@ -66,7 +67,8 @@ or a FAIL, so a route that disappears does not go unnoticed. With `docker-compos
 | Filter values | `/search/filters` | 200, 15 books, `en`, years 1975 to 2008 |
 | Indexing: status | `GET /index/status` | 200, `books_indexed` and `books_published` 15 |
 | Indexing: update | `POST /index/update/abc`, `/999999` | 400 `INVALID_PARAMETER`, 404 `NOT_FOUND` |
-| Indexing: publish, rebuild | `POST /index/publish`, `/index/rebuild` | 501 until DR-08 and DR-10 |
+| Indexing: publish | `POST /index/publish` | 501 until DR-08; after it, 200, `books_published` 0 and still version 1 |
+| Indexing: rebuild | `POST /index/rebuild` | 501 until DR-10 |
 | Ingestion: errors | `POST /ingest/0084`, `GET /ingest/status/0084` | 400 `INVALID_PARAMETER` |
 | Ingestion: status | `GET /ingest/status/999999` | 200, `not_available` |
 | Ingestion: list | `GET /ingest/list` | 200, `count` and `books` |

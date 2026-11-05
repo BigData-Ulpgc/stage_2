@@ -29,10 +29,8 @@ info:
     - All endpoints are read-only (`GET`): they are safe and idempotent, and a client may
       retry them freely.
     - **Browsers (CORS):** the origins allowed to call this API from a web page are set with
-      the variable `CORS_ORIGINS`; other origins do not get the `Access-Control-Allow-Origin`
-      header.
-    - **CORS:** the allowed browser origins are configured with the `CORS_ORIGINS`
-      environment variable of the Search Service.
+      the variable `CORS_ORIGINS` of the Search Service; other origins do not get the
+      `Access-Control-Allow-Origin` header.
   contact:
     name: Daniel Perdomo (Search Service, API contract)
 
