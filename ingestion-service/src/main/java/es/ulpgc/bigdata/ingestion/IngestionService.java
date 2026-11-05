@@ -19,13 +19,15 @@ import java.util.Optional;
  * it in the datalake. POST /ingest/{id} (IngestionApi) calls it, and so will the workers of
  * ingest-queue (CF-08): both paths run the same code.
  *
- * A book that is already in the datalake is not downloaded again (ALREADY_AVAILABLE), so
- * repeating an ingestion is safe. Two concurrent ingestions of the same id may both download;
- * the datalake writes each file atomically (temp file + move), so the result is one complete
- * copy either way.
+ * "In the datalake" means READY (api/contracts/datalake-readiness.md): its {@code <id>._READY}
+ * marker exists together with its header and body; RangeBasedDatalake writes the marker last.
+ * A book written halfway (a crash before the marker, or a file lost) is not in the datalake,
+ * and the next ingestion downloads and writes it again, whole.
  *
- * Until CF-07 "in the datalake" means header and body present (RangeBasedDatalake); CF-07 adds
- * the {@code <id>._READY} marker written last.
+ * A ready book is not downloaded again (ALREADY_AVAILABLE) and its files are not touched, so
+ * repeating an ingestion is safe. Two concurrent ingestions of the same id may both download;
+ * every file goes through its own temporary file and an atomic move, so the result is one
+ * complete copy either way.
  *
  * Thread-safe if the source and the datalake are (GutenbergClient, LocalFileSource and
  * RangeBasedDatalake are).
