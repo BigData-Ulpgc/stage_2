@@ -63,7 +63,16 @@ public abstract class AbstractFileDatalake implements Datalake {
      *
      * A book that is already saved is never modified (§6.2): save writes nothing and returns
      * its location, so Indexing never reads a book while it is being rewritten. "Saved" means
-     * complete: a book whose marker exists but whose body was lost is written again.
+     * complete: a book whose marker exists but whose header or body was lost is damaged, and
+     * is written again.
+     *
+     * Repairing a damaged book first deletes its old marker. Otherwise, as soon as the new
+     * header is in place the book would count as complete with the OLD body, and a crash right
+     * then would leave a mixed book that no later save repairs, because it looks complete.
+     *
+     * The marker is read only once, BEFORE deciding. If it was there, the header and body had
+     * been written before it, so a missing one means a damaged book. If it was not there, it is
+     * never deleted: it can only be the marker another save of the same book has just written.
      *
      * Two saves of the same book at the same time are safe: each file is replaced atomically
      * with a complete version (writeAtomically), and both write the same book.
@@ -75,17 +84,26 @@ public abstract class AbstractFileDatalake implements Datalake {
         if (book.id() < 0) {
             throw new IllegalArgumentException("book_id negativo: " + book.id());
         }
-        if (isCompleteBook(header, body, ready)) {
+        boolean markerFound = Files.isRegularFile(ready);
+        if (markerFound && isCompleteBook(header, body, ready)) {
             return new BookLocation(book.id(), header, body);
         }
         try {
-            writeAtomically(header, book.header());
-            writeAtomically(body, book.body());
-            writeAtomically(ready, clock.instant().truncatedTo(ChronoUnit.SECONDS) + "\n");
+            if (markerFound) {
+                Files.deleteIfExists(ready);      // damaged book: the old marker must not count
+            }
+            writeFile(header, book.header());
+            writeFile(body, book.body());
+            writeFile(ready, clock.instant().truncatedTo(ChronoUnit.SECONDS) + "\n");
         } catch (IOException e) {
             throw new UncheckedIOException("No se pudo guardar el libro " + book.id(), e);
         }
         return new BookLocation(book.id(), header, body);
+    }
+
+    /** Writes one file of a book; the tests override it to fail or look in the middle of a save. */
+    protected void writeFile(Path target, String content) throws IOException {
+        writeAtomically(target, content);
     }
 
     /**

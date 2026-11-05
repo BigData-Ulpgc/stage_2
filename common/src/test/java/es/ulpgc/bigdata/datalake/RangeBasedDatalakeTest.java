@@ -210,6 +210,65 @@ class RangeBasedDatalakeTest {
         assertEquals("B", Files.readString(datalake.locate(1342).orElseThrow().bodyPath(), StandardCharsets.UTF_8));
     }
 
+    /** Runs before each file of a book is written. */
+    private interface FileHook {
+        void beforeWriting(Path target) throws IOException;
+    }
+
+    /** A datalake on the same folder that calls hook before writing each file. */
+    private Datalake hooked(FileHook hook) {
+        return new RangeBasedDatalake(rangeRoot, Clock.fixed(T2, ZoneOffset.UTC)) {
+            @Override
+            protected void writeFile(Path target, String content) throws IOException {
+                hook.beforeWriting(target);
+                super.writeFile(target, content);
+            }
+        };
+    }
+
+    @Test
+    void alRepararUnLibroDanadoBorraElMarcadorViejoAntesDeEscribirNada() throws IOException {
+        BookLocation loc = datalake.save(new RawBook(1342, "H", "B"));
+        Files.delete(loc.headerPath());                       // damaged: marker and body, no header
+        List<String> seen = new ArrayList<>();
+        Datalake watching = hooked(target -> seen.add(
+                target.getFileName() + (Files.exists(ready(1342)) ? " con marcador" : " sin marcador")));
+
+        watching.save(new RawBook(1342, "H2", "B2"));
+
+        assertEquals(List.of("1342.header.txt sin marcador",
+                             "1342.body.txt sin marcador",
+                             "1342._READY sin marcador"), seen,
+                "mientras se reescribe, el libro no puede contar como completo");
+        BookLocation repaired = datalake.locate(1342).orElseThrow();
+        assertEquals("H2", Files.readString(repaired.headerPath(), StandardCharsets.UTF_8));
+        assertEquals("B2", Files.readString(repaired.bodyPath(), StandardCharsets.UTF_8));
+        assertEquals("2026-11-05T08:00:00Z\n", Files.readString(ready(1342), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void siLaReparacionSeCortaAMitadElLibroNoQuedaMezclado() throws IOException {
+        // Review of #24 by Carlos: with the old marker in place, the new header plus the old
+        // body would count as a complete book, and no later save would repair it.
+        BookLocation loc = datalake.save(new RawBook(1342, "H", "B"));
+        Files.delete(loc.headerPath());
+        Datalake dying = hooked(target -> {
+            if (target.getFileName().toString().endsWith(".body.txt")) {
+                throw new IOException("el proceso muere aquí");
+            }
+        });
+
+        assertThrows(UncheckedIOException.class, () -> dying.save(new RawBook(1342, "H2", "B2")));
+
+        assertTrue(datalake.locate(1342).isEmpty(), "cabecera nueva y cuerpo viejo no son un libro");
+        assertEquals(List.of(), datalake.listBookIds());
+
+        datalake.save(new RawBook(1342, "H2", "B2"));         // the retry repairs it
+        BookLocation repaired = datalake.locate(1342).orElseThrow();
+        assertEquals("H2", Files.readString(repaired.headerPath(), StandardCharsets.UTF_8));
+        assertEquals("B2", Files.readString(repaired.bodyPath(), StandardCharsets.UTF_8));
+    }
+
     @Test
     void unMarcadorSoloNoEsUnLibro() throws IOException {
         Path dir = Files.createDirectories(rangeRoot.resolve("01000-01999"));
