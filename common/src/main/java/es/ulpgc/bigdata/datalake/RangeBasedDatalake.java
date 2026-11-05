@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -16,25 +17,36 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Datalake organised by ranges of 1000 ids (shared/SPEC.md, section 3):
+ * Datalake organised by ranges of 1000 ids (shared/SPEC.md, section 3; contract §6.2):
  *   <root>/<START>-<END>/<ID>.header.txt
  *   <root>/<START>-<END>/<ID>.body.txt
+ *   <root>/<START>-<END>/<ID>._READY        written last: the book is complete
  * with START = (ID / 1000) * 1000 and END = START + 999, both with 5 digits.
  *
  * Stage 2 uses this structure instead of "book" (one folder per id) because the goal is
  * hundreds of thousands of books: with "book" the root would hold one entry per book, while
- * here it holds one per 1000 ids and each range folder at most 2000 files. locate is still
+ * here it holds one per 1000 ids and each range folder at most 3000 files. locate is still
  * computed from the id, without listing any folder.
+ *
+ * Datalakes written before DR-06 have no markers: their books are not seen, and Ingestion
+ * stores them again.
  */
 public class RangeBasedDatalake extends AbstractFileDatalake {
 
     private static final int RANGE_SIZE = 1000;
     private static final String HEADER_SUFFIX = ".header.txt";
     private static final String BODY_SUFFIX = ".body.txt";
+    private static final String READY_SUFFIX = "._READY";
     private static final Pattern RANGE_DIR = Pattern.compile("\\d{5,}-\\d{5,}");
 
+    /** The ready markers get the time of the system clock (UTC). */
     public RangeBasedDatalake(Path root) {
-        super(root);
+        this(root, Clock.systemUTC());
+    }
+
+    /** With the clock whose time goes into the ready markers (the tests fix it). */
+    public RangeBasedDatalake(Path root, Clock clock) {
+        super(root, clock);
     }
 
     @Override
@@ -60,9 +72,13 @@ public class RangeBasedDatalake extends AbstractFileDatalake {
         return root.resolve(rangeFolder(id)).resolve(id + BODY_SUFFIX);
     }
 
+    Path readyPath(int id) {
+        return root.resolve(rangeFolder(id)).resolve(id + READY_SUFFIX);
+    }
+
     @Override
     public BookLocation save(RawBook book) {
-        return writeBook(book, headerPath(book.id()), bodyPath(book.id()));
+        return writeBook(book, headerPath(book.id()), bodyPath(book.id()), readyPath(book.id()));
     }
 
     @Override
@@ -70,7 +86,7 @@ public class RangeBasedDatalake extends AbstractFileDatalake {
         if (id < 0) {
             return Optional.empty();
         }
-        return completeBook(id, headerPath(id), bodyPath(id));
+        return completeBook(id, headerPath(id), bodyPath(id), readyPath(id));
     }
 
     @Override
@@ -97,14 +113,16 @@ public class RangeBasedDatalake extends AbstractFileDatalake {
                 && RANGE_DIR.matcher(dir.getFileName().toString()).matches();
     }
 
+    /** The books of one range come from its markers: a book exists only with its marker. */
     private static void collectIdsFrom(Path rangeDir, List<Integer> ids) throws IOException {
         String dirName = rangeDir.getFileName().toString();
         try (Stream<Path> files = Files.list(rangeDir)) {
             for (Path file : (Iterable<Path>) files::iterator) {
-                Integer id = parseIdWithSuffix(file.getFileName().toString(), BODY_SUFFIX);
+                Integer id = parseIdWithSuffix(file.getFileName().toString(), READY_SUFFIX);
                 if (id != null
                         && rangeFolder(id).equals(dirName)                 // in its range
-                        && isCompleteBook(rangeDir.resolve(id + HEADER_SUFFIX), file)) {
+                        && isCompleteBook(rangeDir.resolve(id + HEADER_SUFFIX),
+                                          rangeDir.resolve(id + BODY_SUFFIX), file)) {
                     ids.add(id);
                 }
             }
