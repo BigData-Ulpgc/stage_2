@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.datalake;
 
+import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookLocation;
 import es.ulpgc.bigdata.model.RawBook;
 
@@ -54,7 +55,10 @@ public class RangeBasedDatalake extends AbstractFileDatalake {
         return "range";
     }
 
-    /** id -> name of the folder of its range. */
+    /**
+     * id -> name of the folder of its range. Only arithmetic, for any id >= 0: save and locate
+     * check the id with BookIds before.
+     */
     static String rangeFolder(int id) {
         if (id < 0) {
             throw new IllegalArgumentException("book_id negativo: " + id);
@@ -83,7 +87,7 @@ public class RangeBasedDatalake extends AbstractFileDatalake {
 
     @Override
     public Optional<BookLocation> locate(int id) {
-        if (id < 0) {
+        if (!BookIds.isValid(id)) {
             return Optional.empty();
         }
         return completeBook(id, headerPath(id), bodyPath(id), readyPath(id));
