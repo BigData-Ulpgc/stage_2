@@ -8,3 +8,5 @@ data/
 .vscode/
 # Logs and large raw benchmark output
 *.log
+# JMH test runs: the numbers mean nothing
+benchmarks/search/results/jmh-smoke/
