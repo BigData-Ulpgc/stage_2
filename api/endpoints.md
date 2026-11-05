@@ -38,7 +38,7 @@ Consumed by another service or by an operator, never by the front-end.
 | Provider | Method and route | Consumers | Purpose | Completion |
 |---|---|---|---|---|
 | Indexing | `POST /index/update/{book_id}` | operators, validation | Index one complete book (metadata + posting lists + `index_log`) | done: indexed, visible after the next publish |
-| Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | *501 until DR-08*; then done: `CURRENT` points to the new version |
+| Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | done: `CURRENT` points to the returned version (from DR-08b also `PUBLISHED` and the `IndexPublished` event) |
 | Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | *501 until DR-10*; then accepted (202): follow `rebuild` in `GET /index/status` |
 | Indexing | `GET /index/status` | Control Module, operators | Books indexed and published, index size, rebuild progress | done (read-only) |
 | Ingestion | `POST /ingest/{book_id}` | operators, validation | Download a book, split it into header and body and store it in the datalake | done: stored (`downloaded`), or it already was (`already_available`) |
