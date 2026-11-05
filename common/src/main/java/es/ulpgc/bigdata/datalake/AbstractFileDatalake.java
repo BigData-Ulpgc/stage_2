@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.datalake;
 
+import es.ulpgc.bigdata.model.BookIds;
 import es.ulpgc.bigdata.model.BookLocation;
 import es.ulpgc.bigdata.model.RawBook;
 
@@ -15,8 +16,8 @@ import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
@@ -38,9 +39,6 @@ public abstract class AbstractFileDatalake implements Datalake {
 
     /** Suffix of half-written files. */
     static final String TMP_SUFFIX = ".tmp";
-
-    /** Id that save() could have written: "0" or no leading zeros, max. 9 digits. */
-    private static final Pattern CANONICAL_ID = Pattern.compile("0|[1-9][0-9]{0,8}");
 
     protected final Path root;
 
@@ -86,8 +84,11 @@ public abstract class AbstractFileDatalake implements Datalake {
         Objects.requireNonNull(book, "book");
         Objects.requireNonNull(book.header(), "header");
         Objects.requireNonNull(book.body(), "body");
-        if (book.id() < 0) {
-            throw new IllegalArgumentException("book_id negativo: " + book.id());
+        if (!BookIds.isValid(book.id())) {
+            // The same rule as the APIs (BookIds): a book saved with another id could not be
+            // asked for by any API, and one of 10 digits would not even be listed.
+            throw new IllegalArgumentException(
+                    "book_id fuera de rango (1-" + BookIds.MAX + "): " + book.id());
         }
         boolean markerFound = Files.isRegularFile(ready);
         if (markerFound && isCompleteBook(header, body, ready)) {
@@ -203,9 +204,13 @@ public abstract class AbstractFileDatalake implements Datalake {
                 : Optional.empty();
     }
 
-    /** "1342" -> 1342 ; "0084", "abc", "-5", "99999999999" -> null. */
+    /**
+     * The id of a file name, with the same rule as the APIs (BookIds): the only ids save
+     * accepts. "1342" -> 1342 ; "0", "0084", "abc", "-5", "1000000000" -> null.
+     */
     protected static Integer parseCanonicalId(String text) {
-        return CANONICAL_ID.matcher(text).matches() ? Integer.parseInt(text) : null;
+        OptionalInt id = BookIds.parse(text);
+        return id.isPresent() ? id.getAsInt() : null;
     }
 
     /** ("1342._READY", "._READY") -> 1342 ; "1342._READY.&lt;uuid&gt;.tmp" -> null. */
