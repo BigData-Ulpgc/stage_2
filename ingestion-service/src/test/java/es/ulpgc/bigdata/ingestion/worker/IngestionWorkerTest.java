@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.ingestion.worker;
 
+import com.hazelcast.client.HazelcastClientNotActiveException;
 import com.hazelcast.core.HazelcastInstance;
 import es.ulpgc.bigdata.coordination.BookState;
 import es.ulpgc.bigdata.coordination.BookTask;
@@ -25,6 +26,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -164,6 +166,38 @@ class IngestionWorkerTest {
         clock.advance(Duration.ofSeconds(30));
         source.book(6);
         assertTrue(worker.runOnce());                                  // after the pause it claims again
+    }
+
+    /** A book already stored did not touch the source: it says nothing about a block ending. */
+    @Test
+    void aBookAlreadyAvailableDoesNotShortenTheNextPause() throws Exception {
+        throttle.throttled();                                          // 30 s now, 60 s the next one
+        clock.advance(Duration.ofSeconds(30));
+        source.book(84);
+        ingestion.ingest(84);
+        coordination.seed(List.of(84));
+        assertTrue(worker.runOnce());                                  // ALREADY_AVAILABLE
+        throttle.throttled();
+        assertEquals(Duration.ofSeconds(60), throttle.remaining());
+    }
+
+    /**
+     * complete() failing (the cluster lost after the book was stored) is not a failure of the
+     * book: it goes up to run(), and the book keeps its attempts (review of #28).
+     */
+    @Test
+    void aCoordinationFailureWhileCompletingIsNotABookFailure() throws Exception {
+        HazelcastInstance own = HazelcastTestCluster.settings().openClient();
+        IngestionWorker lonely = new IngestionWorker(Coordination.on(own, HazelcastTestCluster.settings(), clock),
+                ingestion, throttle, stats, "ingestion-test/w8", 2, sleeps::add);
+        source.book(12).whileFetching(12, own::shutdown);              // the client dies during the download
+        coordination.seed(List.of(12));
+        assertThrows(HazelcastClientNotActiveException.class, lonely::runOnce);
+        BookTask task = coordination.task(12).orElseThrow();
+        assertEquals(BookState.INGESTING, task.bookState());           // not FAILED, not requeued
+        assertEquals(0, task.attempts());
+        assertEquals(0L, stats.requeued.get() + stats.failed.get());
+        assertTrue(ingestion.locate(12).isPresent());                  // stored: the next claim finds it ready
     }
 
     @Test

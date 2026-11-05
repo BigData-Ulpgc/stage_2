@@ -8,6 +8,10 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Downloads the raw text of a book from Project Gutenberg: {@code <base>/<id>/pg<id>.txt}
@@ -19,6 +23,8 @@ import java.util.Objects;
  *   <li>The base URL is a parameter (INGESTION_GUTENBERG_URL), so the tests use a local HTTP
  *       server and never Gutenberg.</li>
  *   <li>It sends a User-Agent that says who downloads, and follows redirects.</li>
+ *   <li>INGESTION_REQUEST_TIMEOUT_SECONDS bounds the WHOLE download, body included (the
+ *       timeout of HttpRequest alone only covers the headers).</li>
  * </ul>
  * It does not retry: the worker decides (CF-08), and the coordination contract requeues the
  * book on a transient failure.
@@ -55,13 +61,28 @@ public final class GutenbergClient implements BookSource {
                 .GET()
                 .build();
         HttpResponse<String> response;
+        // The timeout of HttpRequest only covers the response HEADERS: a body that arrives
+        // slowly can last much longer (measured: a 3 s body with a 1 s timeout). The whole
+        // download, body included, is bounded here, so one attempt fits within the lease.
+        CompletableFuture<HttpResponse<String>> download = http.sendAsync(request, HttpResponse.BodyHandlers.ofString());
         try {
-            response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (HttpTimeoutException e) {
-            throw new SourceUnavailableException("timeout (" + requestTimeout.toSeconds() + " s) downloading " + uri, e);
-        } catch (IOException e) {
-            throw new SourceUnavailableException(e.getClass().getSimpleName() + " downloading " + uri
-                    + (e.getMessage() == null ? "" : ": " + e.getMessage()), e);
+            response = download.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            download.cancel(true);                                 // aborts the exchange
+            throw timeout(uri, new HttpTimeoutException("no complete response in " + requestTimeout.toSeconds() + " s"));
+        } catch (InterruptedException e) {
+            download.cancel(true);
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof HttpTimeoutException timeout) {
+                throw timeout(uri, timeout);
+            }
+            if (cause instanceof IOException io) {
+                throw new SourceUnavailableException(io.getClass().getSimpleName() + " downloading " + uri
+                        + (io.getMessage() == null ? "" : ": " + io.getMessage()), io);
+            }
+            throw new IllegalStateException("unexpected failure downloading " + uri, cause);
         }
         int status = response.statusCode();
         if (status >= 200 && status < 300) {
@@ -71,6 +92,11 @@ public final class GutenbergClient implements BookSource {
             throw new BookNotFoundException(bookId, "HTTP " + status + " from " + uri);
         }
         throw new SourceUnavailableException("HTTP " + status + " from " + uri, status);
+    }
+
+    /** The cause is an HttpTimeoutException, so the API answers 504 (IngestionApi). */
+    private SourceUnavailableException timeout(URI uri, HttpTimeoutException cause) {
+        return new SourceUnavailableException("timeout (" + requestTimeout.toSeconds() + " s) downloading " + uri, cause);
     }
 
     URI uriOf(int bookId) {

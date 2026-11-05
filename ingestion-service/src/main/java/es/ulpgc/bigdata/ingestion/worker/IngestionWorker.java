@@ -33,7 +33,8 @@ import java.util.Optional;
  * A transient source failure is retried INGESTION_FETCH_RETRIES times inside the attempt, after
  * 1 s, 2 s, 4 s...; a throttling (429/403) is not retried: it pauses the whole replica
  * (Throttle). With the defaults (2 retries, 30 s request timeout) one attempt lasts at most
- * 3 x 30 s + 3 s, within the 120 s lease.
+ * 3 x 30 s + 3 s, within the 120 s lease: the timeout bounds the whole download, body
+ * included (GutenbergClient), and reading a local file is far faster.
  *
  * If the Coordination calls fail (the cluster is down), run() waits and tries again: the client
  * reconnects by itself (contract §7).
@@ -127,20 +128,18 @@ public final class IngestionWorker implements Runnable {
     private void process(Claim claim) throws InterruptedException {
         stats.claimed.incrementAndGet();
         int bookId = claim.bookId();
+        // Only the ingestion is inside the try: a failure of complete() or fail() is a failure of
+        // the coordination, not of the book, and goes up to run(), which waits and retries
+        // (review of #28). The book then keeps its attempts; its lease expires if needed.
+        IngestionService.IngestResult result;
         try {
-            IngestionService.IngestResult result = ingestWithRetries(bookId);
-            throttle.succeeded();
-            if (!coordination.complete(claim)) {
-                lost(bookId, "complete");
-            } else if (result.outcome() == IngestionService.Outcome.DOWNLOADED) {
-                stats.downloaded.incrementAndGet();
-            } else {
-                stats.alreadyAvailable.incrementAndGet();
-            }
+            result = ingestWithRetries(bookId);
         } catch (BookNotFoundException e) {
             failed(claim, ErrorCode.NOT_FOUND, e.getMessage());
+            return;
         } catch (InvalidBookException e) {
             failed(claim, ErrorCode.INVALID_BOOK, e.getMessage());
+            return;
         } catch (SourceUnavailableException e) {
             if (e.isThrottling()) {
                 throttle.throttled();
@@ -148,9 +147,22 @@ public final class IngestionWorker implements Runnable {
                         owner, e.getMessage(), throttle.remaining().toSeconds());
             }
             failed(claim, ErrorCode.DOWNLOAD_FAILED, e.getMessage());
+            return;
         } catch (RuntimeException e) {
             LOG.error("{}: unexpected error ingesting book {}", owner, bookId, e);
             failed(claim, ErrorCode.INTERNAL_ERROR, e.toString());
+            return;
+        }
+        boolean downloaded = result.outcome() == IngestionService.Outcome.DOWNLOADED;
+        if (downloaded) {
+            throttle.succeeded();       // only a real download says the source answers again
+        }
+        if (!coordination.complete(claim)) {
+            lost(bookId, "complete");
+        } else if (downloaded) {
+            stats.downloaded.incrementAndGet();
+        } else {
+            stats.alreadyAvailable.incrementAndGet();
         }
     }
 

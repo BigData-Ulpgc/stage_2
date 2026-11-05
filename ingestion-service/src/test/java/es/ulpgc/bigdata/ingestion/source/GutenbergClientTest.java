@@ -10,9 +10,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,6 +34,8 @@ class GutenbergClientTest {
     /** path -> what to answer */
     private final Map<String, Answer> answers = new ConcurrentHashMap<>();
     private final Map<String, String> userAgents = new ConcurrentHashMap<>();
+    /** Paths whose body arrives over 3 s, after headers sent at once. */
+    private final Set<String> trickling = ConcurrentHashMap.newKeySet();
 
     private record Answer(int status, String body, String location, long delayMillis) {
         static Answer of(int status, String body) {
@@ -67,6 +71,20 @@ class GutenbergClientTest {
         }
         byte[] body = answer.body().getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
+        if (trickling.contains(path)) {
+            // Headers at once, then the body in pieces: what a slow server does
+            exchange.sendResponseHeaders(answer.status(), 0);
+            try (OutputStream out = exchange.getResponseBody()) {
+                for (int i = 0; i < 10; i++) {
+                    out.write(body);
+                    out.flush();
+                    Thread.sleep(300);
+                }
+            } catch (InterruptedException | IOException e) {
+                // the client gave up: expected in the timeout test
+            }
+            return;
+        }
         exchange.sendResponseHeaders(answer.status(), body.length == 0 ? -1 : body.length);
         try (OutputStream out = exchange.getResponseBody()) {
             out.write(body);
@@ -132,11 +150,26 @@ class GutenbergClientTest {
     }
 
     @Test
-    void aSlowAnswerIsATransientTimeout() {
+    void aSlowAnswerBeforeTheHeadersIsATransientTimeout() {
         answers.put("/cache/epub/98/pg98.txt", new Answer(200, BOOK, null, 3_000));
         GutenbergClient impatient = new GutenbergClient(base, Duration.ofSeconds(2), Duration.ofMillis(300));
         SourceUnavailableException e = assertThrows(SourceUnavailableException.class, () -> impatient.fetch(98));
         assertTrue(e.getMessage().startsWith("timeout"), e.getMessage());
+        assertTrue(e.getCause() instanceof HttpTimeoutException);      // the API answers 504
+    }
+
+    /** The timeout of HttpRequest alone only covers the headers: the whole download is bounded. */
+    @Test
+    void aBodyThatArrivesTooSlowlyIsATransientTimeoutToo() {
+        answers.put("/cache/epub/99/pg99.txt", Answer.of(200, BOOK));
+        trickling.add("/cache/epub/99/pg99.txt");
+        GutenbergClient impatient = new GutenbergClient(base, Duration.ofSeconds(2), Duration.ofMillis(800));
+        long start = System.nanoTime();
+        SourceUnavailableException e = assertThrows(SourceUnavailableException.class, () -> impatient.fetch(99));
+        long millis = (System.nanoTime() - start) / 1_000_000;
+        assertTrue(e.getMessage().startsWith("timeout"), e.getMessage());
+        assertTrue(e.getCause() instanceof HttpTimeoutException);
+        assertTrue(millis < 2_500, "gave up after " + millis + " ms, the body takes 3 s");
     }
 
     @Test
