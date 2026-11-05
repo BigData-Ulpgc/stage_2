@@ -99,7 +99,7 @@ docker compose down -v        # stop and wipe MongoDB data (clean benchmark runs
 |---|---|
 | Hazelcast version (image and Maven client must match) | `HAZELCAST_VERSION=5.7.0` |
 | Cluster name | `HZ_CLUSTER_NAME=search-engine` |
-| Members | `hz-1:5701`, `hz-2:5701` inside Docker; published on the host as `localhost:5701` and `localhost:5702` |
+| Members | `hz-1:5701`, `hz-2:5701` inside Docker; published on the host as `localhost:5701` and `localhost:5702`, on 127.0.0.1 only |
 | Discovery | TCP/IP with a fixed member list; multicast disabled |
 | Cluster configuration | `hazelcast/hazelcast.yaml`, mounted in both members: backups, the index of `book-state`, queue and topic settings (CF-03). Restart the members after changing it: `docker compose up -d --force-recreate hz-1 hz-2` |
 | Heap per member | `HZ_HEAP=512m` |
@@ -138,14 +138,17 @@ docker compose down                                         # stop; down -v also
 | `search` | 1-4 | none, only behind nginx | none | `SEARCH_CPUS`, `SEARCH_MEM_LIMIT` |
 | `indexing` | 1 | none | read-only | `INDEXING_CPUS`, `INDEXING_MEM_LIMIT` |
 | `ingestion` | 1-4 | none | read-write | `INGESTION_CPUS`, `INGESTION_MEM_LIMIT` |
-| `control` | 1 | 7000 | read-only | `CONTROL_CPUS`, `CONTROL_MEM_LIMIT` |
-| `hz-1`, `hz-2` | 2 | 5701, 5702 | none | `HZ_CPUS`, `HZ_MEM_LIMIT` |
+| `control` | 1 | 7000, only on 127.0.0.1 | read-only | `CONTROL_CPUS`, `CONTROL_MEM_LIMIT` |
+| `hz-1`, `hz-2` | 2 | 5701, 5702, only on 127.0.0.1 | none | `HZ_CPUS`, `HZ_MEM_LIMIT` |
 | `mongo` | 1 | 27017, only on 127.0.0.1 | none (volume `mongo-data`) | `MONGO_CPUS`, `MONGO_MEM_LIMIT` |
-| `management-center` | 0-1 (profile `monitoring`) | 8081 | none | `MC_CPUS`, `MC_MEM_LIMIT` |
+| `management-center` | 0-1 (profile `monitoring`) | 8081, only on 127.0.0.1 | none | `MC_CPUS`, `MC_MEM_LIMIT` |
 
 Every default is in `.env`; override one with a variable (`SEARCH_HTTP_THREADS=64 docker compose up -d`)
 or by editing the file. One replica of each adds up to about 5.7 GB of memory limits, so Docker needs
 at least that much. A new variable of a service goes in its `environment` block and in `.env`.
+
+On Linux, the services run as root in their containers, so `./data` belongs to root: delete it with
+`sudo rm -rf data`.
 
 nginx (`scripts/nginx.conf`) does round-robin over the replicas of `search`, found with the DNS of
 Docker, so scaling needs no other change. Each response has an `X-Served-By` header with the replica
