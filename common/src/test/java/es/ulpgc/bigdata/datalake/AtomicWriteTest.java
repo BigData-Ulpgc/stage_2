@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.CopyOption;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -27,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** Tests of AbstractFileDatalake.writeAtomically, without any concrete datalake. */
 class AtomicWriteTest {
@@ -72,16 +74,20 @@ class AtomicWriteTest {
         // A process killed with kill -9 leaves its temporary file. Each write uses a new name,
         // so it is neither reused nor deleted: it stays, and the datalakes ignore any .tmp.
         Path target = tmp.resolve("1342.body.txt");
-        Files.writeString(tmp.resolve("1342.body.txt.tmp"), "restos de un proceso que murió");
+        String leftover = "1342.body.txt.3f2b9c1e-8a4d-4f6e-9b7a-2c5d8e1f0a3b.tmp";
+        Files.writeString(tmp.resolve(leftover), "restos de un proceso que murió");
 
         AbstractFileDatalake.writeAtomically(target, "bueno");
 
         assertEquals("bueno", Files.readString(target, StandardCharsets.UTF_8));
-        assertEquals(List.of("1342.body.txt", "1342.body.txt.tmp"), namesIn(tmp));
+        assertEquals(List.of("1342.body.txt", leftover), namesIn(tmp));
     }
 
     @Test
-    void elTmpEsUnicoYConLosPermisosNormales() throws IOException {
+    void elFicheroEscritoLoPuedenLeerOtrosUsuarios() throws IOException {
+        // Windows (NTFS) has no POSIX permissions: there is nothing to check.
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"),
+                "sin permisos POSIX en este sistema de ficheros");
         Path target = tmp.resolve("1342.body.txt");
         AbstractFileDatalake.writeAtomically(target, "uno");
         Set<PosixFilePermission> normal = Files.getPosixFilePermissions(target);

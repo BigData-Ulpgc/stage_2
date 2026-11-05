@@ -127,6 +127,8 @@ class RangeBasedDatalakeTest {
         Files.writeString(dir.resolve("abc._READY"), "x");
         Files.writeString(dir.resolve("1600.body.txt.tmp"), "x");
         Files.writeString(dir.resolve("1600._READY.tmp"), "x");
+        Files.writeString(dir.resolve("1600._READY.3f2b9c1e-8a4d-4f6e-9b7a-2c5d8e1f0a3b.tmp"), "x");
+        Files.writeString(dir.resolve("1342._READY.3f2b9c1e-8a4d-4f6e-9b7a-2c5d8e1f0a3b.tmp"), "x");
         Files.writeString(dir.resolve("01342.body.txt"), "x");
         Files.writeString(dir.resolve("01342._READY"), "x");
         Files.writeString(dir.resolve("5000.body.txt"), "x");    // wrong range, even with its marker

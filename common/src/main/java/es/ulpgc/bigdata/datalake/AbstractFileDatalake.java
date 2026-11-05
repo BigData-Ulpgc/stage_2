@@ -61,7 +61,7 @@ public abstract class AbstractFileDatalake implements Datalake {
      * marker. A book only "exists" when the three are in place, so a crash halfway leaves a
      * NOT saved book, which the next save writes again.
      *
-     * A book that is already saved is never modified (§6.2): save writes nothing and returns
+     * A book that is already saved is not modified (§6.2): save writes nothing and returns
      * its location, so Indexing never reads a book while it is being rewritten. "Saved" means
      * complete: a book whose marker exists but whose header or body was lost is damaged, and
      * is written again.
@@ -75,7 +75,12 @@ public abstract class AbstractFileDatalake implements Datalake {
      * never deleted: it can only be the marker another save of the same book has just written.
      *
      * Two saves of the same book at the same time are safe: each file is replaced atomically
-     * with a complete version (writeAtomically), and both write the same book.
+     * with a complete version (writeAtomically), so the last complete write wins. Both may
+     * check before either writes the marker, so the second can rewrite a book the first has
+     * just made ready: the same text, and a later time in the marker (contract
+     * datalake-readiness §4). It happens with a manual POST /ingest and a worker, or with a
+     * worker whose lease expired while it was still writing and the worker that claimed the
+     * book after it.
      */
     protected BookLocation writeBook(RawBook book, Path header, Path body, Path ready) {
         Objects.requireNonNull(book, "book");
@@ -203,7 +208,7 @@ public abstract class AbstractFileDatalake implements Datalake {
         return CANONICAL_ID.matcher(text).matches() ? Integer.parseInt(text) : null;
     }
 
-    /** ("1342._READY", "._READY") -> 1342 ; "1342._READY.tmp" -> null. */
+    /** ("1342._READY", "._READY") -> 1342 ; "1342._READY.&lt;uuid&gt;.tmp" -> null. */
     protected static Integer parseIdWithSuffix(String fileName, String suffix) {
         if (!fileName.endsWith(suffix)) {
             return null;
