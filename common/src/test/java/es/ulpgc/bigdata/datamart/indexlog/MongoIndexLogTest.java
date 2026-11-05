@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -216,5 +217,26 @@ class MongoIndexLogTest {
 
         assertEquals(2, log.count());
         assertEquals(Optional.of(T2), log.lastIndexedAt());
+        assertEquals(Set.of(5, 6), log.indexedIds());
+    }
+
+    // --- The ids (recovery of the Control, CF-10) ----------------------------
+
+    @Test
+    void losIdsSonLosDeTodosLosLibrosDelLog() {
+        assertEquals(Set.of(), log.indexedIds());
+        log.markIndexed(List.of(1342, 84), T1);
+        log.markIndexed(List.of(84, BookIds.MAX), T2);
+
+        assertEquals(Set.of(84, 1342, BookIds.MAX), log.indexedIds());
+    }
+
+    @Test
+    void unIdGuardadoComoInt64SeLeeIgual() {
+        // mongosh writes 5 as a double and NumberLong(6) as int64: both are a book id
+        raw.insertOne(new Document("_id", 5.0).append("indexed_at", Date.from(T1)));
+        raw.insertOne(new Document("_id", 6L).append("indexed_at", Date.from(T1)));
+
+        assertEquals(Set.of(5, 6), log.indexedIds());
     }
 }

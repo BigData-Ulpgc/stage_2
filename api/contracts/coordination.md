@@ -4,9 +4,11 @@
 Indexing Service, Search Service. **Implemented by:** `common/coordination` (CF-04); no
 service names a structure or builds a `BookTask` by hand.
 
-**Status: v1.2.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
+**Status: v1.3.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
 publication in §5, an interrupted T10 in §7, split-brain in §9); v1.2 the review notes of #19
-(dropped ids are counted, not logged, §1 and §2). Implemented by
+(dropped ids are counted, not logged, §1 and §2); v1.3 the details of the recovery found while
+implementing it (CF-10, §7: `index_books` only up to `CURRENT`, never backwards, read before
+writing, what is lost). Implemented by
 `common/coordination` (CF-04). Changing anything in this file (names, fields, states,
 transitions) needs the approval of the other two members (plan §7). A change of the `BookTask`
 fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the stored
@@ -214,11 +216,19 @@ because it is not the book's fault: otherwise one outage would send every book i
 **Recovery (CF-10).** The Control checks `coordination-meta.initialized` at startup and on every
 lease check. If it is missing, it rebuilds `book-state`, from the most advanced evidence:
 
-1. `index_books` in MongoDB → `PUBLISHED`;
-2. else `index_log` → `INDEXED`;
+1. `index_books` in MongoDB, with a version up to the one of `CURRENT` → `PUBLISHED` (a book
+   above `CURRENT` belongs to a publication that did not switch it, so it is not visible);
+2. else `index_log` → `INDEXED` (the next publication makes it visible);
 3. else `<id>._READY` in the datalake → `DOWNLOADED`, offered to `index-queue`;
-4. then it seeds again (T1), so the remaining ids become `PENDING`;
+4. then it seeds `CONTROL_SEED_FILE` again (T1), so the remaining ids become `PENDING`;
 5. finally it writes `coordination-meta.initialized`.
+
+Every source is read before anything is written: if one fails (MongoDB down) nothing changes,
+the marker stays missing and the next lease check tries again. Restoring never moves a book
+backwards: an entry that already exists is left as it is, except a `PENDING` one (seeded while
+the recovery ran), which moves forward; the worker that polls its old id from `ingest-queue`
+drops it (§2). A book submitted with `POST /control/jobs` that had no evidence yet (`PENDING`,
+`INGESTING`) and is not in `CONTROL_SEED_FILE` is lost: submit it again.
 
 Books that were `INGESTING`, `INDEXING` or `FAILED` come back at the stage their evidence
 says and are redone; the late completion of a worker that was busy during the loss fails its

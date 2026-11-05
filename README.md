@@ -83,6 +83,7 @@ curl localhost:7012/status    # {"service":"indexing-service","status":"running"
 | `PUBLISH_BATCH`, `PUBLISH_INTERVAL_S` | 100, 30 | The Control publishes (`POST /index/publish`) when this many books are `INDEXED`, or this long after the last publication if any is |
 | `INDEXING_URL` | `http://localhost:7002` | Where the Control calls Indexing (inside Docker: `http://indexing:7002`) |
 | `CONTROL_SEED_FILE` | (none) | A `book_ids.txt` the Control seeds once connected: one id per line, `#` comments and blank lines skipped; a bad line stops the start |
+| `MONGO_URI`, `MONGO_DATABASE`, `DATA_DIR` (Control) | as above | Where the Control finds the evidence to rebuild `book-state` when the cluster loses it (`index_books`, `index_log`, the `_READY` markers; the datalake is only read) |
 
 The request thread pool is always set explicitly (`common` → `ServiceServer`): a Jetty
 `QueuedThreadPool` with max `<SERVICE>_HTTP_THREADS`, min 8, idle timeout 60 s. These are the

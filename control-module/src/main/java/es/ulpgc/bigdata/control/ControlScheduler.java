@@ -11,7 +11,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Runs the ControlTasks periodically, one thread each: a publication that waits the full 30 s
- * for Indexing never delays the lease check.
+ * for Indexing never delays the lease check. The lease check runs at once and then every
+ * LEASE_CHECK_SECONDS, each time after the recovery check (CF-10): a cluster that lost its state
+ * is rebuilt before its leases are looked at.
  *
  * A periodic task that throws is cancelled for good by ScheduledExecutorService, so every run
  * catches what it throws (a Hazelcast call while the cluster is down, for instance), logs it and
@@ -29,15 +31,19 @@ public final class ControlScheduler implements AutoCloseable {
         this.executor = executor;
     }
 
-    public static ControlScheduler start(ControlTasks tasks, Duration leaseCheck) {
+    public static ControlScheduler start(ControlTasks tasks, Recovery recovery, Duration leaseCheck) {
         Objects.requireNonNull(tasks, "tasks");
+        Objects.requireNonNull(recovery, "recovery");
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(2, runnable -> {
             Thread thread = new Thread(runnable, "control-tasks");
             thread.setDaemon(true);
             return thread;
         });
-        executor.scheduleWithFixedDelay(() -> safely("lease check", tasks::checkLeases),
-                leaseCheck.toMillis(), leaseCheck.toMillis(), TimeUnit.MILLISECONDS);
+        executor.scheduleWithFixedDelay(() -> {
+                    safely("recovery", recovery::ensureInitialized);
+                    safely("lease check", tasks::checkLeases);
+                },
+                0, leaseCheck.toMillis(), TimeUnit.MILLISECONDS);
         executor.scheduleWithFixedDelay(() -> safely("publication", () -> {
                     try {
                         tasks.maybePublish();

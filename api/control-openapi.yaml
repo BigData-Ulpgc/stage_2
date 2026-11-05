@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Control Module API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     API of the **Control Module** (plan §3.5), plus its operational status endpoint. Internal:
     consumed by operators, the validation and the benchmarks, never by the front-end. It is the
     only service besides nginx published outside Docker (`localhost:7000`).
 
-    **Status: v0.1.0** (CF-09). The inventory of all endpoints of the system is
+    **Status: v0.2.0** (CF-09; v0.2.0 adds `recovery` to `GET /control/status`, CF-10). The inventory of all endpoints of the system is
     `api/endpoints.md`; the coordination it drives is `api/contracts/coordination.md`.
 
     ## Role in the workflow
@@ -21,6 +21,10 @@ info:
     - **Publication**: `POST /index/publish` of the Indexing Service when `PUBLISH_BATCH` (100)
       books are `INDEXED`, or `PUBLISH_INTERVAL_S` (30 s) after the last publication if at least
       one is. A failed publication is retried after 1 s, 2 s, 4 s… up to 30 s.
+
+    Before each lease check, and at once when it connects, the Control checks that the cluster
+    kept its state (`coordination-meta.initialized`). If it was lost (both Hazelcast members
+    restarted), it rebuilds `book-state` from MongoDB and the datalake (contract §7, CF-10).
 
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
@@ -142,6 +146,8 @@ paths:
                   consecutive_failures: 0
                   last_error: null
                 lease_check: { requeued_or_failed: 3, last_check: '2026-11-04T10:06:20Z' }
+                recovery: { runs: 1, last_run: '2026-11-04T09:00:02Z', published: 850, indexed: 20, downloaded: 30,
+                            seeded: 100, millis: 1840, last_error: null }
         '503':
           $ref: '#/components/responses/CoordinationUnavailable'
         '500':
@@ -312,6 +318,23 @@ components:
           properties:
             requeued_or_failed: { type: integer, description: 'Books with an expired lease requeued or failed by this Control.' }
             last_check: { type: string, format: date-time, nullable: true }
+        recovery:
+          type: object
+          description: |
+            Rebuilds of `book-state` by this Control (contract §7): one when it starts on an empty
+            cluster, one more each time the cluster loses its state. The counts are of the last run.
+          properties:
+            runs: { type: integer, description: 'Successful rebuilds since this Control started.' }
+            last_run: { type: string, format: date-time, nullable: true }
+            published: { type: integer, nullable: true, description: 'Books restored as `PUBLISHED` (`index_books` up to `CURRENT`).' }
+            indexed: { type: integer, nullable: true, description: 'Books restored as `INDEXED` (`index_log`).' }
+            downloaded: { type: integer, nullable: true, description: 'Books restored as `DOWNLOADED` (`_READY`), back in `index-queue`.' }
+            seeded: { type: integer, nullable: true, description: 'Ids of `CONTROL_SEED_FILE` without evidence, `PENDING` again.' }
+            millis: { type: integer, nullable: true, description: 'How long the last rebuild took.' }
+            last_error:
+              type: string
+              nullable: true
+              description: Why the last attempt failed (for example MongoDB down); it is retried at the next lease check.
 
     BookTask:
       type: object

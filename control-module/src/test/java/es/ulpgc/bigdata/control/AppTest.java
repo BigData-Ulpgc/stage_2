@@ -3,13 +3,20 @@ package es.ulpgc.bigdata.control;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.hazelcast.core.HazelcastInstance;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
 import com.sun.net.httpserver.HttpServer;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.coordination.BookState;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.coordination.Stage;
+import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
+import es.ulpgc.bigdata.model.RawBook;
 import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
+import es.ulpgc.bigdata.testsupport.MongoTestSupport;
+import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,7 +33,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,20 +44,46 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-/** The real App: start order, GET /status while connecting, and the seed, lease check and publication wired. */
+/**
+ * The real App: start order, GET /status while connecting, and the seed, lease check, publication
+ * and recovery wired. Each test has its own MongoDB database and DATA_DIR, so the recovery never
+ * reads the development data.
+ */
 class AppTest {
 
     @TempDir
     Path dir;
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    private final String database = MongoTestSupport.newCollectionName("control_app_test");
+
+    /** The variables of every test: port 0, a database and a DATA_DIR of its own. */
+    private Map<String, String> env() {
+        Map<String, String> env = new HashMap<>();
+        env.put("CONTROL_PORT", "0");
+        env.put("MONGO_URI", MongoTestSupport.URI);
+        env.put("MONGO_DATABASE", database);
+        env.put("DATA_DIR", dir.resolve("data").toString());
+        return env;
+    }
+
+    /** The variables that point to the embedded cluster, with leases and checks of 1 s. */
+    private Map<String, String> clusterEnv() {
+        CoordinationSettings settings = HazelcastTestCluster.settings();
+        Map<String, String> env = env();
+        env.put("HZ_MEMBERS", String.join(",", settings.members()));
+        env.put("HZ_CLUSTER_NAME", settings.clusterName());
+        env.put("LEASE_SECONDS", "1");
+        env.put("LEASE_CHECK_SECONDS", "1");
+        return env;
+    }
 
     /** Connecting blocks until the cluster answers; /status must not (review of #19). */
     @Test
     void statusAnswersAtOnceWhileTheClusterIsUnreachable() throws Exception {
-        Map<String, String> env = new HashMap<>();
-        env.put("CONTROL_PORT", "0");
+        Map<String, String> env = env();
         env.put("HZ_MEMBERS", "127.0.0.1:" + freePort());
         long start = System.nanoTime();
         try (App.RunningService service = App.start(Env.of(env))) {
@@ -61,8 +96,7 @@ class AppTest {
 
     @Test
     void aSeedFileThatCannotBeReadStopsTheStart() {
-        Map<String, String> env = new HashMap<>();
-        env.put("CONTROL_PORT", "0");
+        Map<String, String> env = env();
         env.put("CONTROL_SEED_FILE", dir.resolve("missing.txt").toString());
         assertThrows(UncheckedIOException.class, () -> App.start(Env.of(env)));
     }
@@ -78,12 +112,7 @@ class AppTest {
         HttpServer indexing = fakeIndexing(publications);
         CoordinationSettings settings = HazelcastTestCluster.settings();
         HazelcastTestCluster.reset();
-        Map<String, String> env = new HashMap<>();
-        env.put("CONTROL_PORT", "0");
-        env.put("HZ_MEMBERS", String.join(",", settings.members()));
-        env.put("HZ_CLUSTER_NAME", settings.clusterName());
-        env.put("LEASE_SECONDS", "1");
-        env.put("LEASE_CHECK_SECONDS", "1");
+        Map<String, String> env = clusterEnv();
         env.put("PUBLISH_BATCH", "1");
         env.put("INDEXING_URL", "http://127.0.0.1:" + indexing.getAddress().getPort() + "/");
         env.put("CONTROL_SEED_FILE", seed.toString());
@@ -111,6 +140,59 @@ class AppTest {
             workers.shutdown();
             indexing.stop(0);
         }
+    }
+
+    /**
+     * CF-10 end to end: the App rebuilds book-state from a real MongoDB and datalake when it
+     * starts on an empty cluster, and again when the cluster loses its state while it runs.
+     */
+    @Test
+    void theAppRebuildsALostClusterFromMongoAndTheDatalake() throws Exception {
+        assumeTrue(MongoTestSupport.available(), "MongoDB is not available at " + MongoTestSupport.URI);
+        // 1342 published in version 1, 84 indexed, 11 only downloaded, 5 only in the seed file
+        RangeBasedDatalake datalake = new RangeBasedDatalake(dir.resolve("data").resolve("datalake").resolve("range"));
+        datalake.save(new RawBook(84, "header", "body"));
+        datalake.save(new RawBook(11, "header", "body"));
+        Path seed = Files.writeString(dir.resolve("book_ids.txt"), "1342\n84\n11\n5\n");
+        CoordinationSettings settings = HazelcastTestCluster.settings();
+        HazelcastTestCluster.reset();
+        Map<String, String> env = clusterEnv();
+        env.put("CONTROL_SEED_FILE", seed.toString());
+        env.put("INDEXING_URL", "http://127.0.0.1:" + freePort());          // nobody: no publication
+        HazelcastInstance observer = settings.openClient();
+        try (MongoClient mongo = MongoClients.create(MongoTestSupport.URI)) {
+            MongoDatabase db = mongo.getDatabase(database);
+            db.getCollection("index_meta").insertOne(new Document("_id", "CURRENT").append("version", 1)
+                    .append("collection", "inverted_index").append("books", 1));
+            db.getCollection("index_books").insertOne(new Document("_id", 1342).append("version", 1));
+            db.getCollection("index_log").insertMany(List.of(
+                    new Document("_id", 1342).append("indexed_at", new Date()),
+                    new Document("_id", 84).append("indexed_at", new Date())));
+            try (App.RunningService service = App.start(Env.of(env))) {
+                Coordination coordination = Coordination.on(observer, settings, Clock.systemUTC());
+                waitFor(coordination::isInitialized, "the first recovery");
+                assertStates(coordination);
+                assertEquals(1, coordination.queueSize(Stage.INDEXING), "11 waits to be indexed");
+
+                HazelcastTestCluster.reset();                               // both members restart
+                waitFor(coordination::isInitialized, "the recovery after the loss");
+                assertStates(coordination);
+                JsonObject recovery = get(service, "/control/status").getAsJsonObject("recovery");
+                assertEquals(2, recovery.get("runs").getAsInt(), recovery.toString());
+                assertEquals(1, recovery.get("published").getAsInt(), recovery.toString());
+            } finally {
+                db.drop();
+            }
+        } finally {
+            observer.shutdown();
+        }
+    }
+
+    private static void assertStates(Coordination coordination) {
+        assertEquals(BookState.PUBLISHED, coordination.task(1342).orElseThrow().bookState());
+        assertEquals(BookState.INDEXED, coordination.task(84).orElseThrow().bookState());
+        assertEquals(BookState.DOWNLOADED, coordination.task(11).orElseThrow().bookState());
+        assertEquals(BookState.PENDING, coordination.task(5).orElseThrow().bookState());
     }
 
     // --- Helpers -------------------------------------------------------------------------

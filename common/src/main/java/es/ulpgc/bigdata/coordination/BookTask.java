@@ -56,6 +56,14 @@ public record BookTask(int bookId, String state, String owner, long leaseUntil, 
         return new BookTask(bookId, BookState.PENDING.name(), null, 0, 0, null, null, now, 0, 0);
     }
 
+    /**
+     * Recovery (contract §7): a book back in {@code state} from the persistent evidence, without
+     * owner, attempts or error; enqueuedAt is now (a DOWNLOADED one is offered to index-queue).
+     */
+    static BookTask restored(int bookId, BookState state, long now) {
+        return new BookTask(bookId, state.name(), null, 0, 0, null, null, now, 0, 0);
+    }
+
     /** T2, T6: claimed by {@code owner} until {@code leaseUntil}. */
     BookTask claimed(Stage stage, String owner, long leaseUntil, long now) {
         return new BookTask(bookId, stage.working().name(), owner, leaseUntil, attempts, null,
