@@ -6,7 +6,9 @@ import es.ulpgc.bigdata.model.RawBook;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.CopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -100,20 +102,63 @@ public abstract class AbstractFileDatalake implements Datalake {
      * Indexing reads the books Ingestion writes, from another container.
      */
     static void writeAtomically(Path target, String content) throws IOException {
+        writeAtomically(target, content, Files::move);
+    }
+
+    /** writeAtomically with the given Mover (the tests simulate the AccessDeniedException of Windows). */
+    static void writeAtomically(Path target, String content, Mover mover) throws IOException {
         Files.createDirectories(target.getParent());
         Path tmp = target.resolveSibling(target.getFileName() + "." + UUID.randomUUID() + TMP_SUFFIX);
         try {
             Files.writeString(tmp, content, StandardCharsets.UTF_8);
-            try {
-                Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException e) {
-                // The file system does not guarantee atomicity: we carry on,
-                // but the window in which target can be seen half-written is no longer zero.
-                Files.move(tmp, target, REPLACE_EXISTING);
-            }
+            moveReplacing(tmp, target, mover);
         } catch (IOException e) {
             Files.deleteIfExists(tmp);   // do not leave garbage if something fails
             throw e;
+        }
+    }
+
+    /** Most attempts of moveReplacing; with a pause of 1, 2, 3… ms, about 1.2 s in all. */
+    static final int MAX_MOVE_ATTEMPTS = 50;
+
+    /** Moves a file: Files::move in production, a fake in the tests. */
+    @FunctionalInterface
+    interface Mover {
+        void move(Path source, Path target, CopyOption... options) throws IOException;
+    }
+
+    /**
+     * Moves tmp onto target, replacing it, atomically if the file system can.
+     *
+     * On Windows the move fails with AccessDeniedException while another thread is replacing or
+     * reading the same target (two saves of the same book at once). That is momentary, so the
+     * move is tried again after a short, growing pause, up to MAX_MOVE_ATTEMPTS times. On Linux
+     * a rename never fails for that reason, so there an AccessDeniedException is a real lack of
+     * permissions and only arrives a little later. A target that is a folder fails at once:
+     * waiting will not change it. Any other IOException is not retried.
+     */
+    static void moveReplacing(Path tmp, Path target, Mover mover) throws IOException {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                try {
+                    mover.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException e) {
+                    // The file system does not guarantee atomicity: we carry on,
+                    // but the window in which target can be seen half-written is no longer zero.
+                    mover.move(tmp, target, REPLACE_EXISTING);
+                }
+                return;
+            } catch (AccessDeniedException e) {
+                if (attempt >= MAX_MOVE_ATTEMPTS || Files.isDirectory(target)) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
         }
     }
 

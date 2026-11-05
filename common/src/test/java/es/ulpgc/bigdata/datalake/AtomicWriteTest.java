@@ -5,8 +5,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.CopyOption;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
@@ -18,6 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -152,5 +158,121 @@ class AtomicWriteTest {
 
         assertEquals(List.of("1342.body.txt"), namesIn(tmp), "ningún .tmp: se borra si el move falla");
         assertTrue(Files.isRegularFile(target.resolve("dentro.txt")));
+    }
+
+    // ------------------------------------------------------------------
+    // moveReplacing: what Windows does is simulated with a fake Mover,
+    // because on Linux a rename never gets AccessDeniedException for that reason.
+    // ------------------------------------------------------------------
+
+    /** Denies the access the first `denials` times (-1: always), then really moves. */
+    private static AbstractFileDatalake.Mover denyingMover(int denials, AtomicInteger calls) {
+        return (source, target, options) -> {
+            int call = calls.incrementAndGet();
+            if (denials < 0 || call <= denials) {
+                throw new AccessDeniedException(target.toString());
+            }
+            Files.move(source, target, options);
+        };
+    }
+
+    @Test
+    void siWindowsDeniegaElAccesoUnMomentoReintentaYMueve() throws IOException {
+        Path source = Files.writeString(tmp.resolve("1342.body.txt.x.tmp"), "nuevo");
+        Path target = Files.writeString(tmp.resolve("1342.body.txt"), "viejo");
+        AtomicInteger calls = new AtomicInteger();
+
+        AbstractFileDatalake.moveReplacing(source, target, denyingMover(2, calls));
+
+        assertEquals(3, calls.get());
+        assertEquals("nuevo", Files.readString(target, StandardCharsets.UTF_8));
+        assertEquals(List.of("1342.body.txt"), namesIn(tmp));
+    }
+
+    @Test
+    void siElAccesoSigueDenegadoSeRindeTrasElMaximoDeIntentosEsperandoEntreEllos() throws IOException {
+        Path source = Files.writeString(tmp.resolve("1342.body.txt.x.tmp"), "nuevo");
+        Path target = Files.writeString(tmp.resolve("1342.body.txt"), "viejo");
+        AtomicInteger calls = new AtomicInteger();
+        long start = System.nanoTime();
+
+        assertThrows(AccessDeniedException.class,
+                () -> AbstractFileDatalake.moveReplacing(source, target, denyingMover(-1, calls)));
+
+        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        assertEquals(AbstractFileDatalake.MAX_MOVE_ATTEMPTS, calls.get());
+        assertTrue(elapsedMs >= 1_000, "pausas de 1+2+…+49 ms entre intentos, esperado ≥ 1 s: " + elapsedMs + " ms");
+        assertEquals("viejo", Files.readString(target, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void writeAtomicallyReintentaElMovimientoSiWindowsDeniegaElAcceso() throws IOException {
+        Path target = Files.writeString(tmp.resolve("1342.body.txt"), "viejo");
+        AtomicInteger calls = new AtomicInteger();
+
+        AbstractFileDatalake.writeAtomically(target, "nuevo", denyingMover(2, calls));
+
+        assertEquals(3, calls.get());
+        assertEquals("nuevo", Files.readString(target, StandardCharsets.UTF_8));
+        assertEquals(List.of("1342.body.txt"), namesIn(tmp));
+    }
+
+    @Test
+    void siTrasLosReintentosSigueDenegadoNoDejaTmpNiTocaElDestino() throws IOException {
+        Path target = Files.writeString(tmp.resolve("1342.body.txt"), "viejo");
+
+        assertThrows(AccessDeniedException.class,
+                () -> AbstractFileDatalake.writeAtomically(target, "nuevo", denyingMover(-1, new AtomicInteger())));
+
+        assertEquals("viejo", Files.readString(target, StandardCharsets.UTF_8));
+        assertEquals(List.of("1342.body.txt"), namesIn(tmp), "ningún .tmp: se borra si el move falla");
+    }
+
+    @Test
+    void siElDestinoEsUnaCarpetaNoReintenta() throws IOException {
+        // On Windows, moving onto a folder gives AccessDeniedException too: waiting will not fix it.
+        Path source = Files.writeString(tmp.resolve("x.tmp"), "nuevo");
+        Path target = Files.createDirectories(tmp.resolve("1342.body.txt"));
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThrows(AccessDeniedException.class,
+                () -> AbstractFileDatalake.moveReplacing(source, target, denyingMover(-1, calls)));
+
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void otroErrorDeEntradaSalidaNoSeReintenta() throws IOException {
+        Path target = tmp.resolve("1342.body.txt");
+        AtomicInteger calls = new AtomicInteger();
+        AbstractFileDatalake.Mover failing = (source, t, options) -> {
+            calls.incrementAndGet();
+            throw new NoSuchFileException(source.toString());
+        };
+
+        assertThrows(NoSuchFileException.class,
+                () -> AbstractFileDatalake.moveReplacing(tmp.resolve("x.tmp"), target, failing));
+
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void sinMovimientoAtomicoMueveIgualmenteSinEsaOpcion() throws IOException {
+        Path source = Files.writeString(tmp.resolve("x.tmp"), "nuevo");
+        Path target = Files.writeString(tmp.resolve("1342.body.txt"), "viejo");
+        List<Set<CopyOption>> calls = new ArrayList<>();
+        AbstractFileDatalake.Mover noAtomic = (s, t, options) -> {
+            calls.add(Set.of(options));
+            if (calls.get(calls.size() - 1).contains(StandardCopyOption.ATOMIC_MOVE)) {
+                throw new AtomicMoveNotSupportedException(s.toString(), t.toString(), "sin soporte");
+            }
+            Files.move(s, t, options);
+        };
+
+        AbstractFileDatalake.moveReplacing(source, target, noAtomic);
+
+        assertEquals(List.of(Set.of(StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING),
+                             Set.of(StandardCopyOption.REPLACE_EXISTING)), calls);
+        assertEquals("nuevo", Files.readString(target, StandardCharsets.UTF_8));
     }
 }
