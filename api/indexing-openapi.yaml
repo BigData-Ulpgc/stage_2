@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.3.0** (DR-05 and its review follow-up, DR-07, DR-08a, plan v3.3).
+    **Status: draft v0.4.0** (DR-05 and its review follow-up, DR-07, DR-08a, DR-08b, plan v3.3).
     `POST /index/rebuild` answers 501 until DR-10; its contract is already the final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
@@ -153,12 +153,20 @@ paths:
         published yet in `index_books` with version V+1 (a book keeps the first version in which
         it became visible), then switches the `CURRENT` document of `index_meta` to V+1 in ONE
         atomic operation, and records the version in `index_publications`. The index itself is
-        never copied. **From DR-08b** it also marks the books `PUBLISHED` in `book-state` and
-        announces the version with `IndexPublished` on the Hazelcast topic `index-events`.
+        never copied. Then, through Hazelcast (coordination contract §4.1 T10 and §6), it marks
+        `PUBLISHED` in `book-state` every `INDEXED` book that is visible in `CURRENT`, and, only
+        when a new version was created, announces it with `IndexPublished` on the topic
+        `index-events`.
 
         **Completion: synchronous.** A 200 means `CURRENT` already points to the returned
-        version; each Search replica loads it at its next check of `CURRENT` (from DR-08b, as
-        soon as it receives the event).
+        version; each Search replica loads it as soon as it receives the event, or at its next
+        check of `CURRENT`.
+
+        **Without Hazelcast** (still connecting, or the cluster is down) the publication is
+        made and answers 200 anyway: MongoDB is the truth. The states are marked by the next
+        publication or when the service connects (that also repairs a T10 interrupted by a
+        crash, contract §7); a lost event is covered by the periodic check of Search.
+        `GET /status` shows the state of the connection.
 
         **Idempotency.** If no book was indexed since the last publication, no empty version
         is created: the answer is 200 with the current version and `books_published: 0`. So a
@@ -315,7 +323,9 @@ paths:
 
         Answers 200 while the process is running. It does NOT contact MongoDB on purpose: if
         MongoDB is down, restarting the Indexing Service would not fix it, so the healthcheck
-        must not fail because of it. The state of the index is in `GET /index/status`.
+        must not fail because of it, nor Hazelcast: `coordination` only reports the state of the
+        connection, used to notify the publications. The state of the index is in
+        `GET /index/status`.
       responses:
         '200':
           description: The process is running.
@@ -326,6 +336,7 @@ paths:
               example:
                 service: indexing-service
                 status: running
+                coordination: connected
 
 components:
   schemas:
@@ -438,10 +449,16 @@ components:
 
     ServiceStatus:
       type: object
-      required: [service, status]
+      required: [service, status, coordination]
       properties:
         service: { type: string, example: indexing-service }
         status: { type: string, enum: [running] }
+        coordination:
+          type: string
+          enum: [connecting, connected, disconnected]
+          description: |
+            Connection to Hazelcast, used to mark the published books and announce each version.
+            `connecting` until the cluster first answers (the service keeps working meanwhile).
 
     Error:
       type: object
