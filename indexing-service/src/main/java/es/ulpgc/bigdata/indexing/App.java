@@ -16,6 +16,7 @@ import io.javalin.Javalin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,10 +36,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * </pre>
  *
  * One MongoClient per process (D6): App creates it, shares its database with the four
- * repositories (books, inverted_index, index_log, index_meta) and closes it when the service
+ * repositories (books, inverted_index, index_log, publications) and closes it when the service
  * stops ("who creates, closes"). No constructor talks to MongoDB, so the service starts even
  * if MongoDB is down: GET /status answers and the endpoints that need MongoDB answer 503 until
  * it comes back (D4).
+ *
+ * Once the server is up, a background thread completes a publication interrupted by a previous
+ * crash (DR-08a, D2 and D3). In the background so that a MongoDB that does not answer never
+ * delays or stops the start; if it fails, the next POST /index/publish does the same work.
  */
 public final class App {
 
@@ -74,25 +79,45 @@ public final class App {
         MongoClient client = mongo.openClient();
         try {
             MongoDatabase db = client.getDatabase(mongo.database());
+            PublicationRepository publications = new MongoPublicationRepository(db);
             IndexingService service = new IndexingService(
                     new RangeBasedDatalake(layout.datalakeDir()),
                     new MongoMetadataRepository(db),
                     mongo.openIndex(client),                 // shared client: does not own it
                     new MongoIndexLog(db),
-                    new MongoPublicationRepository(db),
+                    publications,
                     new MetadataParser(),
                     Tokenizer.standard());
-            Javalin server = new IndexingApi(service).create(SERVICE_NAME, httpThreads).start(port);
+            // The first version uses MONGO_COLLECTION; later ones keep the one of CURRENT (D8).
+            Publisher publisher = new Publisher(publications, mongo.collection(), Clock.systemUTC());
+            Javalin server = new IndexingApi(service, publisher).create(SERVICE_NAME, httpThreads).start(port);
 
             // Hosts only, never the whole URI: in production it may carry user and password.
             LOG.info("{} on port {} · datalake {} · MongoDB {} db={} index={}",
                     SERVICE_NAME, server.port(), layout.datalakeDir().toAbsolutePath(),
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
+            startRecovery(publisher);
             return new RunningService(server, client);
         } catch (RuntimeException e) {
             client.close();                                  // the start failed: do not leave it open
             throw e;
         }
+    }
+
+    /** D2, D3: daemon, so it never keeps the JVM alive; close() makes it fail if still running. */
+    private static void startRecovery(Publisher publisher) {
+        Thread recovery = new Thread(() -> {
+            try {
+                publisher.recover().ifPresent(result -> LOG.info(
+                        "interrupted publication completed: version {} with {} books",
+                        result.version(), result.booksPublished()));
+            } catch (RuntimeException e) {
+                LOG.warn("could not check for an interrupted publication at start ({}); "
+                        + "the next POST /index/publish will", e.getMessage());
+            }
+        }, SERVICE_NAME + "-publish-recovery");
+        recovery.setDaemon(true);
+        recovery.start();
     }
 
     /**
