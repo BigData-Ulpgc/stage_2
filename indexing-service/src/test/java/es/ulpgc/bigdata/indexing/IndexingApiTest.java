@@ -20,7 +20,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,10 +50,11 @@ class IndexingApiTest {
         metadata = new InMemoryMetadataRepository();
         index = new IndexingServiceTest.SpyIndex();
         indexLog = new InMemoryIndexLog();
-        publications = new InMemoryPublicationRepository();
+        publications = new InMemoryPublicationRepository(indexLog);
         IndexingService service = new IndexingService(datalake, metadata, index, indexLog, publications,
                 new MetadataParser(), Tokenizer.standard());
-        app = new IndexingApi(service).create("indexing-service", 8).start(0);
+        Publisher publisher = new Publisher(publications, "inverted_index", Clock.systemUTC());
+        app = new IndexingApi(service, publisher).create("indexing-service", 8).start(0);
     }
 
     @AfterEach
@@ -175,16 +180,82 @@ class IndexingApiTest {
         assertEquals(0, index.flushes.get());
     }
 
-    // --- 501 until DR-08 / DR-10 ----------------------------------------------------
+    // --- POST /index/publish (DR-08a) -------------------------------------------------
+
+    private static final String ISO_SECONDS = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z";
 
     @Test
-    void publishResponde501HastaDR08() throws Exception {
+    void publishSinNadaPublicadoDevuelveVersionNulaConLosCuatroCamposEnOrden() throws Exception {
         HttpResponse<String> response = post("/index/publish");
 
-        assertEquals(501, response.statusCode());
-        JsonObject error = assertError(response, "NOT_IMPLEMENTED", null);
-        assertEquals("POST /index/publish is not implemented yet (DR-08)", error.get("message").getAsString());
+        assertEquals(200, response.statusCode());
+        JsonObject body = json(response);
+        assertEquals(List.of("version", "books_published", "total_books", "published_at"), List.copyOf(body.keySet()));
+        assertTrue(body.get("version").isJsonNull());
+        assertEquals(0, body.get("books_published").getAsInt());
+        assertEquals(0, body.get("total_books").getAsLong());
+        assertTrue(body.get("published_at").isJsonNull());
     }
+
+    @Test
+    void publishTrasUnUpdateHaceVisibleElLibro() throws Exception {
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+        post("/index/update/1342");
+
+        JsonObject body = json(post("/index/publish"));
+        JsonObject status = json(get("/index/status"));
+
+        assertEquals(1, body.get("version").getAsInt());
+        assertEquals(1, body.get("books_published").getAsInt());
+        assertEquals(1, body.get("total_books").getAsLong());
+        assertTrue(body.get("published_at").getAsString().matches(ISO_SECONDS), body.get("published_at").getAsString());
+        assertEquals(1, status.get("published_version").getAsInt());
+        assertEquals(1, status.get("books_published").getAsLong());
+    }
+
+    @Test
+    void publishDosVecesSeguidasNoCreaOtraVersion() throws Exception {
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+        post("/index/update/1342");
+        JsonObject first = json(post("/index/publish"));
+
+        JsonObject second = json(post("/index/publish"));
+
+        assertEquals(1, second.get("version").getAsInt());
+        assertEquals(0, second.get("books_published").getAsInt());
+        assertEquals(1, second.get("total_books").getAsLong());
+        assertEquals(first.get("published_at"), second.get("published_at"));
+    }
+
+    @Test
+    void publishDa503SiMongoNoResponde() throws Exception {
+        indexLog.failing(true);
+
+        HttpResponse<String> response = post("/index/publish");
+
+        assertEquals(503, response.statusCode());
+        assertError(response, "STORAGE_UNAVAILABLE", null);
+    }
+
+    @Test
+    void publishDa500SiOtrasReplicasPublicanSiempreAntes() throws Exception {
+        indexLog.markIndexed(List.of(1), Instant.now());
+        AtomicInteger next = new AtomicInteger(100);
+        publications.beforeSwitch(() -> {
+            int version = publications.current().map(Publication::version).orElse(0) + 1;
+            publications.setCurrent(new Publication(version, publications.countVisible(version), "inverted_index", "2026-11-05T09:00:00Z"));
+            publications.recordHistory(new PublishedVersion(version, publications.booksOfVersion(version),
+                    publications.countVisible(version), "2026-11-05T09:00:00Z", "inverted_index"));
+            indexLog.markIndexed(List.of(next.getAndIncrement()), Instant.now());
+        });
+
+        HttpResponse<String> response = post("/index/publish");
+
+        assertEquals(500, response.statusCode());
+        assertError(response, "INTERNAL_ERROR", null);
+    }
+
+    // --- 501 until DR-10 ------------------------------------------------------------
 
     @Test
     void rebuildResponde501HastaDR10() throws Exception {

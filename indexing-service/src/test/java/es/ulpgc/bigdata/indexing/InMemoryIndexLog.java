@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -29,6 +30,12 @@ class InMemoryIndexLog implements IndexLog {
 
     boolean contains(int bookId) {
         return log.containsKey(bookId);
+    }
+
+    /** The ids of the log, what the $lookup of MongoPublicationRepository reads from index_log. */
+    Set<Integer> ids() {
+        failIfDown();
+        return Set.copyOf(log.keySet());
     }
 
     private void failIfDown() {
