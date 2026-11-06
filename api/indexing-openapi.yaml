@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.5.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b, plan v3.3).
+    **Status: draft v0.6.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b and its review follow-up, plan v3.3).
     `POST /index/rebuild` answers 501 until DR-10; its contract is already the final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
@@ -163,7 +163,8 @@ paths:
 
         **Completion: synchronous.** A 200 means `CURRENT` already points to the returned
         version; each Search replica loads it as soon as it receives the event, or at its next
-        check of `CURRENT`.
+        check of `CURRENT`. Once `CURRENT` has switched the answer is 200 even if writing the
+        `index_publications` entry fails: the next call (or the next start) writes it.
 
         **Without Hazelcast** (still connecting, or the cluster is down) the publication is
         made and answers 200 anyway: MongoDB is the truth. The states are marked by the next

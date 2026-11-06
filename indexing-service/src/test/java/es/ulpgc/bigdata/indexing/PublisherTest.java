@@ -165,10 +165,11 @@ class PublisherTest {
     }
 
     @Test
-    void siFallaElHistorialLosLibrosYaSonVisiblesYLaSiguienteLlamadaLoRepara() {
+    void siFallaElHistorialRespondeLaVersionPublicadaYLaSiguienteLlamadaLoRepara() {
         indexed(1, 2);
         publications.failHistory(true);
-        assertThrows(MongoException.class, publisher::publish);
+
+        assertEquals(new PublishResult(1, 2, 2, AT), publisher.publish());
         assertEquals(1, publications.current().orElseThrow().version());
         assertNull(publications.historyOf(1));
         publications.failHistory(false);
@@ -177,6 +178,19 @@ class PublisherTest {
 
         assertEquals(new PublishResult(1, 0, 2, AT), result);
         assertEquals(new PublishedVersion(1, List.of(1, 2), 2, AT, "inverted_index"), publications.historyOf(1));
+    }
+
+    @Test
+    void siFallaElHistorialLaVersionSeAnunciaIgual() {
+        List<PublishResult> notified = new CopyOnWriteArrayList<>();
+        Publisher notifying = new Publisher(publications, "inverted_index",
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), notified::add);
+        indexed(1);
+        publications.failHistory(true);
+
+        notifying.publish();
+
+        assertEquals(List.of(new PublishResult(1, 1, 1, AT)), notified);
     }
 
     @Test
