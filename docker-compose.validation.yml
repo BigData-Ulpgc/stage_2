@@ -1,0 +1,14 @@
+# Publishes the internal APIs on this machine, only for the http/*.http files and the automated
+# validation (http/README.md). In the normal deployment they are reached only inside Docker.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.validation.yml up -d
+#
+# With a fixed host port, ingestion cannot be scaled while this file is in use.
+
+services:
+  ingestion:
+    ports:
+      - "127.0.0.1:7001:7001"
+  indexing:
+    ports:
+      - "127.0.0.1:7002:7002"
