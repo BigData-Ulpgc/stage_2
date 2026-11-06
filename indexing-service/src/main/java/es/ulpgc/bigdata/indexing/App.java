@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   INDEXING_PORT          HTTP port (default 7002; 0 = a free one, for tests)
  *   INDEXING_HTTP_THREADS  maximum Jetty request threads (default ServiceServer.DEFAULT_MAX_THREADS)
  *   INDEXING_THREADS       threads that prepare (read, parse, tokenize) the books of a batch (default 4)
+ *   INDEX_WRITE_BATCH      the most books of index-queue written together (default 100)
  *   DATA_DIR               root of the shared volume; the datalake is DATA_DIR/datalake/range (default ./data)
  *   MONGO_URI              mongodb://localhost:27017 (inside Docker: mongodb://mongo:27017)
  *   MONGO_DATABASE         search_engine
@@ -67,7 +68,9 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * Once connected, the same thread starts the index writer (DR-06b, IndexingWriter): the
  * consumer of index-queue, active while this replica holds the lock index-writer and a
- * standby otherwise. /status shows what it does in "writer" (null until connected).
+ * standby otherwise. It writes in batches of up to INDEX_WRITE_BATCH books, prepared on
+ * INDEXING_THREADS parser threads (DR-09). /status shows what it does in "writer" (null until
+ * connected).
  */
 public final class App {
 
@@ -77,6 +80,8 @@ public final class App {
     static final String HTTP_THREADS = "INDEXING_HTTP_THREADS";
     static final String THREADS = "INDEXING_THREADS";
     static final int DEFAULT_THREADS = 4;
+    static final String WRITE_BATCH = "INDEX_WRITE_BATCH";
+    static final int DEFAULT_WRITE_BATCH = 100;
 
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
@@ -100,6 +105,7 @@ public final class App {
         int httpThreads = env.integerAtLeast(HTTP_THREADS,
                 ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
         int threads = env.integerAtLeast(THREADS, DEFAULT_THREADS, 1);
+        int writeBatch = env.integerAtLeast(WRITE_BATCH, DEFAULT_WRITE_BATCH, 1);
         MongoSettings mongo = MongoSettings.fromEnv(env);
         DataLayout layout = DataLayout.fromEnv(env);
         CoordinationSettings coordination = CoordinationSettings.fromEnv(env);
@@ -133,7 +139,7 @@ public final class App {
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
             startRecovery(publisher);
             RunningService running = new RunningService(server, client, writer, notifier, parsers);
-            running.connectInBackground(coordination, connection, service);
+            running.connectInBackground(coordination, connection, service, writeBatch);
             return running;
         } catch (RuntimeException e) {
             parsers.shutdownNow();
@@ -181,7 +187,7 @@ public final class App {
 
     /**
      * The running service. close() stops it in order: first the HTTP server (no new requests),
-     * then the index writer (after its current book, see WRITER_GRACE) and the parser threads,
+     * then the index writer (after its current batch, see WRITER_GRACE) and the parser threads,
      * then the notifier (what it has queued, see HazelcastPublicationNotifier.CLOSE_GRACE), then
      * the Hazelcast client, then the MongoClient they use. Closing twice does nothing (the shutdown hook and
      * a test may both call it).
@@ -189,8 +195,8 @@ public final class App {
     public static final class RunningService implements AutoCloseable {
 
         /**
-         * How long close() waits for the writer to finish its book; then it is interrupted, and
-         * its book stays INDEXING until the Control requeues it (contract §7).
+         * How long close() waits for the writer to finish its batch; then it is interrupted, and
+         * the books of the batch stay INDEXING until the Control requeues them (contract §7).
          */
         static final Duration WRITER_GRACE = Duration.ofSeconds(10);
 
@@ -220,22 +226,22 @@ public final class App {
          */
         private synchronized void connectInBackground(CoordinationSettings settings,
                                                       AtomicReference<BackgroundConnection> forStatus,
-                                                      IndexingService service) {
+                                                      IndexingService service, int writeBatch) {
             connection = BackgroundConnection.start(settings, connected -> {
                 notifier.connected(connected);
                 LOG.info("connected to Hazelcast {}", settings.members());
-                startWriter(connected, service);
+                startWriter(connected, service, writeBatch);
             });
             forStatus.set(connection);
         }
 
         /** D6, D9: the writer starts as soon as there is a cluster, unless the service already stopped. */
-        private synchronized void startWriter(Coordination connected, IndexingService service) {
+        private synchronized void startWriter(Coordination connected, IndexingService service, int writeBatch) {
             if (closed.get()) {
                 return;
             }
             IndexingWriter started = new IndexingWriter(connected, service,
-                    Coordination.owner("indexing", 0), d -> Thread.sleep(d.toMillis()));
+                    Coordination.owner("indexing", 0), d -> Thread.sleep(d.toMillis()), writeBatch);
             connected.onConnectionChange(started::connectionChanged);
             writerThread = new Thread(started, SERVICE_NAME + "-writer");
             writer.set(started);

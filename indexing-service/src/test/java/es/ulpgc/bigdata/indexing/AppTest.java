@@ -23,6 +23,8 @@ import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -95,13 +97,14 @@ class AppTest {
         assertTrue(e.getMessage().contains("INDEXING_PORT"), e.getMessage());
     }
 
-    @Test
-    void sinHilosDeParseoNoArranca() {
+    @ParameterizedTest
+    @ValueSource(strings = {"INDEXING_THREADS", "INDEX_WRITE_BATCH"})
+    void sinHilosDeParseoOSinLoteNoArranca(String variable) {
         Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");
-        env.put("INDEXING_THREADS", "0");
+        env.put(variable, "0");
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> App.start(Env.of(env)));
-        assertTrue(e.getMessage().contains("INDEXING_THREADS"), e.getMessage());
+        assertTrue(e.getMessage().contains(variable), e.getMessage());
     }
 
     @Test
@@ -276,6 +279,10 @@ class AppTest {
 
                 running.close();
                 assertFalse(alive("indexing-service-writer"), "close() volvió con el escritor todavía vivo");
+                for (int i = 0; i < 20 && aliveStartingWith("indexing-service-parser-"); i++) {
+                    Thread.sleep(50);
+                }
+                assertFalse(aliveStartingWith("indexing-service-parser-"), "quedan hilos de parseo tras close()");
                 // The executor ends its thread just after close() returns: a moment of margin.
                 for (int i = 0; i < 20 && alive("indexing-service-notifier"); i++) {
                     Thread.sleep(50);
@@ -342,6 +349,11 @@ class AppTest {
         return Hazelcast.getAllHazelcastInstances().stream()
                 .mapToInt(m -> m.getClientService().getConnectedClients().size())
                 .sum();
+    }
+
+    private static boolean aliveStartingWith(String prefix) {
+        return Thread.getAllStackTraces().keySet().stream()
+                .anyMatch(t -> t.getName().startsWith(prefix) && t.isAlive());
     }
 
     private static boolean alive(String threadName) {
