@@ -158,6 +158,20 @@ nginx (`scripts/nginx.conf`) does round-robin over the replicas of `search`, fou
 Docker, so scaling needs no other change. Each response has an `X-Served-By` header with the replica
 that answered. If a replica dies, nginx sends the request to another one; a 503 is passed on to the client, not retried.
 
+**Without network: the sample and the synthetic dataset.** With `INGESTION_SOURCE=local`, Ingestion reads the `pg<id>.txt` files of `INGESTION_LOCAL_HOST_DIR`
+(`./data/books`) instead of downloading them. Two datasets have that format:
+
+- **The sample dataset:** its `raw/` folder, the 15 real books, as `stage_1/sample_dataset/raw`.
+- **The synthetic dataset of DR-16:** for the scale experiments, 10,000 or 100,000 books with the format of Gutenberg and the word distribution of the real books. It is reproducible with its seed; see `scripts/dataset/README.md`.
+
+```bash
+python3 scripts/dataset/generate_dataset.py --count 10000   # into data/books, about 1.2 GB, 1 min
+INGESTION_SOURCE=local docker compose up -d
+```
+
+Then seed the ids of `data/books/book_ids.txt`. The synthetic ids start at 1,000,001, so they never
+collide with a real book.
+
 To record the CPU and memory of each container during an experiment, see `scripts/monitor.sh`.
 
 ## Service images
