@@ -2,6 +2,7 @@ package es.ulpgc.bigdata.ingestion;
 
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
+import es.ulpgc.bigdata.coordination.BackgroundConnection;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
@@ -17,17 +18,16 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Entry point of the Ingestion Service: the HTTP API (CF-06) and the ingest-queue workers
  * (CF-08), on the book source (CF-05) and the range datalake.
  *
- * Start order: the HTTP server first, then the Hazelcast client in the background, then the
- * workers. Connecting blocks until the cluster answers (CoordinationSettings.openClient), and
- * GET /status must answer meanwhile: it does not depend on Hazelcast (api/endpoints.md). It
- * shows "coordination": disabled | connecting | connected | disconnected.
+ * Start order: the HTTP server first, then the Hazelcast client in the background
+ * (BackgroundConnection, common), then the workers. Connecting blocks until the cluster answers
+ * (CoordinationSettings.openClient), and GET /status must answer meanwhile: it does not depend
+ * on Hazelcast (api/endpoints.md). It shows "coordination": disabled (INGESTION_WORKERS=0) |
+ * connecting | connected | disconnected | failed | closed.
  *
  * Configuration (environment variables):
  * <pre>
@@ -74,20 +74,15 @@ public final class App {
 
         IngestionService ingestion = new IngestionService(source, new BookSplitter(),
                 new RangeBasedDatalake(layout.datalakeDir()));
-        RunningService service = new RunningService();
+        RunningService service = new RunningService(coordination != null);
         service.server = new IngestionApi(ingestion, layout.dataDir())
                 .create(SERVICE_NAME, httpThreads, service::status).start(port);
         LOG.info("{} on port {} · datalake {} · source {} · {} workers", SERVICE_NAME, service.server.port(),
                 layout.datalakeDir().toAbsolutePath(), source.describe(), workers);
 
-        if (coordination == null) {
-            service.coordinationState.set("disabled");
-        } else {
-            service.coordinationState.set("connecting");
-            Thread connector = new Thread(() -> service.connect(coordination, ingestion, workers, fetchRetries),
-                    SERVICE_NAME + "-connect");
-            connector.setDaemon(true);                       // a JVM that stops does not wait for it
-            connector.start();
+        if (coordination != null) {
+            service.connection = BackgroundConnection.start(coordination,
+                    connected -> service.startWorkers(connected, ingestion, workers, fetchRetries, coordination));
         }
         return service;
     }
@@ -98,34 +93,38 @@ public final class App {
      */
     public static final class RunningService implements AutoCloseable {
 
+        private final boolean coordinated;
         private Javalin server;
-        private final AtomicReference<String> coordinationState = new AtomicReference<>("disabled");
-        private final AtomicReference<Coordination> coordination = new AtomicReference<>();
-        private final AtomicReference<IngestionWorkers> workers = new AtomicReference<>();
-        private final AtomicBoolean closed = new AtomicBoolean(false);
+        private volatile BackgroundConnection connection;      // null with INGESTION_WORKERS=0
+        private IngestionWorkers workers;                      // guarded by this
+        private boolean closed;                                // guarded by this
 
-        private RunningService() {
+        private RunningService(boolean coordinated) {
+            this.coordinated = coordinated;
         }
 
-        /** Runs in the background: blocks until the cluster answers, then starts the workers. */
-        private void connect(CoordinationSettings settings, IngestionService ingestion, int count, int fetchRetries) {
-            Coordination connected = Coordination.connect(settings);
-            if (closed.get()) {
-                connected.close();
-                return;
+        /** Runs in the connection thread once the cluster answers (BackgroundConnection). */
+        private void startWorkers(Coordination connected, IngestionService ingestion, int count, int fetchRetries,
+                                  CoordinationSettings settings) {
+            synchronized (this) {
+                if (closed) {
+                    return;
+                }
+                workers = IngestionWorkers.start(connected, ingestion, count, fetchRetries, Clock.systemUTC());
             }
-            coordination.set(connected);
-            connected.onConnectionChange(up -> coordinationState.set(up ? "connected" : "disconnected"));
-            coordinationState.set("connected");
-            workers.set(IngestionWorkers.start(connected, ingestion, count, fetchRetries, Clock.systemUTC()));
             LOG.info("connected to Hazelcast {} · {} workers started", settings.members(), count);
         }
 
         /** The extra fields of GET /status. */
         Map<String, Object> status() {
             Map<String, Object> status = new LinkedHashMap<>();
-            status.put("coordination", coordinationState.get());
-            IngestionWorkers running = workers.get();
+            BackgroundConnection current = connection;
+            // connection is set right after BackgroundConnection.start returns: "connecting" until then
+            status.put("coordination", current != null ? current.state().label() : coordinated ? "connecting" : "disabled");
+            IngestionWorkers running;
+            synchronized (this) {
+                running = workers;
+            }
             if (running != null) {
                 status.put("workers", running.status());
             }
@@ -138,16 +137,20 @@ public final class App {
 
         @Override
         public void close() {
-            if (!closed.compareAndSet(false, true)) {
-                return;
+            IngestionWorkers running;
+            synchronized (this) {
+                if (closed) {
+                    return;
+                }
+                closed = true;
+                running = workers;
             }
-            IngestionWorkers running = workers.get();
             if (running != null) {
                 running.close();
             }
-            Coordination connected = coordination.get();
-            if (connected != null) {
-                connected.close();
+            BackgroundConnection current = connection;
+            if (current != null) {
+                current.close();                // also while connecting: the client closes once it connects
             }
             server.stop();
         }

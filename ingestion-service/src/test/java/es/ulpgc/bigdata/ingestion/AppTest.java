@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -71,6 +72,57 @@ class AppTest {
             long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
             assertEquals("connecting", status.get("coordination").getAsString());
             assertTrue(millis < 5_000, "start + /status took " + millis + " ms");
+        }
+    }
+
+    /** The state of BackgroundConnection reaches /status: a lost cluster shows, and comes back. */
+    @Test
+    void statusFollowsTheClusterGoingAwayAndComingBack() throws Exception {
+        String name = "ingestion-app-test-" + UUID.randomUUID();
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        HazelcastInstance member = HazelcastTestCluster.startStandaloneMember(name, port);
+        Map<String, String> env = env(1);
+        env.put("HZ_MEMBERS", "127.0.0.1:" + port);
+        env.put("HZ_CLUSTER_NAME", name);
+        try (App.RunningService service = App.start(Env.of(env))) {
+            waitForCoordination(service, "connected");
+            assertEquals(1, status(service).getAsJsonObject("workers").get("workers").getAsInt());
+            member.shutdown();
+            waitForCoordination(service, "disconnected");
+            member = HazelcastTestCluster.startStandaloneMember(name, port);
+            waitForCoordination(service, "connected");
+        } finally {
+            member.shutdown();
+        }
+    }
+
+    /** close() while the client is still connecting returns at once; the client closes when it connects. */
+    @Test
+    void closingWhileConnectingDoesNotWait() throws Exception {
+        int nobody;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            nobody = socket.getLocalPort();
+        }
+        Map<String, String> env = env(2);
+        env.put("HZ_MEMBERS", "127.0.0.1:" + nobody);
+        App.RunningService service = App.start(Env.of(env));
+        assertEquals("connecting", status(service).get("coordination").getAsString());
+        long start = System.nanoTime();
+        service.close();
+        long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        assertTrue(millis < 5_000, "close took " + millis + " ms");
+        service.close();                                                     // twice does nothing
+    }
+
+    private void waitForCoordination(App.RunningService service, String expected) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        String state;
+        while (!(state = status(service).get("coordination").getAsString()).equals(expected)) {
+            assertTrue(System.nanoTime() < deadline, "still " + state + ", expected " + expected);
+            Thread.sleep(50);
         }
     }
 
