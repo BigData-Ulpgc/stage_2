@@ -1,0 +1,10 @@
+# What the image build does not need: it would slow every build and invalidate its cache.
+.git
+.idea
+.vscode
+**/target
+data
+benchmarks
+docs
+http
+*.log

@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -15,9 +16,11 @@ import java.util.concurrent.TimeUnit;
  * asks SnapshotHolder to reload, which costs one small query unless CURRENT has changed.
  *
  * This is the periodic check of plan DP-06. It also covers a replica that starts while
- * MongoDB is down. The IndexPublished event only needs to call SnapshotHolder.reload() once
- * the Hazelcast library (CF-04) exists: it will make a replica react sooner, and this check
- * remains as the backup for lost events.
+ * MongoDB is down, and the IndexPublished events that were lost. An event only makes the
+ * replica react sooner: it calls wakeUp() (see PublicationEvents).
+ *
+ * Every check runs on the single thread of this class, so a slow reload never blocks the
+ * thread that delivers the Hazelcast events and two checks never overlap.
  *
  * If a check fails, the replica keeps serving the snapshot it has and tries again next time.
  */
@@ -43,6 +46,15 @@ public final class SnapshotRefresher implements AutoCloseable {
     /** Fixed delay: the next check is counted from the end of this one, so they never pile up. */
     public void start() {
         scheduler.scheduleWithFixedDelay(this::refreshOnce, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    /** Checks as soon as possible instead of waiting for the next period. Returns at once. */
+    public void wakeUp() {
+        try {
+            scheduler.execute(this::refreshOnce);
+        } catch (RejectedExecutionException e) {
+            LOG.debug("Ignoring a wake-up: the service is stopping");
+        }
     }
 
     /**
