@@ -1,0 +1,3 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: index"
+"es.ulpgc.bigdata.indexing.benchmark.AddDocumentBenchmark.addBatch","avgt",1,20,1319.554382,34.443373,"us/op",memory
+"es.ulpgc.bigdata.indexing.benchmark.AddDocumentBenchmark.addBatch","avgt",1,20,1343.172591,40.493159,"us/op",mongo
