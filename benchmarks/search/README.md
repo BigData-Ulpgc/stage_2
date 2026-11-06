@@ -64,8 +64,10 @@ real queries.
 ## Load tests: the system under concurrent requests
 
 `LoadGenerator.java` sends `GET /search` through nginx with the queries of `shared/queries.txt`.
-`run-load.sh` starts the system, loads the dataset, repeats each configuration 3 times, records CPU and
-memory with `scripts/monitor.sh`, and stops everything at the end. One factor changes at a time:
+`run-load.sh` starts the system, loads the dataset and checks it with `scripts/validate-api.sh`: if a
+check fails, it stops without measuring (`validation.txt`). Then it repeats each configuration 3 times,
+records CPU and memory with `scripts/monitor.sh`, and stops everything at the end. One factor changes
+at a time:
 
 | Experiment | What changes | Fixed |
 |---|---|---|
@@ -92,7 +94,21 @@ bash benchmarks/search/run-load.sh
 The loader **empties** the database it receives, so the script uses its own, `search_benchmark`, and
 deletes it at the end. The script ends with `docker compose down`.
 
-**What to hand in:** `git add benchmarks/search/results/load` and push, as with JMH. In
+### A larger index
+
+The plan compares indexes of 200 and 100,000 books. For the 200 books of `shared/book_ids.txt`, the real
+services build the index (`POST /ingest`, `/index/update` and `/index/publish`) and only the `clients`
+experiment runs, about 25 minutes plus the first download:
+
+```bash
+INDEX_IDS=shared/book_ids.txt OUT=benchmarks/search/results/load-200 EXPERIMENTS=clients     bash benchmarks/search/run-load.sh
+```
+
+The books are downloaded from Project Gutenberg once and stay in `data/datalake`. A book that fails is
+reported and skipped, and `host.txt` records how many entered the index. The 100,000 books need the
+dataset of DR-16.
+
+**What to hand in:** `git add benchmarks/search/results/load` (and `load-200`) and push, as with JMH. In
 `summary.csv`, `http_errors`, `wrong_results` and `connection_errors` must be 0, or the run must be
 reported as it is. `requests_per_replica` shows how nginx shared the load.
 
@@ -101,3 +117,17 @@ reported as it is. `requests_per_replica` shows how nginx shared the load.
 - It is a closed loop: under saturation, clients wait instead of queuing more requests, so latencies are
   lower than with requests arriving at a fixed rate.
 - With the sample dataset the index has 15 books. The large index depends on DR-16.
+
+## Analysis
+
+```bash
+python benchmarks/search/analyze.py
+```
+
+It reads `results/jmh` and `results/load*` and writes in `results/analysis/`:
+
+| File | Content |
+|---|---|
+| `common.csv` | Every measure in the common format of plan §7.1 |
+| `tables.md` | Mean and standard deviation of the repetitions, CPU and memory per container, JMH, and warnings (errors, wrong results, fewer than 3 repetitions) |
+| `*.png` | Throughput and p95 with clients, replicas, threads and pool; CPU per container; cost of the page position. Needs `matplotlib` |

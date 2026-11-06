@@ -11,3 +11,4 @@ data/
 # JMH test runs: the numbers mean nothing
 benchmarks/search/results/jmh-smoke/
 benchmarks/search/results/load-smoke/
+benchmarks/search/results/analysis-smoke/

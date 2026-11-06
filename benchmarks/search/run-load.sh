@@ -16,7 +16,16 @@
 # so the index of other work is not touched. It finishes with docker compose down.
 # Results: benchmarks/search/results/load/ (the --smoke ones in results/load-smoke/). See README.md.
 #
-# Variables: DATASET_DIR, REPETITIONS, WARMUP, DURATION, WARM_RUN, BASE_NGINX_CPUS, MVN, COMPOSE.
+# Before measuring, it runs scripts/validate-api.sh on the sample dataset and stops if a check fails
+# (plan §9). The result stays in validation.txt.
+#
+# Other index sizes, built by the real services instead of the loader (POST /ingest, /index/update
+# and /index/publish). The books are downloaded once, into data/datalake:
+#
+#   INDEX_IDS=shared/book_ids.txt OUT=benchmarks/search/results/load-200 EXPERIMENTS=clients #       benchmarks/search/run-load.sh
+#
+# Variables: DATASET_DIR, INDEX_IDS, OUT, EXPERIMENTS, REPETITIONS, WARMUP, DURATION, WARM_RUN,
+# BASE_NGINX_CPUS, MVN, COMPOSE.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -29,6 +38,9 @@ URL="http://localhost:8080"
 BASE_THREADS=250
 BASE_POOL=50
 BASE_NGINX_CPUS="${BASE_NGINX_CPUS:-2}"
+INDEX_IDS="${INDEX_IDS:-}"
+EXPERIMENTS="${EXPERIMENTS:-clients threads pool nginx}"
+OUT_OVERRIDE="${OUT:-}"
 
 SMOKE=false
 [ "${1:-}" = "--smoke" ] && SMOKE=true
@@ -38,9 +50,10 @@ if $SMOKE; then
     REPETITIONS="${REPETITIONS:-1}"; WARMUP="${WARMUP:-2}"; DURATION="${DURATION:-3}"
     CLIENTS_LEVELS="1 8"; REPLICA_LEVELS="1 2"; THREAD_LEVELS="16"; POOL_LEVELS="10"; POOL_CLIENTS="8"
     WARM_RUN="${WARM_RUN:-3}"; NGINX_LEVELS="0.5"; NGINX_CLIENTS="8"
+    OUT="${OUT_OVERRIDE:-$OUT}"
     rm -rf "$OUT"
 else
-    OUT="benchmarks/search/results/load"
+    OUT="${OUT_OVERRIDE:-benchmarks/search/results/load}"
     REPETITIONS="${REPETITIONS:-3}"; WARMUP="${WARMUP:-15}"; DURATION="${DURATION:-30}"
     CLIENTS_LEVELS="1 8 32 128 256"; REPLICA_LEVELS="1 2 4"; THREAD_LEVELS="16 64"; POOL_LEVELS="10 100"
     POOL_CLIENTS="32 128 256"
@@ -61,12 +74,19 @@ if ! $COMPOSE version > /dev/null 2>&1; then
     echo "ERROR: '$COMPOSE' does not work. Is Docker running? For the old command: COMPOSE=docker-compose" >&2
     exit 1
 fi
-if [ ! -d "$DATASET_DIR" ]; then
+if [ -n "$INDEX_IDS" ] && [ ! -f "$INDEX_IDS" ]; then
+    echo "ERROR: INDEX_IDS: no file $INDEX_IDS" >&2
+    exit 1
+fi
+if [ -z "$INDEX_IDS" ] && [ ! -d "$DATASET_DIR" ]; then
     echo "ERROR: dataset not found at $DATASET_DIR. stage_1 must be next to stage_2, or set DATASET_DIR." >&2
     exit 1
 fi
 # pwd -W: a Windows path in Git Bash, because Git Bash does not convert the one inside -Dexec.args.
-DATASET_ABSOLUTE="$(cd "$DATASET_DIR" && { pwd -W 2>/dev/null || pwd; })"
+if [ -z "$INDEX_IDS" ]; then
+    DATASET_ABSOLUTE="$(cd "$DATASET_DIR" && { pwd -W 2>/dev/null || pwd; })"
+fi
+FULL_STACK="$COMPOSE -f docker-compose.yml -f docker-compose.validation.yml"
 
 # A database of its own: the loader EMPTIES the one it receives. It takes it as an argument, not from this variable.
 export MONGO_DATABASE=search_benchmark
@@ -110,6 +130,41 @@ wait_for_replicas() {
     return 1
 }
 
+# The contract must hold before anything is measured (plan §9). Only with the sample dataset,
+# the data its expected results describe.
+validate_before_measuring() {
+    echo "Validating the APIs before measuring"
+    $FULL_STACK up -d --wait >> "$OUT/compose.log" 2>&1
+    wait_for_replicas 1
+    if ! COMPOSE="$FULL_STACK" bash scripts/validate-api.sh > "$OUT/validation.txt" 2>&1; then
+        echo "ERROR: validate-api.sh failed, nothing was measured. See $OUT/validation.txt" >&2
+        return 1
+    fi
+    tail -1 "$OUT/validation.txt"
+    $COMPOSE stop control ingestion indexing >> "$OUT/compose.log" 2>&1
+}
+
+# Builds the index with the real services. A book that fails is reported and skipped.
+build_index_from_ids() {
+    local ids total=0 failed=0
+    ids="$(grep -E '^[0-9]+$' "$INDEX_IDS" | tr -d '')"
+    $COMPOSE exec -T mongo mongosh --quiet "$MONGO_DATABASE" --eval 'db.dropDatabase()' > /dev/null
+    $FULL_STACK up -d --wait mongo hz-1 hz-2 ingestion indexing >> "$OUT/compose.log" 2>&1
+    for id in $ids; do
+        total=$((total + 1))
+        if ! curl -sf -m 300 -X POST "localhost:7001/ingest/$id" > /dev/null             || ! curl -sf -m 120 -X POST "localhost:7002/index/update/$id" > /dev/null; then
+            failed=$((failed + 1))
+            echo "WARNING: book $id could not be ingested or indexed" >&2
+        fi
+        [ $((total % 20)) -ne 0 ] || echo "  $total books"
+    done
+    curl -sf -m 120 -X POST localhost:7002/index/publish
+    echo
+    echo "Index built from $INDEX_IDS: $((total - failed)) of $total books"
+    INDEX_BOOKS=$((total - failed))
+    $COMPOSE stop ingestion indexing >> "$OUT/compose.log" 2>&1
+}
+
 run_point() {
     local experiment="$1" replicas="$2" threads="$3" pool="$4" clients="$5" repetition="$6"
     local label="${experiment}-r${replicas}-t${threads}-p${pool}-c${clients}-rep${repetition}"
@@ -126,13 +181,20 @@ run_point() {
 mkdir -p "$OUT"
 trap cleanup EXIT
 
-echo "Building the image of Search"
-$COMPOSE build search >> "$OUT/compose.log" 2>&1
+echo "Building the images"
+$COMPOSE build >> "$OUT/compose.log" 2>&1
 $COMPOSE up -d --wait mongo >> "$OUT/compose.log" 2>&1
 
-echo "Loading the dataset from $DATASET_ABSOLUTE into $MONGO_DATABASE"
-"$MVN" -q -B install -DskipTests -pl common -am
-(cd search-service && "$MVN" -q -B test-compile exec:java -Dexec.args="'$DATASET_ABSOLUTE' mongodb://localhost:27017 $MONGO_DATABASE")
+if [ -n "$INDEX_IDS" ]; then
+    build_index_from_ids
+    DATASET_DESCRIPTION="$INDEX_IDS ($INDEX_BOOKS books)"
+else
+    echo "Loading the dataset from $DATASET_ABSOLUTE into $MONGO_DATABASE"
+    "$MVN" -q -B install -DskipTests -pl common -am
+    (cd search-service && "$MVN" -q -B test-compile exec:java -Dexec.args="'$DATASET_ABSOLUTE' mongodb://localhost:27017 $MONGO_DATABASE")
+    DATASET_DESCRIPTION="$DATASET_ABSOLUTE ($(find "$DATASET_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') books)"
+    validate_before_measuring
+fi
 
 # Host, limits and dataset of this run: the report must state them (enunciado §6.1).
 {
@@ -146,33 +208,40 @@ echo "Loading the dataset from $DATASET_ABSOLUTE into $MONGO_DATABASE"
     fi
     echo "docker: $(docker info --format '{{.NCPU}} CPUs, {{.MemTotal}} bytes, {{.OperatingSystem}}')"
     java -version 2>&1 | sed 's/^/java: /'
-    echo "dataset: $DATASET_ABSOLUTE ($(find "$DATASET_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') books)"
+    echo "dataset: $DATASET_DESCRIPTION"
     echo "repetitions: $REPETITIONS, warmup: ${WARMUP}s, duration: ${DURATION}s, warm run after each start: ${WARM_RUN}s"
     echo "nginx CPUs in these tests: $BASE_NGINX_CPUS, except in the experiment named nginx<CPUs>"
     echo "limits (.env):"
     grep -E '^(SEARCH|MONGO|NGINX|HZ)_(CPUS|MEM_LIMIT)=' .env | sed 's/^/  /'
 } > "$OUT/host.txt"
 
+# The levels of an experiment, or nothing if EXPERIMENTS does not include it.
+selected() {
+    case " $EXPERIMENTS " in
+        *" $1 "*) echo "$2" ;;
+    esac
+}
+
 for repetition in $(seq 1 "$REPETITIONS"); do
-    for replicas in $REPLICA_LEVELS; do
+    for replicas in $(selected clients "$REPLICA_LEVELS"); do
         start_system "$replicas" "$BASE_THREADS" "$BASE_POOL"
         for clients in $CLIENTS_LEVELS; do
             run_point clients "$replicas" "$BASE_THREADS" "$BASE_POOL" "$clients" "$repetition"
         done
     done
-    for threads in $THREAD_LEVELS; do
+    for threads in $(selected threads "$THREAD_LEVELS"); do
         start_system 1 "$threads" "$BASE_POOL"
         for clients in $CLIENTS_LEVELS; do
             run_point threads 1 "$threads" "$BASE_POOL" "$clients" "$repetition"
         done
     done
-    for pool in $POOL_LEVELS; do
+    for pool in $(selected pool "$POOL_LEVELS"); do
         start_system 1 "$BASE_THREADS" "$pool"
         for clients in $POOL_CLIENTS; do
             run_point pool 1 "$BASE_THREADS" "$pool" "$clients" "$repetition"
         done
     done
-    for cpus in $NGINX_LEVELS; do
+    for cpus in $(selected nginx "$NGINX_LEVELS"); do
         export NGINX_CPUS="$cpus"
         start_system 1 "$BASE_THREADS" "$BASE_POOL"
         for clients in $NGINX_CLIENTS; do
