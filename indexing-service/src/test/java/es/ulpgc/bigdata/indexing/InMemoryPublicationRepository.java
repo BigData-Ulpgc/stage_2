@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -158,5 +159,17 @@ class InMemoryPublicationRepository implements PublicationRepository {
         });
         ids.sort(null);
         return ids;
+    }
+
+    @Override
+    public List<Integer> visibleAmong(Collection<Integer> bookIds, int version) {
+        List<Integer> visible = new ArrayList<>();
+        for (int id : new TreeSet<>(bookIds)) {
+            Integer v = indexBooks.get(id);
+            if (v != null && v <= version) {
+                visible.add(id);
+            }
+        }
+        return visible;
     }
 }

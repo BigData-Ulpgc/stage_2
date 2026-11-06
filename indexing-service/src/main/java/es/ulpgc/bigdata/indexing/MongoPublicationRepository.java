@@ -57,6 +57,8 @@ public final class MongoPublicationRepository implements PublicationRepository {
     private static final String COLLECTION = "collection";
     private static final String PUBLISHED_AT = "published_at";
     private static final UpdateOptions UPSERT = new UpdateOptions().upsert(true);
+    /** Ids per $in of visibleAmong: one query stays small whatever the backlog. */
+    static final int IN_BATCH = 1_000;
 
     private final MongoCollection<Document> indexMeta;
     private final MongoCollection<Document> indexBooks;
@@ -224,5 +226,19 @@ public final class MongoPublicationRepository implements PublicationRepository {
                 .sort(Sorts.ascending(ID))
                 .forEach(doc -> ids.add(doc.get(ID, Number.class).intValue()));
         return ids;
+    }
+
+    /** One query by _id (the primary index) per IN_BATCH ids. */
+    @Override
+    public List<Integer> visibleAmong(Collection<Integer> bookIds, int version) {
+        List<Integer> all = new ArrayList<>(new TreeSet<>(Objects.requireNonNull(bookIds, "bookIds")));
+        List<Integer> visible = new ArrayList<>();
+        for (int from = 0; from < all.size(); from += IN_BATCH) {
+            List<Integer> batch = all.subList(from, Math.min(from + IN_BATCH, all.size()));
+            indexBooks.find(Filters.and(Filters.in(ID, batch), Filters.lte(VERSION, version)))
+                    .projection(Projections.include(ID))
+                    .forEach(doc -> visible.add(doc.get(ID, Number.class).intValue()));
+        }
+        return visible;
     }
 }
