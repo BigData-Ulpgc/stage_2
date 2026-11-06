@@ -14,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * The HTTP API of api/indexing-openapi.yaml on top of ServiceServer (common): JSON with
@@ -46,7 +47,12 @@ public final class IndexingApi {
 
     /** The server with every route and error handler; the caller calls start(port). */
     public Javalin create(String serviceName, int maxThreads) {
-        Javalin app = ServiceServer.create(serviceName, maxThreads);
+        return create(serviceName, maxThreads, Map::of);
+    }
+
+    /** @param extraStatus fields added to GET /status (e.g. the state of Hazelcast): cheap, never MongoDB */
+    public Javalin create(String serviceName, int maxThreads, Supplier<Map<String, Object>> extraStatus) {
+        Javalin app = ServiceServer.create(serviceName, maxThreads, extraStatus);
         app.post("/index/update/{book_id}", this::update);
         app.get("/index/status", this::indexStatus);
         app.post("/index/publish", this::publish);

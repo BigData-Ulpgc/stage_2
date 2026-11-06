@@ -108,13 +108,15 @@ public final class IndexSnapshotLoader {
      * Metadata of the published ids. books may be AHEAD of the index (Indexing saves the
      * metadata before publishing), never behind; if a published id has no metadata anyway,
      * the book stays visible with null fields instead of disappearing from the results.
-     * Books already in {@code reuse} (may be null) are not read again.
+     * Books already in {@code reuse} (may be null) are not read again, except those placeholders:
+     * their metadata may have arrived since the last version.
      */
     private List<BookMetadata> metadataOf(List<Integer> ids, IndexSnapshot reuse) {
         Map<Integer, BookMetadata> found = new HashMap<>();
         List<Integer> missing = new ArrayList<>();
         for (int id : ids) {
-            Optional<BookMetadata> known = reuse == null ? Optional.empty() : reuse.book(id);
+            Optional<BookMetadata> known = reuse == null ? Optional.empty()
+                    : reuse.book(id).filter(book -> !book.equals(withoutMetadata(id)));
             if (known.isPresent()) {
                 found.put(id, known.get());
             } else {
@@ -126,8 +128,13 @@ public final class IndexSnapshotLoader {
         }
         List<BookMetadata> result = new ArrayList<>(ids.size());
         for (int id : ids) {
-            result.add(found.getOrDefault(id, new BookMetadata(id, null, null, null, null, null, null, null, null)));
+            result.add(found.getOrDefault(id, withoutMetadata(id)));
         }
         return result;
+    }
+
+    /** The placeholder of a published book whose metadata could not be found. */
+    private static BookMetadata withoutMetadata(int id) {
+        return new BookMetadata(id, null, null, null, null, null, null, null, null);
     }
 }

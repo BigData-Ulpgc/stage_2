@@ -57,4 +57,10 @@ public interface PublicationRepository {
 
     /** The books whose first version is exactly this one, sorted (to repair a missing history entry). */
     List<Integer> booksOfVersion(int version);
+
+    /**
+     * Of these books, those visible in {@code version} (in index_books with a version <= it), in
+     * no particular order: the ones whose state may become PUBLISHED (T10, DR-08b).
+     */
+    List<Integer> visibleAmong(Collection<Integer> bookIds, int version);
 }

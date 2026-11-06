@@ -56,6 +56,30 @@ class SearchEngineTest {
     }
 
     @Test
+    void theRankingOrdersAllTheMatchesBeforeCuttingThePage() {
+        ResultRanking newestFirst = (matches, query) -> matches.stream()
+                .sorted(java.util.Comparator.comparing(BookMetadata::year).reversed()
+                        .thenComparing(BookMetadata::bookId))
+                .toList();
+        SearchEngine ranked = new SearchEngine(source, newestFirst);
+        Map<String, List<String>> params = Map.of("q", List.of("river"), "limit", List.of("2"));
+
+        SearchEngine.Result result = ranked.search(SNAPSHOT, SearchQuery.parse(params, Tokenizer.standard()));
+
+        assertEquals(List.of(4, 2), ids(result), "book 4 is the newest and would not be in the first page by id");
+        assertEquals(3, result.total());
+    }
+
+    @Test
+    void byDefaultTheOrderIsByBookIdEvenIfThePostingsArriveUnordered() {
+        List<BookMetadata> unordered = List.of(book(4, "a", "en", 2000), book(2, "a", "en", 2000), book(3, "a", "en", 2000));
+
+        List<Integer> ids = ResultRanking.BY_BOOK_ID.rank(unordered, null).stream().map(BookMetadata::bookId).toList();
+
+        assertEquals(List.of(2, 3, 4), ids);
+    }
+
+    @Test
     void oneTermReturnsItsPublishedBooksSortedById() {
         SearchEngine.Result result = search("q", "river");
 
