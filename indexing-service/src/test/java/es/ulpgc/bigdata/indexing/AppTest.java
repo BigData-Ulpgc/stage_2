@@ -161,6 +161,40 @@ class AppTest {
     }
 
     @Test
+    void trasUnaReconstruccionIndexaEnLaColeccionDeCurrent() throws Exception {
+        String database = "search_engine_test_app_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            MongoDatabase db = admin.getDatabase(database);
+            try {
+                // What a rebuild (DR-10) leaves: CURRENT names a collection other than MONGO_COLLECTION.
+                assertTrue(new MongoPublicationRepository(db).switchCurrent(null,
+                        new Publication(1, 0, "inverted_index_r01", "2026-11-06T10:00:00Z")));
+                new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir())
+                        .save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+                running = App.start(Env.of(env));
+
+                assertEquals(200, post("/index/update/1342").statusCode());
+                assertEquals(200, post("/index/publish").statusCode());
+
+                assertNotNull(db.getCollection("inverted_index_r01").find(new Document("term", "elizabeth")).first(),
+                        "las posting lists van a la colección que lee Search");
+                assertEquals(0, db.getCollection("inverted_index").countDocuments(), "y no a MONGO_COLLECTION");
+                Document current = db.getCollection("index_meta").find(new Document("_id", "CURRENT")).first();
+                assertEquals(2, current.getInteger("version"));
+                assertEquals("inverted_index_r01", current.getString("collection"), "publish la conserva");
+            } finally {
+                db.drop();
+            }
+        }
+    }
+
+    @Test
     void alArrancarCompletaUnaPublicacionInterrumpida() throws Exception {
         String database = "search_engine_test_app_" + System.nanoTime();
         try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()

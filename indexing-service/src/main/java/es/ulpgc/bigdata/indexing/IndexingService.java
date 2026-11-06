@@ -2,6 +2,7 @@ package es.ulpgc.bigdata.indexing;
 
 import es.ulpgc.bigdata.datalake.Datalake;
 import es.ulpgc.bigdata.datamart.index.InvertedIndex;
+import es.ulpgc.bigdata.datamart.index.MongoInvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.indexlog.IndexLog;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
@@ -25,9 +26,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Core of the Indexing Service, without anything of HTTP (DR-05, D8): IndexingApi calls it
@@ -57,6 +61,14 @@ import java.util.concurrent.locks.ReentrantLock;
  * is the evidence that the book is complete in the index (publish, INDEXED and the recovery
  * of the Control rely on it), so it is written only when everything else is.
  *
+ * Which collection (D8, DR-10): the posting lists go to the collection of the inverted index
+ * that CURRENT names, the one Search reads; MONGO_COLLECTION while there is no CURRENT or it
+ * names none. A rebuild publishes a new collection, so CURRENT is read again before each write,
+ * not once at start: after a rebuild in any replica, the next write already goes to the new
+ * collection. A write that read CURRENT just before a rebuild switched it still lands in the
+ * old one, and nothing is lost: a rebuild only starts with the writers stopped, and the book of
+ * an update already running is in the datalake, so the rebuild indexes it too.
+ *
  * Errors are exceptions with a meaning; IndexingApi turns them into HTTP codes:
  *  - BookNotFoundException:                    the book is not complete in the datalake (404);
  *  - EmptyBookException:                       the book gives no term, nothing written (422);
@@ -69,7 +81,11 @@ public final class IndexingService {
 
     private final Datalake datalake;
     private final MetadataRepository metadata;
-    private final InvertedIndex index;
+    /** Opens the inverted index of a collection; each one is opened once and kept in indexes. */
+    private final Function<String, InvertedIndex> openIndex;
+    /** MONGO_COLLECTION: where the posting lists go while CURRENT names no collection. */
+    private final String defaultCollection;
+    private final Map<String, InvertedIndex> indexes = new ConcurrentHashMap<>();
     private final IndexLog indexLog;
     private final PublicationRepository publications;
     private final MetadataParser parser;
@@ -81,25 +97,54 @@ public final class IndexingService {
     /** Only one thread at a time touches the inverted index. */
     private final ReentrantLock writeLock = new ReentrantLock();
 
-    /** The books of a batch are prepared one after another, in the calling thread (tests). */
+    /**
+     * One inverted index whatever collection CURRENT names (tests and benchmarks of a single
+     * collection). The books of a batch are prepared one after another, in the calling thread.
+     */
     public IndexingService(Datalake datalake, MetadataRepository metadata, InvertedIndex index,
                            IndexLog indexLog, PublicationRepository publications,
                            MetadataParser parser, Tokenizer tokenizer) {
         this(datalake, metadata, index, indexLog, publications, parser, tokenizer, Runnable::run);
     }
 
-    /** @param parsers where indexBatch prepares the books: a pool of INDEXING_THREADS in the service */
+    /**
+     * One inverted index whatever collection CURRENT names (tests and benchmarks of a single
+     * collection).
+     *
+     * @param parsers where indexBatch prepares the books: a pool of INDEXING_THREADS in the service
+     */
     public IndexingService(Datalake datalake, MetadataRepository metadata, InvertedIndex index,
+                           IndexLog indexLog, PublicationRepository publications,
+                           MetadataParser parser, Tokenizer tokenizer, Executor parsers) {
+        this(datalake, metadata, oneIndex(index), MongoInvertedIndex.DEFAULT_COLLECTION,
+                indexLog, publications, parser, tokenizer, parsers);
+    }
+
+    /**
+     * The service: the posting lists go to the collection CURRENT names (D8, DR-10).
+     *
+     * @param openIndex         opens the inverted index of a collection; called once per collection
+     * @param defaultCollection MONGO_COLLECTION, while CURRENT names no collection
+     * @param parsers           where indexBatch prepares the books: a pool of INDEXING_THREADS
+     */
+    public IndexingService(Datalake datalake, MetadataRepository metadata,
+                           Function<String, InvertedIndex> openIndex, String defaultCollection,
                            IndexLog indexLog, PublicationRepository publications,
                            MetadataParser parser, Tokenizer tokenizer, Executor parsers) {
         this.datalake = Objects.requireNonNull(datalake, "datalake");
         this.metadata = Objects.requireNonNull(metadata, "metadata");
-        this.index = Objects.requireNonNull(index, "index");
+        this.openIndex = Objects.requireNonNull(openIndex, "openIndex");
+        this.defaultCollection = Objects.requireNonNull(defaultCollection, "defaultCollection");
         this.indexLog = Objects.requireNonNull(indexLog, "indexLog");
         this.publications = Objects.requireNonNull(publications, "publications");
         this.parser = Objects.requireNonNull(parser, "parser");
         this.tokenizer = Objects.requireNonNull(tokenizer, "tokenizer");
         this.parsers = Objects.requireNonNull(parsers, "parsers");
+    }
+
+    private static Function<String, InvertedIndex> oneIndex(InvertedIndex index) {
+        Objects.requireNonNull(index, "index");
+        return collection -> index;
     }
 
     /**
@@ -120,7 +165,7 @@ public final class IndexingService {
      */
     public UpdateResult update(int bookId) {
         Prepared book = prepare(bookId);
-        write(List.of(book));
+        write(List.of(book), currentCollection());
         return book.result();
     }
 
@@ -140,6 +185,21 @@ public final class IndexingService {
      *                              log, so none of it is complete, and repeating it is safe
      */
     public BatchResult indexBatch(List<Integer> bookIds) throws InterruptedException {
+        return indexBatch(bookIds, this::currentCollection);
+    }
+
+    /**
+     * indexBatch, but the posting lists go to {@code collection} whatever CURRENT says: the
+     * rebuild (DR-10) fills a new collection that Search does not read yet. The metadata and the
+     * log are the same stores as always.
+     */
+    public BatchResult indexBatchInto(String collection, List<Integer> bookIds) throws InterruptedException {
+        Objects.requireNonNull(collection, "collection");
+        return indexBatch(bookIds, () -> collection);
+    }
+
+    /** @param collection read just before writing, once the books are prepared */
+    private BatchResult indexBatch(List<Integer> bookIds, Supplier<String> collection) throws InterruptedException {
         List<Integer> ids = List.copyOf(new LinkedHashSet<>(Objects.requireNonNull(bookIds, "bookIds")));
         List<CompletableFuture<Prepared>> parsing = new ArrayList<>(ids.size());
         for (int id : ids) {
@@ -164,7 +224,7 @@ public final class IndexingService {
             }
         }
         if (!ready.isEmpty()) {
-            write(ready);
+            write(ready, collection.get());
         }
         return new BatchResult(ready.stream().map(Prepared::result).toList(), rejected);
     }
@@ -203,8 +263,11 @@ public final class IndexingService {
     /**
      * Writes prepared books in the order of DR-07: metadata, posting lists and LAST the log,
      * the evidence that they are complete. One call to each store, whatever the number of books.
+     *
+     * @param collection the collection of the inverted index the posting lists go to
      */
-    private void write(List<Prepared> books) {
+    private void write(List<Prepared> books, String collection) {
+        InvertedIndex index = indexOf(collection);
         // 1. Metadata first, as in the plan; the repository is thread-safe.
         metadata.saveAll(books.stream().map(Prepared::metadata).toList());
 
@@ -231,16 +294,32 @@ public final class IndexingService {
      * between), which is fine for monitoring.
      */
     public IndexStatus status() {
+        Optional<Publication> current = publications.current();
         long booksIndexed = indexLog.count();                 // complete books only (DR-07)
         Instant lastUpdate = indexLog.lastIndexedAt().orElse(null);
-        long indexSizeBytes = index.diskUsageBytes();         // no fsync on the shared client
-        Optional<Publication> current = publications.current();
+        // The collection Search reads; no fsync on the shared client
+        long indexSizeBytes = indexOf(collectionOf(current)).diskUsageBytes();
         return new IndexStatus(
                 booksIndexed,
                 lastUpdate,
                 indexSizeBytes,
                 current.map(Publication::version).orElse(null),
                 current.map(Publication::books).orElse(0L));
+    }
+
+    /** The collection of CURRENT, where the next write goes: one read of index_meta. */
+    private String currentCollection() {
+        return collectionOf(publications.current());
+    }
+
+    /** D8: the one CURRENT names; MONGO_COLLECTION if there is no CURRENT or it names none. */
+    private String collectionOf(Optional<Publication> current) {
+        return current.map(Publication::collection).orElse(defaultCollection);
+    }
+
+    private InvertedIndex indexOf(String collection) {
+        return indexes.computeIfAbsent(collection,
+                name -> Objects.requireNonNull(openIndex.apply(name), "openIndex devolvió null para " + name));
     }
 
     private static String read(Path file) {

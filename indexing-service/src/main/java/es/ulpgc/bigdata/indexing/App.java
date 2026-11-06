@@ -10,6 +10,7 @@ import es.ulpgc.bigdata.coordination.BackgroundConnection;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
+import es.ulpgc.bigdata.datamart.index.MongoInvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
@@ -118,7 +119,9 @@ public final class App {
             IndexingService service = new IndexingService(
                     new RangeBasedDatalake(layout.datalakeDir()),
                     new MongoMetadataRepository(db),
-                    mongo.openIndex(client),                 // shared client: does not own it
+                    // The collection of CURRENT (D8, DR-10), on the shared client that App closes
+                    collection -> new MongoInvertedIndex(db, collection),
+                    mongo.collection(),
                     new MongoIndexLog(db),
                     publications,
                     new MetadataParser(),
