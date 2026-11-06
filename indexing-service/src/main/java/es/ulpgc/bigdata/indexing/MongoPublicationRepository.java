@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -228,10 +229,13 @@ public final class MongoPublicationRepository implements PublicationRepository {
         return ids;
     }
 
-    /** One query by _id (the primary index) per IN_BATCH ids. */
+    /**
+     * One query by _id (the primary index) per IN_BATCH ids. Without repeated ids, so that an id
+     * repeated in two batches is not returned twice; the order does not matter.
+     */
     @Override
     public List<Integer> visibleAmong(Collection<Integer> bookIds, int version) {
-        List<Integer> all = new ArrayList<>(new TreeSet<>(Objects.requireNonNull(bookIds, "bookIds")));
+        List<Integer> all = new ArrayList<>(new LinkedHashSet<>(Objects.requireNonNull(bookIds, "bookIds")));
         List<Integer> visible = new ArrayList<>();
         for (int from = 0; from < all.size(); from += IN_BATCH) {
             List<Integer> batch = all.subList(from, Math.min(from + IN_BATCH, all.size()));

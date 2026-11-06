@@ -43,9 +43,11 @@ import java.util.function.Function;
  * count them. So every publication first checks CURRENT against index_books (repair): the
  * books of CURRENT must be exactly those with a version <= it, as Search's fixture also writes.
  *
- * After every publish call, still inside the lock, the PublicationNotifier tells the rest of
- * the system (DR-08b): the states of the published books (T10) and the IndexPublished event.
- * If it fails, the call still answers what was published: CURRENT has already switched.
+ * After every publish call, still inside the lock, the PublicationNotifier is handed what the
+ * call answers (DR-08b), so the calls never overlap and the versions arrive in order. It must
+ * return at once: the Hazelcast one only queues the announcement (T10 and the IndexPublished
+ * event) for a thread of its own. If it fails, the call still answers what was published:
+ * CURRENT has already switched.
  */
 public final class Publisher {
 

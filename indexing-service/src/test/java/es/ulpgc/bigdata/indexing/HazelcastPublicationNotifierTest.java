@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.indexing;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.mongodb.MongoException;
 import es.ulpgc.bigdata.coordination.BookState;
 import es.ulpgc.bigdata.coordination.Claim;
 import es.ulpgc.bigdata.coordination.Coordination;
@@ -19,9 +20,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * T10 and IndexPublished (DR-08b) against a real Hazelcast member embedded in the JVM: the
  * books reach INDEXED through the same transitions as in production (seed, claim, complete).
  * index_books is the in-memory fake.
+ *
+ * The notifier works in a thread of its own: the tests wait for it with awaitQueued.
  */
 class HazelcastPublicationNotifierTest {
 
@@ -63,7 +70,12 @@ class HazelcastPublicationNotifierTest {
 
     @AfterEach
     void tearDown() {
+        notifier.close();
         coordination.unsubscribe(subscription);
+    }
+
+    private void awaitNotifier() throws Exception {
+        notifier.awaitQueued(Duration.ofSeconds(5));
     }
 
     /** The books go PENDING -> ... -> INDEXED, as the workers of Ingestion and Indexing do. */
@@ -108,6 +120,7 @@ class HazelcastPublicationNotifierTest {
         published(1, 1, 2);                              // 3 is indexed but not published yet
 
         notifier.afterPublish(new PublishResult(1, 2, 2, AT));
+        awaitNotifier();
 
         assertEquals(BookState.PUBLISHED, stateOf(1));
         assertEquals(BookState.PUBLISHED, stateOf(2));
@@ -124,6 +137,7 @@ class HazelcastPublicationNotifierTest {
 
         notifier.afterPublish(new PublishResult(1, 0, 1, AT));
         notifier.afterPublish(new PublishResult(2, 1, 2, AT));    // a later one, as a marker
+        awaitNotifier();
 
         assertEquals(BookState.PUBLISHED, stateOf(4));
         // The first event is the one of version 2: 1 new book, 2 in total.
@@ -136,6 +150,7 @@ class HazelcastPublicationNotifierTest {
         indexedInBookState(5);
 
         notifier.afterPublish(new PublishResult(null, 0, 0, null));
+        awaitNotifier();
 
         assertEquals(BookState.INDEXED, stateOf(5));
         assertNull(events.poll(300, TimeUnit.MILLISECONDS));
@@ -146,28 +161,188 @@ class HazelcastPublicationNotifierTest {
         indexedInBookState(6, 7);
         published(1, 6);
 
-        int marked = notifier.connected(coordination);
+        notifier.connected(coordination);
+        awaitNotifier();
 
-        assertEquals(1, marked);
         assertEquals(BookState.PUBLISHED, stateOf(6));
         assertEquals(BookState.INDEXED, stateOf(7));
     }
 
     @Test
-    void desconectadoSeSaltaYAlVolverSeNotificaDeNuevo() throws Exception {
+    void desconectadoSeSaltaYAlVolverSeAnunciaLaVersionYSeMarcanLosEstados() throws Exception {
         notifier.connected(coordination);
+        awaitNotifier();
         indexedInBookState(8);
         published(1, 8);
 
         notifier.connectionChanged(false);
         notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        awaitNotifier();
         assertEquals("disconnected", notifier.state());
+        assertEquals(1, notifier.skipped());
         assertEquals(BookState.INDEXED, stateOf(8));
+        assertNull(events.poll(300, TimeUnit.MILLISECONDS));
 
         notifier.connectionChanged(true);
-        notifier.afterPublish(new PublishResult(1, 0, 1, AT));
+        awaitNotifier();
+
+        assertEquals(new IndexPublished(1, 1, 1, AT), events.poll(5, TimeUnit.SECONDS));
         assertEquals(BookState.PUBLISHED, stateOf(8));
+    }
+
+    @Test
+    void antesDeConectarSeGuardaLaUltimaVersionYSeAnunciaAlConectar() throws Exception {
+        indexedInBookState(10, 11);
+        published(1, 10);
+        notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        published(2, 11);
+        notifier.afterPublish(new PublishResult(2, 1, 2, AT));
+
+        notifier.connected(coordination);
+        awaitNotifier();
+
+        assertEquals(2, notifier.skipped());
+        assertEquals(new IndexPublished(2, 1, 2, AT), events.poll(5, TimeUnit.SECONDS));
+        assertNull(events.poll(300, TimeUnit.MILLISECONDS), "solo se anuncia la última");
+        assertEquals(BookState.PUBLISHED, stateOf(10));
+        assertEquals(BookState.PUBLISHED, stateOf(11));
+    }
+
+    @Test
+    void unaReconexionSinNadaSaltadoNoAnunciaNada() throws Exception {
+        notifier.connected(coordination);
+        notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        awaitNotifier();
+        assertEquals(new IndexPublished(1, 1, 1, AT), events.poll(5, TimeUnit.SECONDS));
+
+        notifier.connectionChanged(false);
+        notifier.connectionChanged(true);
+        awaitNotifier();
+
+        assertNull(events.poll(300, TimeUnit.MILLISECONDS));
+    }
+
+    // ---- its own thread (review of #32) ----
+
+    @Test
+    void conT10BloqueadoAfterPublishVuelveEnseguidaYLasSincronizacionesSeAgrupan() throws Exception {
+        notifier.connected(coordination);
+        awaitNotifier();
+        indexedInBookState(12, 13);
+        published(1, 12);
+        CountDownLatch insideSync = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger syncs = new AtomicInteger();
+        publications.beforeCurrent(() -> {
+            if (syncs.incrementAndGet() == 1) {
+                insideSync.countDown();
+                await(release);                         // a MongoDB or a Hazelcast that is slow
+            }
+        });
+
+        notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        assertTrue(insideSync.await(5, TimeUnit.SECONDS));
+        long start = System.nanoTime();
+        published(2, 13);
+        for (int version = 2; version <= 4; version++) {
+            notifier.afterPublish(new PublishResult(version, 1, version, AT));
+        }
+        long tookMs = (System.nanoTime() - start) / 1_000_000;
+        release.countDown();
+        awaitNotifier();
+
+        assertTrue(tookMs < 500, "afterPublish solo encola, tardó " + tookMs + " ms");
+        assertEquals(2, syncs.get(), "las tres publicaciones durante la espera comparten una sincronización");
+        List<Integer> versions = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            versions.add(events.poll(5, TimeUnit.SECONDS).version());
+        }
+        assertEquals(List.of(1, 2, 3, 4), versions, "un evento por versión, en orden");
+        assertEquals(BookState.PUBLISHED, stateOf(12));
+        assertEquals(BookState.PUBLISHED, stateOf(13));
+    }
+
+    @Test
+    void siT10FallaElEventoSaleIgualYLaSiguientePublicacionMarcaLosEstados() throws Exception {
+        notifier.connected(coordination);
+        awaitNotifier();
+        indexedInBookState(14);
+        published(1, 14);
+        AtomicBoolean mongoDown = new AtomicBoolean(true);
+        publications.beforeCurrent(() -> {
+            if (mongoDown.get()) {
+                throw new MongoException("MongoDB no responde (simulado)");
+            }
+        });
+
+        notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        awaitNotifier();
+        assertEquals(new IndexPublished(1, 1, 1, AT), events.poll(5, TimeUnit.SECONDS));
+        assertEquals(BookState.INDEXED, stateOf(14));
+
+        mongoDown.set(false);
+        notifier.afterPublish(new PublishResult(1, 0, 1, AT));
+        awaitNotifier();
+
+        assertEquals(BookState.PUBLISHED, stateOf(14));
+    }
+
+    @Test
+    void siSePierdeElClusterConUnEventoEnColaNoSeEnviaYSeAnunciaAlVolver() throws Exception {
+        notifier.connected(coordination);
+        awaitNotifier();
+        published(1, 16);
+        CountDownLatch insideSync = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean first = new AtomicBoolean(true);
+        publications.beforeCurrent(() -> {
+            if (first.getAndSet(false)) {
+                insideSync.countDown();
+                await(release);
+            }
+        });
+        notifier.afterPublish(new PublishResult(1, 0, 1, AT));   // only a sync, which blocks
+        assertTrue(insideSync.await(5, TimeUnit.SECONDS));
+        notifier.afterPublish(new PublishResult(2, 1, 2, AT));   // queued behind it
+
+        notifier.connectionChanged(false);
+        release.countDown();
+        awaitNotifier();
+
+        assertNull(events.poll(300, TimeUnit.MILLISECONDS), "sin clúster no se llama a Hazelcast");
         assertEquals(1, notifier.skipped());
+        notifier.connectionChanged(true);
+        awaitNotifier();
+        assertEquals(new IndexPublished(2, 1, 2, AT), events.poll(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void closeEsperaUnMargenYLuegoCortaLoQueQueda() throws Exception {
+        notifier.connected(coordination);
+        awaitNotifier();
+        published(1, 15);
+        CountDownLatch insideSync = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        publications.beforeCurrent(() -> {
+            insideSync.countDown();
+            try {
+                Thread.sleep(60_000);                   // never ends by itself
+            } catch (InterruptedException e) {
+                interrupted.countDown();
+                Thread.currentThread().interrupt();
+            }
+        });
+        notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        assertTrue(insideSync.await(5, TimeUnit.SECONDS));
+
+        long start = System.nanoTime();
+        notifier.close();
+        long tookMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertTrue(tookMs >= HazelcastPublicationNotifier.CLOSE_GRACE.toMillis() - 100, "esperó " + tookMs + " ms");
+        assertTrue(tookMs < HazelcastPublicationNotifier.CLOSE_GRACE.toMillis() + 2_000, "esperó " + tookMs + " ms");
+        assertTrue(interrupted.await(1, TimeUnit.SECONDS), "close() debe interrumpir lo que sigue en marcha");
+        assertDoesNotThrow(() -> notifier.afterPublish(new PublishResult(2, 1, 2, AT)));
     }
 
     @Test
@@ -176,6 +351,7 @@ class HazelcastPublicationNotifierTest {
         published(1, 9);                                 // indexed with POST /index/update: no state
 
         notifier.afterPublish(new PublishResult(1, 1, 1, AT));
+        awaitNotifier();
 
         assertTrue(coordination.task(9).isEmpty());
         assertEquals(new IndexPublished(1, 1, 1, AT), events.poll(5, TimeUnit.SECONDS));
@@ -216,5 +392,14 @@ class HazelcastPublicationNotifierTest {
         notifier.connected(coordination);
 
         assertThrows(IllegalStateException.class, () -> notifier.connected(coordination));
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertTrue(latch.await(5, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 }

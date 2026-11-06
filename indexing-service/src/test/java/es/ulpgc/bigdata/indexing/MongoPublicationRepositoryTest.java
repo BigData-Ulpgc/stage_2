@@ -250,6 +250,20 @@ class MongoPublicationRepositoryTest {
         assertEquals(ids.size(), visible.size());
     }
 
+    @Test
+    void visibleAmongNoDevuelveDosVecesUnIdRepetidoEnDosLotes() {
+        List<Integer> ids = new ArrayList<>();
+        for (int id = 1; id <= MongoPublicationRepository.IN_BATCH; id++) {
+            ids.add(id);
+        }
+        publications.addBooks(ids, 1);
+        ids.add(1);                                     // the first id again, in the second batch
+
+        List<Integer> visible = publications.visibleAmong(ids, 1);
+
+        assertEquals(MongoPublicationRepository.IN_BATCH, visible.size());
+    }
+
     // ---- switchCurrent (the fencing of contract §5) ----
 
     @Test

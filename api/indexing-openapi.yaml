@@ -156,10 +156,12 @@ paths:
         published yet in `index_books` with version V+1 (a book keeps the first version in which
         it became visible), then switches the `CURRENT` document of `index_meta` to V+1 in ONE
         atomic operation, and records the version in `index_publications`. The index itself is
-        never copied. Then, through Hazelcast (coordination contract §4.1 T10 and §6), it marks
-        `PUBLISHED` in `book-state` every `INDEXED` book that is visible in `CURRENT`, and, only
-        when a new version was created, announces it with `IndexPublished` on the topic
-        `index-events`.
+        never copied. Right after answering, through Hazelcast (coordination contract §4.1 T10
+        and §6), it announces the version with `IndexPublished` on the topic `index-events`
+        (only when a new version was created, one event per version) and marks `PUBLISHED` in
+        `book-state` every `INDEXED` book that is visible in `CURRENT`. That runs in a thread of
+        its own, so a slow cluster never delays the answer; a caller that counts `INDEXED`
+        books just after the 200 may still see the published ones for a few milliseconds.
 
         **Completion: synchronous.** A 200 means `CURRENT` already points to the returned
         version; each Search replica loads it as soon as it receives the event, or at its next
@@ -167,9 +169,10 @@ paths:
         `index_publications` entry fails: the next call (or the next start) writes it.
 
         **Without Hazelcast** (still connecting, or the cluster is down) the publication is
-        made and answers 200 anyway: MongoDB is the truth. The states are marked by the next
-        publication or when the service connects (that also repairs a T10 interrupted by a
-        crash, contract §7); a lost event is covered by the periodic check of Search.
+        made and answers 200 anyway: MongoDB is the truth. When the service connects or
+        reconnects, it announces the last version it could not announce and marks the states
+        (that also repairs a T10 interrupted by a crash, contract §7); a lost event is covered
+        by the periodic check of Search.
         `GET /status` shows the state of the connection.
 
         **Idempotency.** If no book was indexed since the last publication, no empty version

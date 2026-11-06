@@ -234,16 +234,20 @@ class AppTest {
                 HttpResponse<String> publish = post("/index/publish");
 
                 assertEquals(200, publish.statusCode(), publish.body());
-                assertEquals(BookState.PUBLISHED, coordination.task(1342).orElseThrow().bookState());
+                // The event and T10 leave right after the answer, from the notifier's thread.
                 IndexPublished event = events.poll(5, TimeUnit.SECONDS);
                 assertNotNull(event, "no llegó IndexPublished");
                 JsonObject body = JsonParser.parseString(publish.body()).getAsJsonObject();
                 assertEquals(new IndexPublished(1, 1, 1, body.get("published_at").getAsString()), event);
+                awaitState(coordination, 1342, BookState.PUBLISHED);
 
                 running.close();
-                assertFalse(Thread.getAllStackTraces().keySet().stream()
-                                .anyMatch(t -> t.getName().equals("indexing-service-writer") && t.isAlive()),
-                        "close() volvió con el escritor todavía vivo");
+                assertFalse(alive("indexing-service-writer"), "close() volvió con el escritor todavía vivo");
+                // The executor ends its thread just after close() returns: a moment of margin.
+                for (int i = 0; i < 20 && alive("indexing-service-notifier"); i++) {
+                    Thread.sleep(50);
+                }
+                assertFalse(alive("indexing-service-notifier"), "el hilo del notifier sigue vivo tras close()");
             } finally {
                 running.close();                              // the writer stops before the client
                 hz.shutdown();
@@ -299,6 +303,11 @@ class AppTest {
             }
         }
         assertEquals(expected, role);
+    }
+
+    private static boolean alive(String threadName) {
+        return Thread.getAllStackTraces().keySet().stream()
+                .anyMatch(t -> t.getName().equals(threadName) && t.isAlive());
     }
 
     private static void awaitState(Coordination coordination, int bookId, BookState expected) throws Exception {
