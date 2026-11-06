@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -66,6 +67,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * the locks of the client that left. Back with the cluster, the writer takes the lock again
  * before writing anything (contract §5).
  *
+ * Also when the cluster is lost AND back while the writer is busy with a book (review of #37):
+ * meanwhile the member may have released the lock of this client and another replica may hold
+ * it, so connected being true again proves nothing. Each disconnection is counted, and a hold
+ * of the lock ends as soon as the count is not the one read before its tryLock. The book in
+ * hand is finished (its lease is still ours, and indexing is idempotent), then release() finds
+ * out whether the lock was still ours, and the writer competes for it again as a standby.
+ *
  * If a Hazelcast call fails, the writer waits 1, 2, 4... 30 s and tries again (the client
  * reconnects by itself); the wait starts again at 1 s as soon as the cluster answers a tryLock.
  */
@@ -100,6 +108,8 @@ public final class IndexingWriter implements Runnable {
 
     private volatile boolean stopping = false;
     private volatile boolean connected = true;
+    /** Disconnections seen so far: a hold of the lock is valid only while this does not change. */
+    private final AtomicLong disconnections = new AtomicLong();
     private volatile Role role = Role.STANDBY;
     private Duration outageDelay = Duration.ZERO;           // only the writer thread touches it
     private boolean holdsLock = false;                       // taken and not yet released; writer thread only
@@ -146,12 +156,13 @@ public final class IndexingWriter implements Runnable {
                     if (holdsLock) {
                         release();                          // pending since the cluster was lost
                     }
+                    long generation = disconnections.get();  // read BEFORE taking the lock
                     boolean holding = lock.tryLock(step);
                     backoff = MIN_BACKOFF;                  // the cluster answered: the next failure waits 1 s
                     if (holding) {
                         holdsLock = true;
                         try {
-                            writeWhileHolding();
+                            writeWhileHolding(generation);
                         } finally {
                             role = Role.STANDBY;
                         }
@@ -187,9 +198,13 @@ public final class IndexingWriter implements Runnable {
 
     /**
      * Called by Hazelcast when the client loses the cluster (false) or gets it back (true): on
-     * false the writer stops claiming and releases the lock (contract §5).
+     * false the writer stops claiming and releases the lock (contract §5), and the current hold
+     * of the lock ends even if the cluster is back before the writer looks.
      */
     public void connectionChanged(boolean up) {
+        if (!up) {
+            disconnections.incrementAndGet();           // before connected: never seen up and unchanged
+        }
         connected = up;
     }
 
@@ -200,7 +215,7 @@ public final class IndexingWriter implements Runnable {
     /** For GET /status: what the writer did and the ids the coordination dropped. */
     public Map<String, Object> status() {
         Map<String, Object> status = new LinkedHashMap<>();
-        status.put("role", role.name().toLowerCase());
+        status.put("role", role.name().toLowerCase(Locale.ROOT));
         status.put("indexed", indexed.get());
         status.put("requeued", requeued.get());
         status.put("failed", failed.get());
@@ -212,14 +227,22 @@ public final class IndexingWriter implements Runnable {
         return status;
     }
 
-    private void writeWhileHolding() throws InterruptedException {
+    /**
+     * Claims and indexes while this hold of the lock is valid: not stopping, connected, and no
+     * disconnection since the tryLock that took it (generation).
+     */
+    private void writeWhileHolding(long generation) throws InterruptedException {
         role = Role.ACTIVE;
         LOG.info("{}: holds index-writer, consuming {}", owner, Stage.INDEXING.queue());
-        while (!stopping && connected) {
+        while (!stopping && connected && disconnections.get() == generation) {
             Optional<Claim> first = coordination.claim(Stage.INDEXING, owner, step);
             if (first.isPresent()) {
                 process(batchFrom(first.get()));
             }
+        }
+        if (!stopping && connected) {
+            LOG.warn("{}: the cluster was lost while holding index-writer; taking it again before "
+                    + "the next book", owner);
         }
     }
 
