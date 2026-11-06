@@ -130,8 +130,9 @@ with the next version anyway (the publication reads `index_log`, plan §6.5).
 
 - The claim (T2, T6) writes `leaseUntil = now + LEASE_SECONDS`. Each claimant reads
   `LEASE_SECONDS` from its own environment (default 120 s, much longer than one download or
-  indexing). A worker that needs longer may renew: `replace` of its own entry with a later
-  `leaseUntil`.
+  indexing). Indexing claims up to `INDEX_WRITE_BATCH` books and writes them together: the
+  lease must cover the whole batch, which takes seconds. A worker that needs longer may renew:
+  `replace` of its own entry with a later `leaseUntil`.
 - Every `LEASE_CHECK_SECONDS` (default 10 s) the Control queries
   `state IN ('INGESTING', 'INDEXING') AND leaseUntil < now` and applies T4/T8, or T5/T9 when
   the attempts are used up, with `lastError = LEASE_EXPIRED`.

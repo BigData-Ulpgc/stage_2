@@ -17,9 +17,14 @@ info:
     HTTP: the HTTP endpoints are for the Control Module (publication), for administration
     (single update, rebuild) and for the functional validation. Both paths run the same code.
     The queue is consumed by the **index writer** of the replica that holds the lock
-    `index-writer` (coordination contract §5); the other replicas wait as standbys. It claims
-    each book (`INDEXING`), indexes it and marks it `INDEXED` once it is in `index_log`; failures
-    follow the codes of the contract (§4.3). The HTTP update does not change `book-state`.
+    `index-writer` (coordination contract §5); the other replicas wait as standbys. It works in
+    **batches** (DR-09): it claims a book (`INDEXING`), waiting for one, then the ones already in
+    the queue without waiting, up to `INDEX_WRITE_BATCH` (default 100). The books are read and
+    parsed on `INDEXING_THREADS` threads (default 4) and written together, so each distinct
+    term is written once per batch; each book becomes `INDEXED` once it is in `index_log`. With
+    an empty queue a batch is one book and nothing waits for more. Failures follow the codes
+    of the contract (§4.3): a book that cannot be read fails alone, a MongoDB failure requeues
+    the whole batch. The HTTP update indexes one book and does not change `book-state`.
 
     1. Ingestion writes `<id>._READY` and puts the id in `index-queue`.
     2. Indexing reads the book, saves its metadata (`books`) and its terms (`inverted_index`),
@@ -38,7 +43,7 @@ info:
       have) answers 404 `NOT_FOUND` with the same `Error` schema and `field: null`, never
       the web framework's own page. All services share this rule (`ServiceServer` in `common`).
     - **Writes are serialized** inside the service: concurrent requests and the index writer
-      are answered correctly, one write at a time. Across replicas, only the holder of
+      are answered correctly, one write (one book, or one batch of the writer) at a time. Across replicas, only the holder of
       `index-writer` consumes the queue; the writes of indexing are idempotent.
     - **Timeouts and retries (callers).** Connect timeout 2 s; request timeout 30 s for
       `update` and `publish`, 5 s for the status endpoints. Every `POST` is safe to retry after
