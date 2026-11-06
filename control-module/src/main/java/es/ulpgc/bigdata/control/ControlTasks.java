@@ -27,7 +27,13 @@ import java.util.Optional;
  *
  * A failed publication (Indexing down, a timeout, 409 during a rebuild, 503 without MongoDB) is
  * retried after 1 s, 2 s, 4 s... up to 30 s, instead of every second; the publication is
- * idempotent, so a retry never duplicates anything. The methods are called by ControlScheduler,
+ * idempotent, so a retry never duplicates anything.
+ *
+ * A publication that made nothing new visible (books_published 0) means the INDEXED books are
+ * already published, or never will be: T10 has not marked them yet, it failed, or MongoDB was
+ * emptied without Hazelcast. A full batch then does not trigger again until the interval is
+ * over, so Indexing gets at most one useless call per interval instead of one per second
+ * (review of #35). The methods are called by ControlScheduler,
  * one thread each, and by the tests with their own clock.
  */
 public final class ControlTasks {
@@ -50,6 +56,7 @@ public final class ControlTasks {
     private volatile IndexingClient.PublishOutcome lastOutcome;
     private volatile String lastPublishError;
     private volatile long publications;
+    private volatile boolean lastWasEmpty;
 
     // Lease check state
     private volatile long leasesRequeued;
@@ -87,7 +94,7 @@ public final class ControlTasks {
             return Optional.empty();                    // backing off after a failure
         }
         long indexed = coordination.count(BookState.INDEXED);
-        boolean batchFull = indexed >= publishBatch;
+        boolean batchFull = indexed >= publishBatch && !lastWasEmpty;
         boolean intervalOver = indexed > 0 && now - lastPublishedAt >= publishInterval.toMillis();
         if (!batchFull && !intervalOver) {
             return Optional.empty();
@@ -100,8 +107,14 @@ public final class ControlTasks {
             lastOutcome = outcome;
             lastPublishError = null;
             publications++;
-            LOG.info("published version {}: {} books new, {} visible ({} were INDEXED, {})", outcome.version(),
-                    outcome.booksPublished(), outcome.totalBooks(), indexed, batchFull ? "batch full" : "interval over");
+            lastWasEmpty = outcome.booksPublished() == 0;
+            if (lastWasEmpty) {
+                LOG.info("nothing new to publish: {} books INDEXED but none new in the index, version {} stays;"
+                        + " a full batch waits {} s before the next try", indexed, outcome.version(), publishInterval.toSeconds());
+            } else {
+                LOG.info("published version {}: {} books new, {} visible ({} were INDEXED, {})", outcome.version(),
+                        outcome.booksPublished(), outcome.totalBooks(), indexed, batchFull ? "batch full" : "interval over");
+            }
             return Optional.of(outcome);
         } catch (IndexingClient.PublishFailedException e) {
             consecutiveFailures++;

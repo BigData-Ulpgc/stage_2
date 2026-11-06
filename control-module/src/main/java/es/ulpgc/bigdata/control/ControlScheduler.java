@@ -31,21 +31,29 @@ public final class ControlScheduler implements AutoCloseable {
 
     public static ControlScheduler start(ControlTasks tasks, Duration leaseCheck) {
         Objects.requireNonNull(tasks, "tasks");
+        return start(tasks::checkLeases, () -> {
+            try {
+                tasks.maybePublish();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();                    // close(): the executor is stopping
+            }
+        }, leaseCheck, PUBLICATION_CHECK);
+    }
+
+    /** Any two tasks with any periods: the tests check with it that a task that throws runs again. */
+    static ControlScheduler start(Runnable leaseCheck, Runnable publication, Duration leaseCheckPeriod,
+                                  Duration publicationPeriod) {
+        Objects.requireNonNull(leaseCheck, "leaseCheck");
+        Objects.requireNonNull(publication, "publication");
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(2, runnable -> {
             Thread thread = new Thread(runnable, "control-tasks");
             thread.setDaemon(true);
             return thread;
         });
-        executor.scheduleWithFixedDelay(() -> safely("lease check", tasks::checkLeases),
-                leaseCheck.toMillis(), leaseCheck.toMillis(), TimeUnit.MILLISECONDS);
-        executor.scheduleWithFixedDelay(() -> safely("publication", () -> {
-                    try {
-                        tasks.maybePublish();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();            // close(): the executor is stopping
-                    }
-                }),
-                PUBLICATION_CHECK.toMillis(), PUBLICATION_CHECK.toMillis(), TimeUnit.MILLISECONDS);
+        executor.scheduleWithFixedDelay(() -> safely("lease check", leaseCheck),
+                leaseCheckPeriod.toMillis(), leaseCheckPeriod.toMillis(), TimeUnit.MILLISECONDS);
+        executor.scheduleWithFixedDelay(() -> safely("publication", publication),
+                publicationPeriod.toMillis(), publicationPeriod.toMillis(), TimeUnit.MILLISECONDS);
         return new ControlScheduler(executor);
     }
 

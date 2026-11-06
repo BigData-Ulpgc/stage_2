@@ -6,6 +6,7 @@ import com.hazelcast.core.HazelcastInstance;
 import es.ulpgc.bigdata.coordination.BackgroundConnection;
 import es.ulpgc.bigdata.coordination.BookState;
 import es.ulpgc.bigdata.coordination.Coordination;
+import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.coordination.ErrorCode;
 import es.ulpgc.bigdata.coordination.Stage;
 import es.ulpgc.bigdata.http.ServiceServer;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -24,8 +26,10 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -202,7 +206,51 @@ class ControlApiTest {
         }
     }
 
+    /**
+     * Where the state check really matters: with a Coordination whose client lost the cluster,
+     * a Hazelcast call would wait for the 120 s invocation timeout (review of #35).
+     */
+    @Test
+    void aLostClusterAnswers503AtOnce() throws Exception {
+        String name = "control-api-test-" + UUID.randomUUID();
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        HazelcastInstance member = HazelcastTestCluster.startStandaloneMember(name, port);
+        CoordinationSettings settings = new CoordinationSettings(List.of("127.0.0.1:" + port), name, 60, 3, 10);
+        BackgroundConnection lost = BackgroundConnection.start(settings, c -> { });
+        Javalin api = new ControlApi(lost, Map::of).create("control-module", ServiceServer.MIN_THREADS).start(0);
+        try {
+            waitFor(() -> lost.state() == BackgroundConnection.State.CONNECTED);
+            assertEquals(200, send(api.port(), "GET", "/control/status", null).statusCode());
+            member.shutdown();
+            waitFor(() -> lost.state() == BackgroundConnection.State.DISCONNECTED);
+
+            long start = System.nanoTime();
+            HttpResponse<String> response = send(api.port(), "GET", "/control/status", null);
+            long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            assertError(response, 503, "COORDINATION_UNAVAILABLE", null);
+            assertTrue(response.body().contains("disconnected"), response.body());
+            assertTrue(millis < 2_000, "answered after " + millis + " ms");
+            assertEquals("disconnected", json(send(api.port(), "GET", "/status", null).body())
+                    .get("coordination").getAsString());
+        } finally {
+            api.stop();
+            lost.close();
+            member.shutdown();
+        }
+    }
+
     // --- Helpers -------------------------------------------------------------------------
+
+    private static void waitFor(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (!condition.getAsBoolean()) {
+            assertTrue(System.nanoTime() < deadline, "timed out");
+            Thread.sleep(20);
+        }
+    }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
         return send(server.port(), method, path, body);

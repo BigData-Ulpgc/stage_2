@@ -22,10 +22,10 @@ import java.util.Objects;
  * Entry point of the Control Module (CF-09): the HTTP API (ControlApi) and the periodic tasks
  * (ControlTasks: the expired-lease check and the publication).
  *
- * Start order: the HTTP server first, then the Hazelcast client in the background
- * (BackgroundConnection), and once connected the periodic tasks and, with CONTROL_SEED_FILE,
- * the seed of that file. GET /status answers from the first moment, with "coordination":
- * connecting | connected | disconnected | failed | closed.
+ * Start order: the Hazelcast client starts connecting in the background (BackgroundConnection,
+ * it returns at once), then the HTTP server starts; once connected come the periodic tasks and,
+ * with CONTROL_SEED_FILE, the seed of that file. GET /status answers as soon as the server is
+ * up, with "coordination": connecting | connected | disconnected | failed | closed.
  *
  * Configuration (environment variables): ControlSettings (port, publication, INDEXING_URL,
  * CONTROL_SEED_FILE) and CoordinationSettings (HZ_MEMBERS, LEASE_CHECK_SECONDS...).
@@ -61,7 +61,7 @@ public final class App {
             service.server = new ControlApi(service.connection, service::tasksStatus)
                     .create(SERVICE_NAME, settings.httpThreads()).start(settings.port());
         } catch (RuntimeException e) {
-            service.connection.close();                       // e.g. the port is taken
+            service.close();                                  // e.g. the port is taken
             throw e;
         }
         LOG.info("{} on port {} · Hazelcast {} · Indexing {} · publish every {} books or {} s · seed {}",
@@ -154,7 +154,9 @@ public final class App {
                 running.close();
             }
             connection.close();
-            server.stop();
+            if (server != null) {                             // null if it did not start
+                server.stop();
+            }
         }
     }
 }
