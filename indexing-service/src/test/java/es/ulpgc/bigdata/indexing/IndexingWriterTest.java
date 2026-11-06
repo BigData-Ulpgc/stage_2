@@ -11,6 +11,7 @@ import es.ulpgc.bigdata.coordination.BookState;
 import es.ulpgc.bigdata.coordination.BookTask;
 import es.ulpgc.bigdata.coordination.Claim;
 import es.ulpgc.bigdata.coordination.Coordination;
+import es.ulpgc.bigdata.coordination.CoordinationNames;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.coordination.Stage;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
@@ -365,6 +366,70 @@ class IndexingWriterTest {
 
         // The pending release came before taking it again: once stopped, the lock is free
         // (taken twice and released once, it would stay held and no replica could take over).
+        writer.stop();
+        running.get(0).thread().join(5_000);
+        assertFalse(coordination.indexWriterLock().isLocked(), "el lock quedó tomado al parar");
+    }
+
+    /** Review of #37 (Carlos's test): the cluster is lost and back while the writer is busy. */
+    @Test
+    void unaReconexionDuranteUnLibroNoDejaDosEscritores() throws Exception {
+        HazelcastInstance otherClient = HazelcastTestMember.settings().openClient();
+        try {
+            Coordination other = Coordination.on(otherClient, HazelcastTestMember.settings(), Clock.systemUTC());
+            inDatalake(40, 41, 42, 43, 44, 45);
+            CountDownLatch gate = new CountDownLatch(1);
+            index.flushGate = gate;
+            downloaded(40);
+            IndexingWriter a = start(coordination, "w-a");
+            assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));     // a is writing 40
+
+            a.connectionChanged(false);                                     // the cluster is lost...
+            otherClient.getMap(CoordinationNames.LOCKS)
+                    .forceUnlock(CoordinationNames.INDEX_WRITER_LOCK);     // ...the member frees a's lock
+            IndexingWriter b = start(other, "w-b");
+            await("b activo", () -> b.role() == IndexingWriter.Role.ACTIVE);
+            a.connectionChanged(true);                                      // ...and it is back
+            index.flushGate = null;
+            gate.countDown();                                               // a finishes 40
+
+            downloaded(41, 42, 43, 44, 45);
+            await("41-45 INDEXED", () -> List.of(41, 42, 43, 44, 45).stream()
+                    .allMatch(id -> task(id).bookState() == BookState.INDEXED));
+            assertEquals(IndexingWriter.Role.STANDBY, a.role());
+            assertEquals(1L, a.status().get("indexed"), "a solo termina el 40");
+            assertEquals(5L, b.status().get("indexed"));
+        } finally {
+            for (Running r : running) {
+                r.writer().stop();
+                r.thread().join(10_000);
+            }
+            otherClient.shutdown();
+        }
+    }
+
+    @Test
+    void unaReconexionCortaConElLockAunSuyoLoSueltaYLoVuelveATomar() throws Exception {
+        inDatalake(46, 47);
+        CountDownLatch gate = new CountDownLatch(1);
+        index.flushGate = gate;
+        downloaded(46);
+        IndexingWriter writer = start(coordination, "w-a");
+        assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));
+
+        writer.connectionChanged(false);                   // lost and back before the member
+        writer.connectionChanged(true);                    // frees anything: the lock is still ours
+        index.flushGate = null;
+        gate.countDown();
+
+        downloaded(47);
+        await("46 y 47 INDEXED", () -> task(46).bookState() == BookState.INDEXED
+                && task(47).bookState() == BookState.INDEXED);
+        assertEquals(IndexingWriter.Role.ACTIVE, writer.role());
+        assertEquals(2L, writer.status().get("indexed"));
+
+        // It released the lock before taking it again: taken twice and released once, it would
+        // stay held after the stop and no replica could take over.
         writer.stop();
         running.get(0).thread().join(5_000);
         assertFalse(coordination.indexWriterLock().isLocked(), "el lock quedó tomado al parar");
