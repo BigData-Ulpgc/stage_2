@@ -1,0 +1,135 @@
+\section{API design and contracts}
+\label{sec:api}
+
+The full specifications are in the repository, one OpenAPI document per service because every service has
+a \code{GET /status}: \code{api/openapi.yaml} (Search), \code{api/indexing-openapi.yaml},
+\code{api/ingestion-openapi.yaml} and \code{api/control-openapi.yaml}. The inventory of every endpoint is
+\code{api/endpoints.md}. This section summarises them.
+
+\subsection{Front-end use cases}
+
+A front-end needs three things, and it reaches them only through nginx on port 8080:
+
+\begin{itemize}
+  \item Search books by keywords, optionally by author, language and year, one page at a time.
+  \item Show the details of one book.
+  \item Offer the available filters: the languages and the range of years of the published index.
+\end{itemize}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{4.6cm}L{1.6cm}X@{}}
+\toprule
+\textbf{Endpoint} & \textbf{Provider} & \textbf{Purpose} \\
+\midrule
+\code{GET /search} & Search & Keyword search (AND) with filters and pagination \\
+\code{GET /books/\{book\_id\}} & Search & Metadata of one published book \\
+\code{GET /search/filters} & Search & Languages and year range of the published index \\
+\bottomrule
+\end{tabularx}
+\caption{Front-end inventory. All are read-only, so they are safe to retry.}
+\end{table}
+
+\subsection{Internal and operational interfaces}
+
+These are consumed by another service or by an operator, never by the front-end. Only the Control Module
+is published on the host, on \code{127.0.0.1}; the others are reached by name inside the Docker network.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{4.9cm}L{2.4cm}X@{}}
+\toprule
+\textbf{Endpoint} & \textbf{Consumer} & \textbf{Completion} \\
+\midrule
+\code{POST /ingest/\{book\_id\}} & operators, validation & Done: the book is stored, or was already available \\
+\code{GET /ingest/status/\{book\_id\}} & operators, validation & Done (read-only) \\
+\code{GET /ingest/list} & operators, validation & Done (read-only) \\
+\code{POST /index/update/\{book\_id\}} & operators, validation & Done: indexed, but not visible until published \\
+\code{POST /index/publish} & Control Module & Done: \code{CURRENT} points to the returned version \\
+\code{POST /index/rebuild} & operators & Accepted: continues in the background \\
+\code{GET /index/status} & Control, operators & Done (read-only) \\
+\code{POST /control/jobs} & operators, benchmarks & Accepted (202): follow it with \code{/control/status} \\
+\code{GET /control/status} & operators, benchmarks & Done (read-only) \\
+\code{GET /control/tasks/\{book\_id\}} & operators, validation & Done (read-only) \\
+\code{POST /control/retry-failed} & operators & Accepted: the books are back in their queue \\
+\midrule
+\code{GET /status} (every service) & Docker healthcheck, operators & Done. Liveness only: it does not depend on MongoDB or Hazelcast \\
+\bottomrule
+\end{tabularx}
+\caption{Internal inventory, and the operational endpoint in the last row.}
+\end{table}
+
+\subsection{Parameters, pagination and errors}
+
+\code{GET /search} requires \code{q}, tokenised with the same \code{Tokenizer} as Indexing, so a query made
+only of stopwords has no terms and is rejected. \code{author} matches part of the name, ignoring case;
+\code{language} is an ISO 639-1 code; and \code{year} has four digits. Filters combine with AND.
+
+Pagination uses \code{offset} (default 0) and \code{limit} (default 20, at most 100). \code{total} counts every
+match, not only the page, and a valid search without matches answers 200 with an empty list. Results are
+ordered by ascending \code{book\_id}, behind a \code{ResultRanking} interface that lets the order change
+without touching the search. A ranking by relevance would also need term frequencies, which the index does
+not store.
+
+Every response of Search carries \code{index\_version}, the one version it was computed from. All services
+share one error format:
+
+\begin{lstlisting}
+{"error": {"code": "INVALID_PARAMETER", "message": "limit must be ...", "field": "limit"}}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{1.2cm}L{5.4cm}X@{}}
+\toprule
+\textbf{Status} & \textbf{Code} & \textbf{Meaning} \\
+\midrule
+400 & \code{MISSING\_PARAMETER}, \code{INVALID\_PARAMETER} & The request is wrong; \code{field} says where \\
+404 & \code{NOT\_FOUND} & Unknown book, or a route that does not exist \\
+503 & \code{INDEX\_NOT\_READY} & Nothing has been published yet \\
+503 & \code{STORAGE\_UNAVAILABLE} & MongoDB does not answer; retry later \\
+503 & \code{COORDINATION\_UNAVAILABLE} & The Control has no connection to Hazelcast \\
+500 & \code{INTERNAL\_ERROR} & Our bug: the details go to the log, not to the client \\
+\bottomrule
+\end{tabularx}
+\caption{Main errors. Each specification lists those of its service.}
+\end{table}
+
+\subsection{Contracts that are not HTTP}
+
+Most of the work between services does not use HTTP:
+
+\begin{itemize}
+  \item \textbf{Coordination} (\code{api/contracts/coordination.md}): the Hazelcast map \code{book-state},
+        the queues \code{ingest-queue} and \code{index-queue}, the topic \code{index-events} with the
+        \code{IndexPublished} event, the lock of the index writer, leases and the transitions of a book.
+  \item \textbf{Datalake readiness} (\code{api/contracts/datalake-readiness.md}): ranges of folders and the
+        \code{<id>.\_READY} marker, written last, which says a book is complete.
+  \item \textbf{Publication in MongoDB:} \code{index\_books}, \code{index\_meta} (\code{CURRENT}) and
+        \code{index\_publications}. Switching \code{CURRENT} changes one document, so a new version appears
+        all at once. The index itself is not copied, because the entries of a written book never change.
+\end{itemize}
+
+\pending{Link the contract of the publication when \code{api/contracts/index-publication.md} exists (plan,
+owner Daniel Rodríguez). Today the inventory cites the plan, which is not in the repository.}
+
+\subsection{Validation evidence}
+
+The APIs can be checked without a front-end at three levels, all with their expected results:
+
+\begin{itemize}
+  \item \code{scripts/validate-api.sh}: every check with one command against the running system, ending
+        with exit code 1 if any fails. On the sample dataset of 15 books it gives 56 correct, 0 failed and
+        0 skipped.
+  \item \code{StackValidationTest}: the same contract in JUnit, also checking the shape of the JSON.
+  \item \code{http/*.http}: examples to run by hand, documented in \code{http/README.md}.
+\end{itemize}
+
+They cover keyword search, each filter alone and combined, valid searches without results, invalid parameters,
+pagination, the internal endpoints, and the read-only mounts of the datalake. A check only reports
+\textit{skipped} for an endpoint that answers 501; a route that disappears is a failure. The expected answers
+were compared with the original texts, so they are not a copy of what the API returns. The load tests refuse
+to measure if this validation fails.
+
+\pending{Add the checks of the Control routes and repeat the validation with the complete flow once DR-06b is
+merged.}
