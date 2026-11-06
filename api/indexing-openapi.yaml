@@ -331,7 +331,7 @@ paths:
         Answers 200 while the process is running. It does NOT contact MongoDB on purpose: if
         MongoDB is down, restarting the Indexing Service would not fix it, so the healthcheck
         must not fail because of it, nor Hazelcast: `coordination` only reports the state of the
-        connection, used to notify the publications. The state of the index is in
+        connection, used to announce the publications and to consume `index-queue`. The state of the index is in
         `GET /index/status`.
       responses:
         '200':
@@ -344,6 +344,7 @@ paths:
                 service: indexing-service
                 status: running
                 coordination: connected
+                coordination_failure: null
                 writer:
                   role: active
                   indexed: 187
@@ -465,16 +466,25 @@ components:
 
     ServiceStatus:
       type: object
-      required: [service, status, coordination, writer]
+      required: [service, status, coordination, coordination_failure, writer]
       properties:
         service: { type: string, example: indexing-service }
         status: { type: string, enum: [running] }
         coordination:
           type: string
-          enum: [connecting, connected, disconnected]
+          enum: [connecting, connected, disconnected, failed, closed]
           description: |
-            Connection to Hazelcast, used to mark the published books and announce each version.
-            `connecting` until the cluster first answers (the service keeps working meanwhile).
+            Connection to Hazelcast, used to mark the published books, announce each version and
+            consume `index-queue`. `connecting` until the cluster first answers (the service
+            keeps working meanwhile); `disconnected` while the client reconnects by itself;
+            `failed` if the connection could not even be attempted; `closed` while stopping.
+        coordination_failure:
+          type: string
+          nullable: true
+          description: |
+            Why the connection `failed`, or what failed once connected (for example, starting
+            the writer): then `coordination` may say `connected` while the writer is null. Null
+            if nothing failed.
         writer:
           $ref: '#/components/schemas/WriterStatus'
 

@@ -109,8 +109,11 @@ public final class HazelcastPublicationNotifier implements PublicationNotifier, 
         }
     }
 
-    /** For GET /status: connecting, connected or disconnected. */
-    public String state() {
+    /**
+     * What this notifier believes of the connection: connecting, connected or disconnected. For
+     * the tests; GET /status shows the state of BackgroundConnection.
+     */
+    String state() {
         if (coordination.get() == null) {
             return "connecting";
         }

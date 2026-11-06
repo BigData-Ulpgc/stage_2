@@ -6,6 +6,7 @@ import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.config.MongoSettings;
+import es.ulpgc.bigdata.coordination.BackgroundConnection;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
@@ -52,11 +53,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * crash (DR-08a, D2 and D3). In the background so that a MongoDB that does not answer never
  * delays or stops the start; if it fails, the next POST /index/publish does the same work.
  *
- * Another one connects to Hazelcast (DR-08b), to mark the published books (T10) and announce
- * each version on index-events. Connecting blocks until the cluster answers
- * (CoordinationSettings.openClient), and GET /status must answer meanwhile, so it runs after
- * the server, in the background; /status shows "coordination": connecting, connected or
- * disconnected. Without Hazelcast the service publishes anyway (HazelcastPublicationNotifier).
+ * The Hazelcast client connects in the background too (BackgroundConnection, CF-09): to mark
+ * the published books (T10) and announce each version on index-events (DR-08b). Connecting
+ * blocks until the cluster answers (CoordinationSettings.openClient), and GET /status must
+ * answer meanwhile, so it starts after the server; /status shows "coordination" (connecting,
+ * connected, disconnected, failed or closed) and "coordination_failure" (why it failed, or
+ * what failed once connected; null if nothing did). Without Hazelcast the service publishes
+ * anyway (HazelcastPublicationNotifier).
  *
  * Once connected, the same thread starts the index writer (DR-06b, IndexingWriter): the
  * consumer of index-queue, active while this replica holds the lock index-writer and a
@@ -110,8 +113,9 @@ public final class App {
             HazelcastPublicationNotifier notifier = new HazelcastPublicationNotifier(publications);
             Publisher publisher = new Publisher(publications, mongo.collection(), Clock.systemUTC(), notifier);
             AtomicReference<IndexingWriter> writer = new AtomicReference<>();
+            AtomicReference<BackgroundConnection> connection = new AtomicReference<>();
             Javalin server = new IndexingApi(service, publisher)
-                    .create(SERVICE_NAME, httpThreads, () -> extraStatus(notifier, writer.get()))
+                    .create(SERVICE_NAME, httpThreads, () -> extraStatus(connection.get(), writer.get()))
                     .start(port);
 
             // Hosts only, never the whole URI: in production it may carry user and password.
@@ -120,7 +124,7 @@ public final class App {
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
             startRecovery(publisher);
             RunningService running = new RunningService(server, client, writer, notifier);
-            running.connectInBackground(coordination, notifier, service);
+            running.connectInBackground(coordination, connection, service);
             return running;
         } catch (RuntimeException e) {
             client.close();                                  // the start failed: do not leave it open
@@ -128,10 +132,13 @@ public final class App {
         }
     }
 
-    /** The fields of GET /status beyond service and status: cheap, never MongoDB. */
-    private static Map<String, Object> extraStatus(HazelcastPublicationNotifier notifier, IndexingWriter writer) {
+    /** The fields of GET /status beyond service and status: cheap, never MongoDB nor Hazelcast. */
+    static Map<String, Object> extraStatus(BackgroundConnection connection, IndexingWriter writer) {
         Map<String, Object> status = new LinkedHashMap<>();
-        status.put("coordination", notifier.state());
+        status.put("coordination", connection == null
+                ? BackgroundConnection.State.CONNECTING.label()       // the instant before it starts
+                : connection.state().label());
+        status.put("coordination_failure", connection == null ? null : connection.failure().orElse(null));
         status.put("writer", writer == null ? null : writer.status());
         return status;
     }
@@ -171,7 +178,7 @@ public final class App {
         private final MongoClient client;
         private final AtomicReference<IndexingWriter> writer;
         private final HazelcastPublicationNotifier notifier;
-        private final AtomicReference<Coordination> coordination = new AtomicReference<>();
+        private BackgroundConnection connection;             // guarded by this
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private Thread writerThread;                         // guarded by this
 
@@ -183,37 +190,21 @@ public final class App {
             this.notifier = notifier;
         }
 
-        /** D2: daemon, so a JVM that stops does not wait for a cluster that never answers. */
-        private void connectInBackground(CoordinationSettings settings, HazelcastPublicationNotifier notifier,
-                                         IndexingService service) {
-            Thread connector = new Thread(() -> {
-                Coordination connected;
-                try {
-                    connected = Coordination.connect(settings);                    // blocks
-                } catch (RuntimeException e) {
-                    LOG.warn("Hazelcast: {} (no writer and no notifications until the next start)", e.toString());
-                    return;
-                }
-                if (!adopt(connected)) {
-                    return;                                      // closed while connecting
-                }
-                // Only queues the repair of the states: the notifier does it in its own thread.
+        /**
+         * D2: in BackgroundConnection's daemon thread, so a JVM that stops does not wait for a
+         * cluster that never answers. Once connected, in that thread: the notifier (it only
+         * queues the announcement of what was skipped and the repair of the states) and the
+         * writer. If one of them fails, /status shows it in coordination_failure.
+         */
+        private synchronized void connectInBackground(CoordinationSettings settings,
+                                                      AtomicReference<BackgroundConnection> forStatus,
+                                                      IndexingService service) {
+            connection = BackgroundConnection.start(settings, connected -> {
                 notifier.connected(connected);
                 LOG.info("connected to Hazelcast {}", settings.members());
                 startWriter(connected, service);
-            }, SERVICE_NAME + "-connect");
-            connector.setDaemon(true);
-            connector.start();
-        }
-
-        /** Keeps the client to close it; if the service already stopped, closes it now. */
-        private boolean adopt(Coordination connected) {
-            coordination.set(connected);
-            if (closed.get() && coordination.compareAndSet(connected, null)) {
-                connected.close();
-                return false;
-            }
-            return true;
+            });
+            forStatus.set(connection);
         }
 
         /** D6, D9: the writer starts as soon as there is a cluster, unless the service already stopped. */
@@ -268,9 +259,12 @@ public final class App {
                 try {
                     stopWriter();
                     notifier.close();
-                    Coordination connected = coordination.getAndSet(null);
-                    if (connected != null) {
-                        connected.close();
+                    BackgroundConnection started;
+                    synchronized (this) {
+                        started = connection;
+                    }
+                    if (started != null) {
+                        started.close();                     // or as soon as it connects
                     }
                 } finally {
                     client.close();                          // even if stopping the rest failed

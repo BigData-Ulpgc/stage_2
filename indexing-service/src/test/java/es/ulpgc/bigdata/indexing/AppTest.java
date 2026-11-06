@@ -12,6 +12,7 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
+import es.ulpgc.bigdata.coordination.BackgroundConnection;
 import es.ulpgc.bigdata.coordination.BookState;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.IndexPublished;
@@ -197,7 +198,27 @@ class AppTest {
         assertEquals(200, status.statusCode());
         JsonObject body = JsonParser.parseString(status.body()).getAsJsonObject();
         assertEquals("connecting", body.get("coordination").getAsString());
+        assertTrue(body.get("coordination_failure").isJsonNull());
         assertTrue(body.get("writer").isJsonNull(), "sin cluster no hay escritor");
+    }
+
+    @Test
+    void siLaConexionFallaStatusDiceFailedYPorQue() throws Exception {
+        // No configuration makes the real client fail at once (it retries forever): a connector
+        // that fails, as BackgroundConnection would report it.
+        BackgroundConnection failed = BackgroundConnection.start(
+                () -> { throw new IllegalStateException("configuración de Hazelcast inválida (simulado)"); },
+                connected -> { });
+        for (int i = 0; i < 100 && failed.state() != BackgroundConnection.State.FAILED; i++) {
+            Thread.sleep(20);
+        }
+
+        Map<String, Object> status = App.extraStatus(failed, null);
+
+        assertEquals("failed", status.get("coordination"));
+        assertEquals("java.lang.IllegalStateException: configuración de Hazelcast inválida (simulado)",
+                status.get("coordination_failure"));
+        assertNull(status.get("writer"));
     }
 
     @Test
@@ -210,6 +231,7 @@ class AppTest {
             assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
             HazelcastTestMember.reset();
             HazelcastInstance hz = HazelcastTestMember.settings().openClient();
+            int clientsBefore = connectedClients();
             try {
                 Coordination coordination = Coordination.on(hz, HazelcastTestMember.settings(), Clock.systemUTC());
                 BlockingQueue<IndexPublished> events = new LinkedBlockingQueue<>();
@@ -227,7 +249,9 @@ class AppTest {
 
                 // The writer of this replica claims it from index-queue and indexes it (T6, T7).
                 awaitState(coordination, 1342, BookState.INDEXED);
-                JsonObject writer = JsonParser.parseString(get("/status").body()).getAsJsonObject().getAsJsonObject("writer");
+                JsonObject status = JsonParser.parseString(get("/status").body()).getAsJsonObject();
+                assertTrue(status.get("coordination_failure").isJsonNull(), status.toString());
+                JsonObject writer = status.getAsJsonObject("writer");
                 assertEquals("active", writer.get("role").getAsString());
                 assertEquals(1, writer.get("indexed").getAsLong());
 
@@ -248,6 +272,10 @@ class AppTest {
                     Thread.sleep(50);
                 }
                 assertFalse(alive("indexing-service-notifier"), "el hilo del notifier sigue vivo tras close()");
+                for (int i = 0; i < 100 && connectedClients() != clientsBefore; i++) {
+                    Thread.sleep(50);
+                }
+                assertEquals(clientsBefore, connectedClients(), "close() debe cerrar el cliente de Hazelcast");
             } finally {
                 running.close();                              // the writer stops before the client
                 hz.shutdown();
@@ -303,6 +331,10 @@ class AppTest {
             }
         }
         assertEquals(expected, role);
+    }
+
+    private static int connectedClients() {
+        return HazelcastTestMember.start().getClientService().getConnectedClients().size();
     }
 
     private static boolean alive(String threadName) {
