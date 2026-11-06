@@ -40,6 +40,10 @@ import java.util.function.Function;
  * complete in the index, so Search is right), but CURRENT.books and the history of V+1 did not
  * count them. So every publication first checks CURRENT against index_books (repair): the
  * books of CURRENT must be exactly those with a version <= it, as Search's fixture also writes.
+ *
+ * After every publish call, still inside the lock, the PublicationNotifier tells the rest of
+ * the system (DR-08b): the states of the published books (T10) and the IndexPublished event.
+ * If it fails, the call still answers what was published: CURRENT has already switched.
  */
 public final class Publisher {
 
@@ -51,16 +55,24 @@ public final class Publisher {
     private final PublicationRepository publications;
     private final String defaultCollection;
     private final Clock clock;
+    private final PublicationNotifier notifier;
     private final ReentrantLock lock = new ReentrantLock();
 
     /**
      * @param defaultCollection the collection of the inverted index for the first version (D8):
      *                          later versions keep the one of CURRENT
      */
-    public Publisher(PublicationRepository publications, String defaultCollection, Clock clock) {
+    public Publisher(PublicationRepository publications, String defaultCollection, Clock clock,
+                     PublicationNotifier notifier) {
         this.publications = Objects.requireNonNull(publications, "publications");
         this.defaultCollection = Objects.requireNonNull(defaultCollection, "defaultCollection");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.notifier = Objects.requireNonNull(notifier, "notifier");
+    }
+
+    /** Without notifications (PublicationNotifier.NONE). */
+    public Publisher(PublicationRepository publications, String defaultCollection, Clock clock) {
+        this(publications, defaultCollection, clock, PublicationNotifier.NONE);
     }
 
     /**
@@ -93,6 +105,7 @@ public final class Publisher {
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                 Optional<PublishResult> result = attempt(select);
                 if (result.isPresent()) {
+                    notify(result.get());
                     return result.get();
                 }
                 LOG.info("CURRENT changed during the publication (attempt {} of {}): another replica published",
@@ -102,6 +115,16 @@ public final class Publisher {
                     + " intentos seguidos: otras réplicas están publicando a la vez");
         } finally {
             lock.unlock();
+        }
+    }
+
+    /** DR-08b: never turns a publication that happened into an error. */
+    private void notify(PublishResult result) {
+        try {
+            notifier.afterPublish(result);
+        } catch (RuntimeException e) {
+            LOG.warn("version {} is published, but notifying it failed ({}): repaired later",
+                    result.version(), e.toString());
         }
     }
 

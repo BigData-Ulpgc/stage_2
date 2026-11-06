@@ -13,9 +13,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -222,6 +224,30 @@ class MongoPublicationRepositoryTest {
 
         assertEquals(List.of(3, 9), publications.booksOfVersion(2));
         assertEquals(List.of(), publications.booksOfVersion(7));
+    }
+
+    @Test
+    void visibleAmongDevuelveSoloLosPublicadosHastaEsaVersion() {
+        publications.addBooks(List.of(1, 2), 1);
+        publications.addBooks(List.of(3), 2);
+
+        assertEquals(Set.of(1, 2), Set.copyOf(publications.visibleAmong(List.of(3, 2, 1, 99), 1)));
+        assertEquals(Set.of(1, 2, 3), Set.copyOf(publications.visibleAmong(List.of(1, 2, 3, 99), 2)));
+        assertEquals(List.of(), publications.visibleAmong(List.of(), 2));
+    }
+
+    @Test
+    void visibleAmongPreguntaPorLotesSinPerderNinguno() {
+        List<Integer> ids = new ArrayList<>();
+        for (int id = 1; id <= MongoPublicationRepository.IN_BATCH + 5; id++) {
+            ids.add(id);
+        }
+        publications.addBooks(ids, 1);
+
+        List<Integer> visible = publications.visibleAmong(ids, 1);
+
+        assertEquals(Set.copyOf(ids), Set.copyOf(visible));
+        assertEquals(ids.size(), visible.size());
     }
 
     // ---- switchCurrent (the fencing of contract §5) ----
