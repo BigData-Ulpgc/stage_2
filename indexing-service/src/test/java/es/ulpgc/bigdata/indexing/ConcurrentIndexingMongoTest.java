@@ -6,6 +6,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
+import es.ulpgc.bigdata.datamart.index.InvertedIndex;
 import es.ulpgc.bigdata.datamart.index.MongoInvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,6 +32,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -39,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -56,7 +60,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * replicas nothing does: two upserts of the same NEW term can meet, and with the unique index
  * on "term" one of them could fail with E11000 duplicate key. MongoDB (4.2 or later) retries
  * such an upsert itself when its filter is an equality on the fields of the unique index, as
- * eq("term") is, and as _id is in books and index_log. These tests pin that guarantee.
+ * eq("term") is, and as _id is in books and index_log. The first test pins that guarantee.
+ *
+ * The second one pins the other half of DR-11: a publication that comes while a batch is being
+ * written never makes a book of that batch visible before it is complete.
  */
 class ConcurrentIndexingMongoTest {
 
@@ -224,5 +231,108 @@ class ConcurrentIndexingMongoTest {
         assertEquals(expected.keySet(), seen);
         assertEquals(all.size(), db.getCollection("books").countDocuments(), "un documento por libro en books");
         assertEquals(all.size(), db.getCollection("index_log").countDocuments(), "una entrada por libro en index_log");
+    }
+
+    // --- Publishing while a batch is written -----------------------------------------
+
+    /**
+     * The inverted index of MongoDB, but its flush stops until the test releases it: the moment
+     * when the metadata of a batch are written and its posting lists are not.
+     */
+    private static final class PausingIndex implements InvertedIndex {
+        private final InvertedIndex delegate;
+        private final CountDownLatch inFlush = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+        private volatile boolean pause = false;
+
+        PausingIndex(InvertedIndex delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override public String name() { return delegate.name(); }
+        @Override public void addDocument(int bookId, Set<String> terms) { delegate.addDocument(bookId, terms); }
+        @Override public List<Integer> postings(String term) { return delegate.postings(term); }
+        @Override public void clear() { delegate.clear(); }
+        @Override public long diskUsageBytes() { return delegate.diskUsageBytes(); }
+        @Override public void close() { delegate.close(); }
+
+        @Override
+        public void flush() {
+            if (pause) {
+                inFlush.countDown();
+                try {
+                    if (!release.await(30, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("el test no soltó el flush");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            }
+            delegate.flush();
+        }
+    }
+
+    /**
+     * Search shows the books of index_books up to CURRENT, so a book that is visible must be
+     * complete: its metadata in books and its id in the posting list of every one of its terms.
+     * publish takes the books from index_log, which is written LAST (DR-07). Here a publication
+     * comes while a batch is half written (metadata yes, posting lists no): it must not publish
+     * any book of that batch, and the next one, once the batch is complete, must publish them.
+     */
+    @Test
+    void publicarMientrasSeEscribeUnLoteNoHaceVisibleNingunLibroAMedias() throws Exception {
+        for (int id = 1; id <= 3; id++) {
+            datalake.save(new RawBook(id, IndexingServiceTest.HEADER_1342, body(id)));
+        }
+        PausingIndex index = new PausingIndex(new MongoInvertedIndex(db));
+        IndexingService service = new IndexingService(datalake, new MongoMetadataRepository(db), index,
+                new MongoIndexLog(db), new MongoPublicationRepository(db), new MetadataParser(), Tokenizer.standard());
+        Publisher publisher = new Publisher(new MongoPublicationRepository(db), "inverted_index", Clock.systemUTC());
+
+        service.update(1);
+        assertEquals(1, publisher.publish().booksPublished());
+
+        index.pause = true;
+        ExecutorService writer = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchResult> batch = writer.submit(() -> service.indexBatch(List.of(2, 3)));
+            assertTrue(index.inFlush.await(30, TimeUnit.SECONDS), "el lote no llegó al flush");
+            assertEquals(3, db.getCollection("books").countDocuments(), "los metadatos del lote ya están escritos");
+
+            PublishResult during = publisher.publish();
+            assertEquals(0, during.booksPublished(), "publicó libros sin sus posting lists");
+            assertEquals(1, during.version());
+            assertCompleteUpToCurrent(Set.of(1));
+
+            index.release.countDown();
+            assertEquals(2, batch.get(30, TimeUnit.SECONDS).indexed().size());
+        } finally {
+            index.release.countDown();
+            writer.shutdownNow();
+        }
+
+        PublishResult after = publisher.publish();
+        assertEquals(2, after.booksPublished());
+        assertEquals(2, after.version());
+        assertCompleteUpToCurrent(Set.of(1, 2, 3));
+    }
+
+    /** The visible books (index_books up to CURRENT) are exactly these, and each is complete. */
+    private void assertCompleteUpToCurrent(Set<Integer> visible) {
+        int current = db.getCollection("index_meta").find(new Document("_id", "CURRENT")).first().getInteger("version");
+        Set<Integer> shown = new TreeSet<>();
+        for (Document book : db.getCollection("index_books").find(new Document("version", new Document("$lte", current)))) {
+            shown.add(book.getInteger("_id"));
+        }
+        assertEquals(new TreeSet<>(visible), shown, "los libros visibles");
+        for (int id : shown) {
+            assertEquals(1, db.getCollection("books").countDocuments(new Document("_id", id)), "los metadatos de " + id);
+            for (String term : Tokenizer.standard().uniqueTerms(body(id))) {
+                Document postings = db.getCollection("inverted_index").find(new Document("term", term)).first();
+                assertTrue(postings != null && postings.getList("postings", Integer.class).contains(id),
+                        "el libro " + id + " es visible y falta en la posting list de '" + term + "'");
+            }
+        }
     }
 }
