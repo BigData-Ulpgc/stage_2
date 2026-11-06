@@ -125,6 +125,18 @@ public final class BenchmarkBooks {
         return datalake;
     }
 
+    /** Deletes a folder the benchmark created, with everything in it. */
+    public static void delete(Path dir) throws IOException {
+        if (dir == null || !Files.exists(dir)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(dir)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        }
+    }
+
     /** Prints the books each benchmark uses, as CSV. */
     public static void main(String[] args) {
         List<RawBook> books = load();
