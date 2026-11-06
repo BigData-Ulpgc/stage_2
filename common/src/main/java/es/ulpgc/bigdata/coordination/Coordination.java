@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -227,6 +228,62 @@ public final class Coordination implements AutoCloseable {
     /** Written by the Control after a full seed or recovery. */
     public void markInitialized() {
         hz.<String, Long>getMap(CoordinationNames.COORDINATION_META).set(CoordinationNames.INITIALIZED, now());
+    }
+
+    // --- Rebuild of the index (DR-10) ----------------------------------------------------
+
+    /**
+     * The marker of a rebuild (contract §5): while it exists, no index writer claims from
+     * index-queue, and POST /index/update and /index/publish answer 409 in every replica. Only
+     * one rebuild at a time: putIfAbsent. It expires after {@code ttl} unless the rebuild renews
+     * it, so a replica that dies in the middle of a rebuild does not stop indexing for ever.
+     *
+     * @param ttl at least 1 s; Hazelcast drops the fraction of a second
+     * @return the token of this rebuild (the epoch ms it started), to renew and end it; empty if
+     *         another rebuild holds the marker
+     */
+    public OptionalLong tryStartRebuild(Duration ttl) {
+        requireWholeSeconds(ttl);
+        long token = now();
+        Long other = meta().putIfAbsent(CoordinationNames.REBUILD, token, ttl.toMillis(), TimeUnit.MILLISECONDS);
+        return other == null ? OptionalLong.of(token) : OptionalLong.empty();
+    }
+
+    /**
+     * Gives the marker of this rebuild another {@code ttl}.
+     *
+     * @return false if it is no longer this rebuild's (it expired, maybe another one started):
+     *         the rebuild must stop, because the writers may be writing again
+     */
+    public boolean renewRebuild(long token, Duration ttl) {
+        requireWholeSeconds(ttl);
+        return isOurs(token) && meta().setTtl(CoordinationNames.REBUILD, ttl.toMillis(), TimeUnit.MILLISECONDS)
+                && isOurs(token);
+    }
+
+    /** Removes the marker if it is still this rebuild's: never the one of a rebuild started after it expired. */
+    public void endRebuild(long token) {
+        meta().remove(CoordinationNames.REBUILD, token);
+    }
+
+    /** Whether a rebuild runs now, in any replica. */
+    public boolean isRebuilding() {
+        return meta().containsKey(CoordinationNames.REBUILD);
+    }
+
+    /** Hazelcast keeps a TTL in whole seconds and drops the rest: under 1 s the entry is born expired. */
+    private static void requireWholeSeconds(Duration ttl) {
+        if (ttl.compareTo(Duration.ofSeconds(1)) < 0) {
+            throw new IllegalArgumentException("El TTL de la marca de reconstrucción debe ser de al menos 1 s: " + ttl);
+        }
+    }
+
+    private boolean isOurs(long token) {
+        return Long.valueOf(token).equals(meta().get(CoordinationNames.REBUILD));
+    }
+
+    private IMap<String, Long> meta() {
+        return hz.getMap(CoordinationNames.COORDINATION_META);
     }
 
     // --- Workers (Ingestion, Indexing) ---------------------------------------------------
