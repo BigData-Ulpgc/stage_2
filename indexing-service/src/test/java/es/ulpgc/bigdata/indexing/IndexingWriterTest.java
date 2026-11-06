@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.indexing;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientConnectionStrategyConfig;
+import com.hazelcast.collection.IQueue;
 import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.MongoException;
 import es.ulpgc.bigdata.coordination.BookState;
@@ -240,6 +241,28 @@ class IndexingWriterTest {
         assertEquals(2L, writer.status().get("requeued"));
         assertTrue(task(1).lastError().startsWith("INTERNAL_ERROR: "), task(1).lastError());
         assertTrue(task(2).lastError().startsWith("INTERNAL_ERROR: "), task(2).lastError());
+    }
+
+    /** Review of #37 in a batch: lost and back while the first claim waits, the batch is not filled. */
+    @Test
+    void unaReconexionMientrasEsperaElPrimerLibroNoLlenaElLote() throws Exception {
+        inDatalake(50, 51, 52, 53, 54, 55);
+        downloaded(50, 51, 52, 53, 54, 55);
+        IQueue<Integer> queue = client.getQueue(CoordinationNames.INDEX_QUEUE);
+        queue.clear();                                      // DOWNLOADED, but not in the queue yet
+        IndexingWriter writer = start(coordination, "w-a", 100, Duration.ofSeconds(3));
+        await("activo", () -> writer.role() == IndexingWriter.Role.ACTIVE);
+        Thread.sleep(300);                                  // waiting in its first claim (3 s)
+
+        writer.connectionChanged(false);
+        writer.connectionChanged(true);
+        queue.addAll(List.of(50, 51, 52, 53, 54, 55));      // all six at once
+
+        await("los 6 INDEXED", () -> writer.status().get("indexed").equals(6L));
+        // The first claim returns 50, but the batch is not filled under a lost hold: 50 alone,
+        // then the lock is taken again and the other five come as a batch of their own.
+        assertEquals(2, index.flushes.get(), "un lote con el 50 y otro con los 5 restantes");
+        assertEquals(5, writer.status().get("last_batch"));
     }
 
     @Test

@@ -70,9 +70,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * Also when the cluster is lost AND back while the writer is busy with a book (review of #37):
  * meanwhile the member may have released the lock of this client and another replica may hold
  * it, so connected being true again proves nothing. Each disconnection is counted, and a hold
- * of the lock ends as soon as the count is not the one read before its tryLock. The book in
- * hand is finished (its lease is still ours, and indexing is idempotent), then release() finds
- * out whether the lock was still ours, and the writer competes for it again as a standby.
+ * of the lock ends as soon as the count is not the one read before its tryLock: no more claims,
+ * not even to fill the batch being formed. The batch in hand is written (its leases are still
+ * ours, and indexing is idempotent), then release() finds out whether the lock was still ours,
+ * and the writer competes for it again as a standby.
  *
  * If a Hazelcast call fails, the writer waits 1, 2, 4... 30 s and tries again (the client
  * reconnects by itself); the wait starts again at 1 s as soon as the cluster answers a tryLock.
@@ -234,23 +235,31 @@ public final class IndexingWriter implements Runnable {
     private void writeWhileHolding(long generation) throws InterruptedException {
         role = Role.ACTIVE;
         LOG.info("{}: holds index-writer, consuming {}", owner, Stage.INDEXING.queue());
-        while (!stopping && connected && disconnections.get() == generation) {
+        while (stillHolding(generation)) {
             Optional<Claim> first = coordination.claim(Stage.INDEXING, owner, step);
             if (first.isPresent()) {
-                process(batchFrom(first.get()));
+                process(batchFrom(first.get(), generation));
             }
         }
         if (!stopping && connected) {
             LOG.warn("{}: the cluster was lost while holding index-writer; taking it again before "
-                    + "the next book", owner);
+                    + "the next batch", owner);
         }
     }
 
-    /** The first book and the ones already in the queue, without waiting, up to batchSize. */
-    private List<Claim> batchFrom(Claim first) throws InterruptedException {
+    /** This hold of the lock is still valid: not stopping, connected, no disconnection since its tryLock. */
+    private boolean stillHolding(long generation) {
+        return !stopping && connected && disconnections.get() == generation;
+    }
+
+    /**
+     * The first book and the ones already in the queue, without waiting, up to batchSize, while
+     * this hold of the lock is valid: a batch is never filled after the cluster was lost.
+     */
+    private List<Claim> batchFrom(Claim first, long generation) throws InterruptedException {
         List<Claim> batch = new ArrayList<>(batchSize);
         batch.add(first);
-        while (batch.size() < batchSize && !stopping && connected) {
+        while (batch.size() < batchSize && stillHolding(generation)) {
             Optional<Claim> next = coordination.claim(Stage.INDEXING, owner, Duration.ZERO);
             if (next.isEmpty()) {
                 break;                                      // the queue is empty: write what there is
