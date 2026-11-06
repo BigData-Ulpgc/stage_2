@@ -20,7 +20,9 @@ info:
       `FAILED` with `MAX_ATTEMPTS` used (contract §4.2).
     - **Publication**: `POST /index/publish` of the Indexing Service when `PUBLISH_BATCH` (100)
       books are `INDEXED`, or `PUBLISH_INTERVAL_S` (30 s) after the last publication if at least
-      one is. A failed publication is retried after 1 s, 2 s, 4 s… up to 30 s.
+      one is. A failed publication is retried after 1 s, 2 s, 4 s… up to 30 s. A publication
+      that made nothing new visible (`books_published: 0`) does not repeat for a full batch
+      until the interval is over.
 
     Before each lease check, and at once when it connects, the Control checks that the cluster
     kept its state (`coordination-meta.initialized`). If it was lost (both Hazelcast members

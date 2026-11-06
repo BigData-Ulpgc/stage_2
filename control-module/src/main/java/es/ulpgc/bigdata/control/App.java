@@ -30,11 +30,11 @@ import java.util.Objects;
  * (ControlTasks: the expired-lease check and the publication) and the recovery of a cluster that
  * lost its state (Recovery, CF-10).
  *
- * Start order: the HTTP server first, then the Hazelcast client in the background
- * (BackgroundConnection), and once connected the periodic tasks (the first recovery check and
- * lease check run at once) and, with CONTROL_SEED_FILE, the seed of that file. GET /status
- * answers from the first moment, with "coordination": connecting | connected | disconnected |
- * failed | closed.
+ * Start order: the Hazelcast client starts connecting in the background (BackgroundConnection,
+ * it returns at once), then the HTTP server starts; once connected come the periodic tasks (the
+ * first recovery check and lease check run at once) and, with CONTROL_SEED_FILE, the seed of
+ * that file. GET /status answers as soon as the server is up, with "coordination": connecting |
+ * connected | disconnected | failed | closed.
  *
  * Configuration (environment variables): ControlSettings (port, publication, INDEXING_URL,
  * CONTROL_SEED_FILE), CoordinationSettings (HZ_MEMBERS, LEASE_CHECK_SECONDS...), and for the
@@ -79,8 +79,7 @@ public final class App {
             service.server = new ControlApi(service.connection, service::tasksStatus)
                     .create(SERVICE_NAME, settings.httpThreads()).start(settings.port());
         } catch (RuntimeException e) {
-            service.connection.close();                       // e.g. the port is taken
-            mongoClient.close();
+            service.close();                                  // e.g. the port is taken
             throw e;
         }
         LOG.info("{} on port {} · Hazelcast {} · Indexing {} · publish every {} books or {} s · seed {} · recovery from MongoDB {} and {}",
@@ -188,7 +187,9 @@ public final class App {
             }
             connection.close();
             mongoClient.close();
-            server.stop();
+            if (server != null) {                             // null if it did not start
+                server.stop();
+            }
         }
     }
 }

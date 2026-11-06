@@ -10,6 +10,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -251,6 +252,61 @@ class PublisherTest {
         publications.setCurrent(current);
         publications.recordHistory(new PublishedVersion(current.version(), books, current.books(),
                 current.publishedAt(), current.collection()));
+    }
+
+    // ---- notifications (DR-08b) ----
+
+    @Test
+    void notificaCadaPublicacionConLoQueRespondio() {
+        List<PublishResult> notified = new CopyOnWriteArrayList<>();
+        Publisher notifying = new Publisher(publications, "inverted_index",
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), notified::add);
+        indexed(1, 2);
+
+        PublishResult first = notifying.publish();
+        PublishResult nothingNew = notifying.publish();
+
+        assertEquals(List.of(first, nothingNew), notified);
+        assertEquals(new PublishResult(1, 0, 2, AT), nothingNew);
+    }
+
+    @Test
+    void siNotificarFallaLaPublicacionSigueHecha() {
+        Publisher failing = new Publisher(publications, "inverted_index",
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), result -> {
+                    throw new IllegalStateException("Hazelcast no responde (simulado)");
+                });
+        indexed(1);
+
+        PublishResult result = failing.publish();
+
+        assertEquals(new PublishResult(1, 1, 1, AT), result);
+        assertEquals(1, publications.current().orElseThrow().version());
+    }
+
+    @Test
+    void unaPublicacionQueFallaNoSeNotifica() {
+        List<PublishResult> notified = new CopyOnWriteArrayList<>();
+        Publisher notifying = new Publisher(publications, "inverted_index",
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), notified::add);
+        indexed(1);
+        publications.failSwitch(true);
+
+        assertThrows(MongoException.class, notifying::publish);
+
+        assertEquals(List.of(), notified);
+    }
+
+    @Test
+    void laRecuperacionAlArrancarTambienNotifica() {
+        List<PublishResult> notified = new CopyOnWriteArrayList<>();
+        Publisher notifying = new Publisher(publications, "inverted_index",
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), notified::add);
+        publications.addBooks(List.of(5), 1);              // a publication of 1 died before the CAS
+
+        notifying.recover();
+
+        assertEquals(List.of(new PublishResult(1, 1, 1, AT)), notified);
     }
 
     // ---- one publication at a time in the process (D7) ----

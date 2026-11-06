@@ -131,6 +131,29 @@ class ControlTasksTest {
         assertEquals(10, indexing.calls, "never more than 30 s between two attempts");
     }
 
+    /**
+     * Indexing answered 0 new books (T10 is late or failed, MongoDB was emptied): the full batch
+     * waits for the interval instead of calling every second (review of #35).
+     */
+    @Test
+    void aPublicationWithNothingNewWaitsForTheInterval() throws Exception {
+        ControlTasks tasks = tasks(1);
+        indexed(1);
+        indexing.booksPublished = 0;
+        assertTrue(tasks.maybePublish().isPresent());
+        clock.advance(Duration.ofSeconds(1));
+        assertTrue(tasks.maybePublish().isEmpty(), "the batch is still full, but nothing new came of it");
+        assertEquals(1, indexing.calls);
+
+        clock.advance(INTERVAL.minusSeconds(1));
+        indexing.booksPublished = 2;
+        assertTrue(tasks.maybePublish().isPresent(), "the interval is over");
+        assertEquals(2, indexing.calls);
+        clock.advance(Duration.ofSeconds(1));
+        assertTrue(tasks.maybePublish().isPresent(), "something was published: the full batch counts again");
+        assertEquals(3, indexing.calls);
+    }
+
     // --- Lease check ---------------------------------------------------------------------
 
     @Test
@@ -172,6 +195,7 @@ class ControlTasksTest {
 
         private final Deque<Boolean> failures = new ArrayDeque<>();
         int calls;
+        int booksPublished = 2;
 
         FakeIndexing() {
             super(URI.create("http://unused.invalid"));
@@ -189,7 +213,7 @@ class ControlTasksTest {
             if (Optional.ofNullable(failures.poll()).orElse(false)) {
                 throw new PublishFailedException("Indexing is down");
             }
-            return new PublishOutcome(7, 2, 2, "2026-11-04T10:00:30Z");
+            return new PublishOutcome(7, booksPublished, 2, "2026-11-04T10:00:30Z");
         }
     }
 }

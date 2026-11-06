@@ -16,6 +16,7 @@ import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.model.RawBook;
 import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
 import es.ulpgc.bigdata.testsupport.MongoTestSupport;
+import io.javalin.util.JavalinBindException;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -131,10 +132,12 @@ class AppTest {
             // Another one takes a book through both stages: with PUBLISH_BATCH=1 it is published
             coordination.complete(coordination.claim(Stage.INGESTION, "ingestion-ok/w0", Duration.ofSeconds(1)).orElseThrow());
             coordination.complete(coordination.claim(Stage.INDEXING, "indexing-ok/w0", Duration.ofSeconds(1)).orElseThrow());
-            waitFor(() -> publications.get() > 0, "the publication");
+            // The Control counts a publication once it has read Indexing's answer, after Indexing
+            // received it: wait for the Control itself (review of #35, it failed 1 run in 2)
+            waitFor(() -> publication(service).get("publications").getAsInt() > 0, "the publication");
+            assertTrue(publications.get() > 0);
 
             JsonObject status = get(service, "/control/status");
-            assertTrue(status.getAsJsonObject("publication").get("publications").getAsInt() > 0, status.toString());
             assertEquals(1, status.getAsJsonObject("lease_check").get("requeued_or_failed").getAsInt(), status.toString());
         } finally {
             workers.shutdown();
@@ -195,7 +198,26 @@ class AppTest {
         assertEquals(BookState.PENDING, coordination.task(5).orElseThrow().bookState());
     }
 
+    /** The start fails with the port's error: closing what had started (server not up) must not hide it. */
+    @Test
+    void aPortThatIsTakenStopsTheStart() throws Exception {
+        try (ServerSocket taken = new ServerSocket(0)) {
+            Map<String, String> env = env();
+            env.put("CONTROL_PORT", String.valueOf(taken.getLocalPort()));
+            env.put("HZ_MEMBERS", "127.0.0.1:" + freePort());
+            assertThrows(JavalinBindException.class, () -> App.start(Env.of(env)));
+        }
+    }
+
     // --- Helpers -------------------------------------------------------------------------
+
+    private JsonObject publication(App.RunningService service) {
+        try {
+            return get(service, "/control/status").getAsJsonObject("publication");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     /** Indexing's POST /index/publish, counting the calls. */
     private static HttpServer fakeIndexing(AtomicInteger publications) throws Exception {
