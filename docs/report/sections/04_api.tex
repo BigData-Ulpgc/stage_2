@@ -119,8 +119,9 @@ The APIs can be checked without a front-end at three levels, all with their expe
 
 \begin{itemize}
   \item \code{scripts/validate-api.sh}: every check with one command against the running system, ending
-        with exit code 1 if any fails. On the sample dataset of 15 books it gives 56 correct, 0 failed and
-        0 skipped.
+        with exit code 1 if any fails. On the 15 books of the sample dataset it gives 64 correct, 0 failed and
+        0 skipped, both with the books loaded directly and with the same books processed by the complete
+        flow (Control, Ingestion, Indexing and publication).
   \item \code{StackValidationTest}: the same contract in JUnit, also checking the shape of the JSON.
   \item \code{http/*.http}: examples to run by hand, documented in \code{http/README.md}.
 \end{itemize}
@@ -130,6 +131,3 @@ pagination, the internal endpoints, and the read-only mounts of the datalake. A 
 \textit{skipped} for an endpoint that answers 501; a route that disappears is a failure. The expected answers
 were compared with the original texts, so they are not a copy of what the API returns. The load tests refuse
 to measure if this validation fails.
-
-\pending{Add the checks of the Control routes and repeat the validation with the complete flow once DR-06b is
-merged.}

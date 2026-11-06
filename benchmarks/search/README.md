@@ -98,7 +98,7 @@ deletes it at the end. The script ends with `docker compose down`.
 
 The plan compares indexes of 200 and 100,000 books. For the 200 books of `shared/book_ids.txt`, the real
 services build the index (`POST /ingest`, `/index/update` and `/index/publish`) and only the `clients`
-experiment runs, about 25 minutes plus the first download:
+experiment runs, about 45 minutes plus the first download:
 
 ```bash
 INDEX_IDS=shared/book_ids.txt OUT=benchmarks/search/results/load-200 EXPERIMENTS=clients     bash benchmarks/search/run-load.sh
