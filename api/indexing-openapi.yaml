@@ -1,15 +1,14 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.2.1
+  version: 0.3.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.2.1** (DR-05 and its review follow-up, DR-07, plan v3.3). `POST /index/publish`
-    answers 501 until DR-08 and `POST /index/rebuild` until DR-10; their contract is already the
-    final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
+    **Status: draft v0.3.0** (DR-05 and its review follow-up, DR-07, DR-08a, plan v3.3).
+    `POST /index/rebuild` answers 501 until DR-10; its contract is already the final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
 
@@ -83,9 +82,9 @@ paths:
         a timeout or a 503 the caller can simply call again.
 
         **Readiness.** Only complete books are indexed; a book that is missing or still being
-        written gives 404. **From DR-06** "complete" means that the book has its `<id>._READY`
-        marker in the datalake (contract §6.2). Until then it means that both its header and
-        its body exist.
+        written gives 404. "Complete" means that the book has its `<id>._READY` marker in the
+        datalake, which Ingestion writes after its header and body (contract §6.2). A datalake
+        written before DR-06 has no markers: its books give 404 until they are ingested again.
 
         **Empty books.** A book whose body gives no term at all answers 422 `EMPTY_BOOK` and
         nothing is written: neither its metadata nor its terms. That happens when the body is
@@ -119,7 +118,7 @@ paths:
         '400':
           $ref: '#/components/responses/InvalidBookId'
         '404':
-          description: The book is not complete in the datalake (from DR-06, no `<id>._READY`).
+          description: The book is not complete in the datalake (no `<id>._READY`).
           content:
             application/json:
               schema:
@@ -151,21 +150,28 @@ paths:
         books or `PUBLISH_INTERVAL_S` seconds).
 
         Publishes version V+1 (contract §6.5): records the books of `index_log` that are not
-        published yet in `index_books` with version V+1, then switches the `CURRENT` document of `index_meta`
-        to V+1 in ONE atomic operation, and announces it with `IndexPublished` on the
-        Hazelcast topic `index-events`. The index itself is never copied.
+        published yet in `index_books` with version V+1 (a book keeps the first version in which
+        it became visible), then switches the `CURRENT` document of `index_meta` to V+1 in ONE
+        atomic operation, and records the version in `index_publications`. The index itself is
+        never copied. **From DR-08b** it also marks the books `PUBLISHED` in `book-state` and
+        announces the version with `IndexPublished` on the Hazelcast topic `index-events`.
 
         **Completion: synchronous.** A 200 means `CURRENT` already points to the returned
-        version; each Search replica loads it when it receives the event (or, if the event is
-        lost, at its next check of `CURRENT`).
+        version; each Search replica loads it at its next check of `CURRENT` (from DR-08b, as
+        soon as it receives the event).
 
         **Idempotency.** If no book was indexed since the last publication, no empty version
         is created: the answer is 200 with the current version and `books_published: 0`. So a
-        retry after a lost response returns the version that the first call created.
-        Concurrent calls are serialized. A publication interrupted by a crash is completed or
-        undone when the service starts again.
+        retry after a lost response returns the version that the first call created. If nothing
+        has ever been published and there is nothing to publish, `version` and `published_at`
+        are null.
 
-        **Until DR-08** this endpoint answers 501 `NOT_IMPLEMENTED`.
+        **Concurrency and failures.** Calls to one replica are serialized. `CURRENT` only moves
+        from the version that was read (V) to V+1: a conditional update that is the fencing of
+        coordination contract §5, so a late writer can never move it back. If another replica
+        published first, the call starts again on the new version. A publication interrupted by
+        a crash (books already in `index_books` with V+1, `CURRENT` still at V) is invisible to
+        Search and is completed when the service starts again, or by the next call.
       responses:
         '200':
           description: The returned version is the published one (`CURRENT`).
@@ -188,10 +194,15 @@ paths:
                     books_published: 0
                     total_books: 200
                     published_at: '2026-11-03T10:15:00Z'
+                nothingYet:
+                  summary: Nothing published ever and nothing indexed
+                  value:
+                    version: null
+                    books_published: 0
+                    total_books: 0
+                    published_at: null
         '409':
           $ref: '#/components/responses/RebuildInProgress'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '503':
           $ref: '#/components/responses/StorageUnavailable'
         '500':
@@ -340,7 +351,8 @@ components:
         version:
           type: integer
           minimum: 1
-          description: Version that `CURRENT` points to after the call (the same `index_version` that Search returns).
+          nullable: true
+          description: Version that `CURRENT` points to after the call (the same `index_version` that Search returns); null if nothing has ever been published.
           example: 43
         books_published:
           type: integer
@@ -353,7 +365,8 @@ components:
         published_at:
           type: string
           format: date-time
-          description: When `version` was published (UTC).
+          nullable: true
+          description: When `version` was published (UTC, to the second); null if nothing has ever been published.
 
     RebuildStatus:
       type: object
@@ -466,13 +479,13 @@ components:
           example:
             error: { code: REBUILD_IN_PROGRESS, message: 'a rebuild is running, retry later', field: null }
     NotImplemented:
-      description: Temporary, until the task that implements the endpoint (DR-08 publish, DR-10 rebuild).
+      description: Temporary, until the task that implements the endpoint (DR-10 rebuild).
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error: { code: NOT_IMPLEMENTED, message: 'POST /index/publish is not implemented yet (DR-08)', field: null }
+            error: { code: NOT_IMPLEMENTED, message: 'POST /index/rebuild is not implemented yet (DR-10)', field: null }
     StorageUnavailable:
       description: MongoDB does not answer within the driver timeout; nothing was changed or the change is safe to repeat. Retry later.
       content:

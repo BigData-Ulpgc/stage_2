@@ -9,7 +9,7 @@ import java.util.Objects;
  * Indexing cannot disagree on a path.
  *
  * <pre>
- *   &lt;DATA_DIR&gt;/datalake/range/&lt;START&gt;-&lt;END&gt;/&lt;id&gt;.header.txt, &lt;id&gt;.body.txt   RangeBasedDatalake
+ *   &lt;DATA_DIR&gt;/datalake/range/&lt;START&gt;-&lt;END&gt;/&lt;id&gt;.header.txt, &lt;id&gt;.body.txt, &lt;id&gt;._READY   RangeBasedDatalake
  * </pre>
  *
  * The datalake is the only thing on this volume: the inverted index and the metadata live in

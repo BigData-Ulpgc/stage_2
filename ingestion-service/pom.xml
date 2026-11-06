@@ -27,6 +27,14 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
         </dependency>
+        <!-- The embedded Hazelcast cluster of common's tests, for the worker tests (CF-08) -->
+        <dependency>
+            <groupId>es.ulpgc.bigdata</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
