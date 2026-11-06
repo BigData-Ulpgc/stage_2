@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * HTTP API of the Ingestion Service (assignment §3.2.1; contract api/ingestion-openapi.yaml).
@@ -55,8 +56,18 @@ public final class IngestionApi {
 
     /** The server with every route and error handler; the caller calls start(port). */
     public Javalin create(String serviceName, int maxThreads) {
-        Javalin app = ServiceServer.create(serviceName, maxThreads,
-                () -> Map.of("source", service.sourceDescription()));
+        return create(serviceName, maxThreads, Map::of);
+    }
+
+    /** The same, with more fields for GET /status (the workers and the coordination, CF-08). */
+    public Javalin create(String serviceName, int maxThreads, Supplier<Map<String, Object>> extraStatus) {
+        Objects.requireNonNull(extraStatus, "extraStatus");
+        Javalin app = ServiceServer.create(serviceName, maxThreads, () -> {
+            Map<String, Object> status = new LinkedHashMap<>();
+            status.put("source", service.sourceDescription());
+            status.putAll(extraStatus.get());
+            return status;
+        });
         app.post("/ingest/{book_id}", this::ingest);
         app.get("/ingest/status/{book_id}", this::status);
         app.get("/ingest/list", this::list);

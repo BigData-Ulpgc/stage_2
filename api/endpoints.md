@@ -55,7 +55,9 @@ Consumed by another service or by an operator, never by the front-end.
 |---|---|---|---|---|
 | every service | `GET /status` | Docker healthcheck, Control Module | Liveness of the process (it does not depend on MongoDB or Hazelcast) | done (read-only) |
 
-Search adds the loaded `index_version` to its `GET /status`, and Ingestion its book `source`.
+Search adds the loaded `index_version` to its `GET /status`, and Ingestion its book `source`,
+its `coordination` (`connecting` until the cluster answers: `/status` never waits for it) and
+what its `ingest-queue` workers did.
 
 ## Interactions that are not HTTP
 

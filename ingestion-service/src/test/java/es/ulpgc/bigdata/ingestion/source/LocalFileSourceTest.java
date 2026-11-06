@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.ingestion.source;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -15,6 +16,12 @@ class LocalFileSourceTest {
 
     @TempDir
     Path tmp;
+
+    /** Every folder of these tests has at least one book, or the source would not start. */
+    @BeforeEach
+    void oneBook() throws Exception {
+        Files.writeString(tmp.resolve("pg1.txt"), "a book");
+    }
 
     @Test
     void returnsTheFilePgIdUntouched() throws Exception {
@@ -40,5 +47,21 @@ class LocalFileSourceTest {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new LocalFileSource(tmp.resolve("nowhere")));
         assertTrue(e.getMessage().contains("nowhere"));
+    }
+
+    /** What Docker leaves when the host folder of a bind mount does not exist. */
+    @Test
+    void anEmptyFolderIsRejectedAtStartup() throws Exception {
+        Path empty = Files.createDirectory(tmp.resolve("empty"));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> new LocalFileSource(empty));
+        assertTrue(e.getMessage().contains("has no pg<id>.txt file"), e.getMessage());
+    }
+
+    @Test
+    void aFolderWithoutBookFilesIsRejectedToo() throws Exception {
+        Path other = Files.createDirectory(tmp.resolve("other"));
+        Files.writeString(other.resolve("README.md"), "not a book");
+        Files.writeString(other.resolve("pgX.txt"), "not an id");
+        assertThrows(IllegalArgumentException.class, () -> new LocalFileSource(other));
     }
 }
