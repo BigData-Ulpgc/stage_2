@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -29,6 +30,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class DatalakeContractTest {
 
     @TempDir Path tmp;
+
+    /** The name of a temporary file left by a write that died: <file>.<uuid>.tmp. */
+    private static Path leftoverTmp(Path file) {
+        return Path.of(file + "." + UUID.randomUUID() + AbstractFileDatalake.TMP_SUFFIX);
+    }
 
     /** The implementations: expected name + recipe to create a new one. */
     static Stream<Arguments> structures() {
@@ -110,6 +116,18 @@ class DatalakeContractTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("structures")
+    void unLibroGuardadoNoSeModifica(String name, Function<Path, Datalake> factory) throws IOException {
+        Datalake d = create(name, factory);
+        BookLocation first = d.save(new RawBook(1342, "H", "B"));
+
+        BookLocation second = d.save(new RawBook(1342, "H2", "B2"));
+
+        assertEquals(first, second);
+        assertEquals("B", Files.readString(d.locate(1342).orElseThrow().bodyPath(), StandardCharsets.UTF_8));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("structures")
     void libroSinHeaderDesaparece(String name, Function<Path, Datalake> factory) throws IOException {
         Datalake d = create(name, factory);
         d.save(new RawBook(1, "H", "B"));
@@ -131,6 +149,8 @@ class DatalakeContractTest {
         // paths returned by save, so it works for the three structures.
         Files.writeString(Path.of(loc.bodyPath() + ".tmp"), "x");
         Files.writeString(Path.of(loc.headerPath() + ".tmp"), "x");
+        Files.writeString(leftoverTmp(loc.bodyPath()), "x");
+        Files.writeString(leftoverTmp(loc.headerPath()), "x");
         Files.writeString(loc.bodyPath().resolveSibling("notas.txt"), "x");
 
         // At the root: a loose file and a folder with an invalid name that imitates
@@ -150,7 +170,7 @@ class DatalakeContractTest {
     @MethodSource("structures")
     void listadoYLocateSonCoherentes(String name, Function<Path, Datalake> factory) throws IOException {
         Datalake d = create(name, factory);
-        for (int id = 0; id < 30; id++) {
+        for (int id = 1; id <= 30; id++) {             // from 1: the ids of BookIds
             d.save(new RawBook(id * 137, "H", "B"));
         }
         Files.delete(d.locate(137).orElseThrow().bodyPath());
@@ -182,7 +202,7 @@ class DatalakeContractTest {
     void listaOrdenadaConMuchosLibrosDesordenados(String name, Function<Path, Datalake> factory) {
         Datalake d = create(name, factory);
         List<Integer> ids = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 1; i <= 100; i++) {
             ids.add(i * 37);                        // spread across several ranges
         }
         Collections.shuffle(ids, new Random(42));   // fixed seed: always the same shuffle
@@ -207,9 +227,9 @@ class DatalakeContractTest {
         d.save(new RawBook(1, "H", "B"));
         BookLocation loc = d.save(new RawBook(1342, "H", "B"));
 
-        // Simulates that the process died after writing body.tmp but before moving it:
-        // the header is in place and the body only exists as .tmp.
-        Files.move(loc.bodyPath(), Path.of(loc.bodyPath() + ".tmp"));
+        // Simulates that the process died after writing the body's temporary file but before
+        // moving it: the header is in place and the body only exists as .tmp.
+        Files.move(loc.bodyPath(), leftoverTmp(loc.bodyPath()));
 
         assertTrue(d.locate(1342).isEmpty());
         assertEquals(List.of(1), d.listBookIds());
@@ -221,13 +241,14 @@ class DatalakeContractTest {
             throws IOException {
         Datalake d = create(name, factory);
         BookLocation loc = d.save(new RawBook(1342, "H", "B"));
-        Files.move(loc.bodyPath(), Path.of(loc.bodyPath() + ".tmp"));
+        Files.move(loc.bodyPath(), leftoverTmp(loc.bodyPath()));
 
-        BookLocation again = d.save(new RawBook(1342, "H", "B definitivo"));
+        d.save(new RawBook(1342, "H", "B definitivo"));
 
+        // The abandoned temporary file does not get in the way: the listing and locate ignore
+        // it. Whether it stays or is cleaned up is not part of the contract.
         assertEquals(List.of(1342), d.listBookIds());
         assertEquals("B definitivo",
                 Files.readString(d.locate(1342).orElseThrow().bodyPath(), StandardCharsets.UTF_8));
-        assertFalse(Files.exists(Path.of(again.bodyPath() + ".tmp")));
     }
 }

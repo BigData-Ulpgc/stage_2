@@ -188,9 +188,17 @@ public final class Coordination implements AutoCloseable {
     public Map<BookState, Long> countByState() {
         Map<BookState, Long> counts = new EnumMap<>(BookState.class);
         for (BookState state : BookState.values()) {
-            counts.put(state, books.aggregate(Aggregators.count(), Predicates.equal("state", state.name())));
+            counts.put(state, count(state));
         }
         return counts;
+    }
+
+    /**
+     * Books in one state: one aggregation on the members, served by the index on state. The
+     * Control asks for INDEXED every second to decide when to publish (CF-09).
+     */
+    public long count(BookState state) {
+        return books.aggregate(Aggregators.count(), Predicates.equal("state", state.name()));
     }
 
     /**

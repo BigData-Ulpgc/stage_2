@@ -358,6 +358,17 @@ class CoordinationTest {
     }
 
     @Test
+    void countOfOneStateAgreesWithCountByState() throws Exception {
+        coordination.seed(List.of(1, 2, 3, 4));
+        coordination.complete(claim(Stage.INGESTION));
+        coordination.complete(claim(Stage.INGESTION));
+        assertEquals(2L, coordination.count(BookState.PENDING));
+        assertEquals(2L, coordination.count(BookState.DOWNLOADED));
+        assertEquals(0L, coordination.count(BookState.INDEXED));
+        assertEquals(coordination.countByState().get(BookState.PENDING), coordination.count(BookState.PENDING));
+    }
+
+    @Test
     void markPublishedOnlyTouchesIndexedBooks() throws Exception {
         coordination.seed(List.of(1, 2));
         coordination.complete(claim(Stage.INGESTION));

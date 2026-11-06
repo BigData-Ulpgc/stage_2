@@ -44,7 +44,7 @@ Storage chosen for Stage 2 (goal: hundreds of thousands of books):
 
 | Store | Structure | Where |
 |---|---|---|
-| Datalake | `range`: folders of 1000 ids | `<DATA_DIR>/datalake/range/<START>-<END>/<id>.header.txt`, `<id>.body.txt` |
+| Datalake | `range`: folders of 1000 ids; a book exists when its `<id>._READY` marker is there, written last (contract §6.2). Datalakes written before DR-06 have no markers: their books are ingested again | `<DATA_DIR>/datalake/range/<START>-<END>/<id>.header.txt`, `<id>.body.txt`, `<id>._READY` |
 | Metadata | MongoDB, one document per book with the book id as `_id` (contract §6.3) | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / collection `books` |
 | Inverted index | MongoDB, one document `{"term", "postings"}` per term | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / `MONGO_COLLECTION` (`inverted_index`) |
 
@@ -76,6 +76,10 @@ curl localhost:7012/status    # {"service":"indexing-service","status":"running"
 | `INGESTION_GUTENBERG_URL` | `https://www.gutenberg.org/cache/epub` | Base of the download URL `<base>/<id>/pg<id>.txt` |
 | `INGESTION_CONNECT_TIMEOUT_SECONDS`, `INGESTION_REQUEST_TIMEOUT_SECONDS` | 10, 30 | Timeouts of one download |
 | `INGESTION_LOCAL_DIR` | `sample_dataset/raw` | Folder of the `local` source; it must exist, or Ingestion does not start |
+| `INGESTION_WORKERS` | 4 | `ingest-queue` worker threads of one Ingestion replica; `0`: HTTP API only, no Hazelcast |
+| `INGESTION_FETCH_RETRIES` | 2 | Retries of a transient source failure inside one attempt (after 1 s, 2 s…); a 429 or 403 is not retried, it pauses the replica |
+| `HZ_MEMBERS`, `HZ_CLUSTER_NAME` | `localhost:5701,localhost:5702`, `search-engine` | Hazelcast cluster of the workers (inside Docker: `hz-1:5701,hz-2:5701`) |
+| `LEASE_SECONDS`, `MAX_ATTEMPTS`, `LEASE_CHECK_SECONDS` | 120, 3, 10 | Leases and attempts of the coordination contract (`api/contracts/coordination.md` §8) |
 
 The request thread pool is always set explicitly (`common` → `ServiceServer`): a Jetty
 `QueuedThreadPool` with max `<SERVICE>_HTTP_THREADS`, min 8, idle timeout 60 s. These are the

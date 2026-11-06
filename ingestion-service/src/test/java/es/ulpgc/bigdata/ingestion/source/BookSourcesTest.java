@@ -1,9 +1,11 @@
 package es.ulpgc.bigdata.ingestion.source;
 
 import es.ulpgc.bigdata.config.Env;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -16,6 +18,12 @@ class BookSourcesTest {
 
     @TempDir
     Path tmp;
+
+    /** A local folder must hold at least one book (LocalFileSource). */
+    @BeforeEach
+    void oneBook() throws Exception {
+        Files.writeString(tmp.resolve("pg1.txt"), "a book");
+    }
 
     @Test
     void theDefaultIsGutenberg() {
