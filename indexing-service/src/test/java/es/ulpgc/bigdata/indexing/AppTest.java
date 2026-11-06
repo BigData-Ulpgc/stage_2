@@ -96,6 +96,15 @@ class AppTest {
     }
 
     @Test
+    void sinHilosDeParseoNoArranca() {
+        Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");
+        env.put("INDEXING_THREADS", "0");
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> App.start(Env.of(env)));
+        assertTrue(e.getMessage().contains("INDEXING_THREADS"), e.getMessage());
+    }
+
+    @Test
     void closeLiberaElPuertoYSePuedeLlamarDosVeces() throws Exception {
         running = App.start(Env.of(baseEnv("mongodb://127.0.0.1:1")));
         int port = running.port();
