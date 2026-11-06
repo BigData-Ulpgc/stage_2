@@ -3,8 +3,6 @@ package es.ulpgc.bigdata.indexing;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientConnectionStrategyConfig;
-import com.hazelcast.config.Config;
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.MongoException;
 import es.ulpgc.bigdata.coordination.BookState;
@@ -17,6 +15,7 @@ import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.model.RawBook;
+import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -40,9 +39,9 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The consumer of index-queue (DR-06b) against a real Hazelcast member embedded in the JVM:
- * the books reach DOWNLOADED through the real transitions, and IndexingService runs on the
- * in-memory stores. The waits of the writer are recorded and shortened to 10 ms.
+ * The consumer of index-queue (DR-06b) against a real Hazelcast cluster embedded in the JVM
+ * (common's HazelcastTestCluster, two members): the books reach DOWNLOADED through the real
+ * transitions, and IndexingService runs on the in-memory stores. The waits of the writer are recorded and shortened to 10 ms.
  */
 class IndexingWriterTest {
 
@@ -67,7 +66,7 @@ class IndexingWriterTest {
 
     @BeforeAll
     static void connect() {
-        client = HazelcastTestMember.settings().openClient();
+        client = HazelcastTestCluster.settings().openClient();
     }
 
     @AfterAll
@@ -77,8 +76,8 @@ class IndexingWriterTest {
 
     @BeforeEach
     void setUp() {
-        HazelcastTestMember.reset();
-        coordination = Coordination.on(client, HazelcastTestMember.settings(), Clock.systemUTC());
+        HazelcastTestCluster.reset();
+        coordination = Coordination.on(client, HazelcastTestCluster.settings(), Clock.systemUTC());
         datalake = new RangeBasedDatalake(dataDir.resolve("datalake/range"));
         metadata = new InMemoryMetadataRepository();
         index = new IndexingServiceTest.SpyIndex();
@@ -239,8 +238,8 @@ class IndexingWriterTest {
         // that fails at once while offline (ASYNC). The writer is NOT told of the disconnection,
         // so its calls to Hazelcast throw: the case of a failure the listener has not seen.
         String cluster = "indexing-writer-outage-" + UUID.randomUUID();
-        HazelcastInstance member = ownMember(cluster, 5961, true);
-        int port = member.getCluster().getLocalMember().getAddress().getPort();
+        int port = 5961;
+        HazelcastInstance member = HazelcastTestCluster.startStandaloneMember(cluster, port);
         CoordinationSettings settings = new CoordinationSettings(List.of("127.0.0.1:" + port), cluster, 120, 3, 10);
         ClientConfig config = new ClientConfig().setClusterName(cluster);
         config.getNetworkConfig().addAddress("127.0.0.1:" + port);
@@ -258,7 +257,7 @@ class IndexingWriterTest {
             assertEquals(List.of(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(4)),
                     backoffs().subList(0, 3));
 
-            member = ownMember(cluster, port, false);          // the cluster is back, on the same port
+            member = HazelcastTestCluster.startStandaloneMember(cluster, port);   // back, on the same port
             await("vuelve a tener el lock", () -> writer.role() == IndexingWriter.Role.ACTIVE);
             sleeps.clear();
             member.shutdown();
@@ -276,16 +275,6 @@ class IndexingWriterTest {
         return sleeps.stream().filter(d -> d.compareTo(IndexingWriter.MIN_BACKOFF) >= 0).toList();
     }
 
-    private static HazelcastInstance ownMember(String cluster, int port, boolean autoIncrement) {
-        Config config = new Config().setClusterName(cluster);
-        config.setProperty("hazelcast.phone.home.enabled", "false");
-        config.getJetConfig().setEnabled(false);
-        config.getNetworkConfig().setPort(port).setPortAutoIncrement(autoIncrement);
-        config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
-        config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
-        return Hazelcast.newHazelcastInstance(config);
-    }
-
     // ---- leases ----
 
     @Test
@@ -298,7 +287,7 @@ class IndexingWriterTest {
         assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));
 
         // The Control, 10 minutes later, sees the lease expired and requeues the book (T8).
-        Coordination control = Coordination.on(client, HazelcastTestMember.settings(),
+        Coordination control = Coordination.on(client, HazelcastTestCluster.settings(),
                 Clock.fixed(Instant.now().plus(Duration.ofMinutes(10)), ZoneOffset.UTC));
         assertEquals(1, control.requeueExpiredLeases());
         index.flushGate = null;                            // the next attempt does not stop
@@ -313,9 +302,9 @@ class IndexingWriterTest {
 
     @Test
     void conDosEscritoresSoloUnoIndexaYElOtroTomaElRelevo() throws Exception {
-        HazelcastInstance otherClient = HazelcastTestMember.settings().openClient();
+        HazelcastInstance otherClient = HazelcastTestCluster.settings().openClient();
         try {
-            Coordination other = Coordination.on(otherClient, HazelcastTestMember.settings(), Clock.systemUTC());
+            Coordination other = Coordination.on(otherClient, HazelcastTestCluster.settings(), Clock.systemUTC());
             inDatalake(20, 21, 22, 23);
             IndexingWriter a = start(coordination, "w-a");
             await("a activo", () -> a.role() == IndexingWriter.Role.ACTIVE);

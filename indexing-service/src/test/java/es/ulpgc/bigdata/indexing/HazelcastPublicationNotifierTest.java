@@ -1,7 +1,5 @@
 package es.ulpgc.bigdata.indexing;
 
-import com.hazelcast.config.Config;
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.MongoException;
 import es.ulpgc.bigdata.coordination.BookState;
@@ -10,6 +8,7 @@ import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.coordination.IndexPublished;
 import es.ulpgc.bigdata.coordination.Stage;
+import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,9 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * T10 and IndexPublished (DR-08b) against a real Hazelcast member embedded in the JVM: the
- * books reach INDEXED through the same transitions as in production (seed, claim, complete).
- * index_books is the in-memory fake.
+ * T10 and IndexPublished (DR-08b) against a real Hazelcast cluster embedded in the JVM (common's
+ * HazelcastTestCluster, two members): the books reach INDEXED through the same transitions as
+ * in production (seed, claim, complete). index_books is the in-memory fake.
  *
  * The notifier works in a thread of its own: the tests wait for it with awaitQueued.
  */
@@ -51,7 +50,7 @@ class HazelcastPublicationNotifierTest {
 
     @BeforeAll
     static void startCluster() {
-        client = HazelcastTestMember.settings().openClient();
+        client = HazelcastTestCluster.settings().openClient();
     }
 
     @AfterAll
@@ -61,8 +60,8 @@ class HazelcastPublicationNotifierTest {
 
     @BeforeEach
     void setUp() {
-        HazelcastTestMember.reset();
-        coordination = Coordination.on(client, HazelcastTestMember.settings(), Clock.systemUTC());
+        HazelcastTestCluster.reset();
+        coordination = Coordination.on(client, HazelcastTestCluster.settings(), Clock.systemUTC());
         publications = new InMemoryPublicationRepository();
         notifier = new HazelcastPublicationNotifier(publications);
         subscription = coordination.subscribe(events::add);
@@ -360,16 +359,9 @@ class HazelcastPublicationNotifierTest {
     @Test
     void siElClientePierdeElClusterElEstadoPasaADisconnected() throws Exception {
         // A member of its own: stopping the shared one would break the other tests.
-        Config config = new Config().setClusterName("indexing-disconnect-" + UUID.randomUUID());
-        config.setProperty("hazelcast.phone.home.enabled", "false");
-        config.getJetConfig().setEnabled(false);
-        config.getNetworkConfig().setPort(5941).setPortAutoIncrement(true);
-        config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
-        config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
-        HazelcastInstance member = Hazelcast.newHazelcastInstance(config);
-        CoordinationSettings settings = new CoordinationSettings(
-                List.of("127.0.0.1:" + member.getCluster().getLocalMember().getAddress().getPort()),
-                config.getClusterName(), 120, 3, 10);
+        String cluster = "indexing-disconnect-" + UUID.randomUUID();
+        HazelcastInstance member = HazelcastTestCluster.startStandaloneMember(cluster, 5941);
+        CoordinationSettings settings = new CoordinationSettings(List.of("127.0.0.1:5941"), cluster, 120, 3, 10);
         HazelcastInstance ownClient = settings.openClient();
         try {
             notifier.connected(Coordination.on(ownClient, settings, Clock.systemUTC()));

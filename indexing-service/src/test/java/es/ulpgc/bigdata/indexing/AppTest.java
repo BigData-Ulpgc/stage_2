@@ -2,7 +2,6 @@ package es.ulpgc.bigdata.indexing;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.ConnectionString;
@@ -20,6 +19,7 @@ import es.ulpgc.bigdata.coordination.Stage;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.model.RawBook;
+import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -71,9 +71,9 @@ class AppTest {
         env.put("INDEXING_HTTP_THREADS", "8");
         env.put("DATA_DIR", dataDir.toString());
         env.put("MONGO_URI", mongoUri);
-        // The embedded test member, never the compose cluster of localhost:5701 (DR-08b).
-        env.put("HZ_MEMBERS", HazelcastTestMember.address());
-        env.put("HZ_CLUSTER_NAME", HazelcastTestMember.clusterName());
+        // The embedded test cluster, never the compose cluster of localhost:5701 (DR-08b).
+        env.put("HZ_MEMBERS", String.join(",", HazelcastTestCluster.settings().members()));
+        env.put("HZ_CLUSTER_NAME", HazelcastTestCluster.settings().clusterName());
         return env;
     }
 
@@ -229,11 +229,11 @@ class AppTest {
                 .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
                 .build())) {
             assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
-            HazelcastTestMember.reset();
-            HazelcastInstance hz = HazelcastTestMember.settings().openClient();
+            HazelcastTestCluster.reset();
+            HazelcastInstance hz = HazelcastTestCluster.settings().openClient();
             int clientsBefore = connectedClients();
             try {
-                Coordination coordination = Coordination.on(hz, HazelcastTestMember.settings(), Clock.systemUTC());
+                Coordination coordination = Coordination.on(hz, HazelcastTestCluster.settings(), Clock.systemUTC());
                 BlockingQueue<IndexPublished> events = new LinkedBlockingQueue<>();
                 coordination.subscribe(events::add);
                 new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir())
@@ -288,17 +288,12 @@ class AppTest {
     void sinMongoElEscritorArrancaIgualYSinClusterPasaAEspera() throws Exception {
         // A member of its own, which the test stops (stopping the shared one would break the
         // other tests). MongoDB down (port 1): the repair at connect fails, the writer starts anyway.
-        Config config = new Config().setClusterName("indexing-app-" + UUID.randomUUID());
-        config.setProperty("hazelcast.phone.home.enabled", "false");
-        config.getJetConfig().setEnabled(false);
-        config.getNetworkConfig().setPort(5971).setPortAutoIncrement(true);
-        config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
-        config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
-        HazelcastInstance member = Hazelcast.newHazelcastInstance(config);
+        String cluster = "indexing-app-" + UUID.randomUUID();
+        HazelcastInstance member = HazelcastTestCluster.startStandaloneMember(cluster, 5971);
         try {
             Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");
             env.put("HZ_MEMBERS", "127.0.0.1:" + member.getCluster().getLocalMember().getAddress().getPort());
-            env.put("HZ_CLUSTER_NAME", config.getClusterName());
+            env.put("HZ_CLUSTER_NAME", cluster);
             running = App.start(Env.of(env));
             awaitWriterRole("active");
 
@@ -333,8 +328,11 @@ class AppTest {
         assertEquals(expected, role);
     }
 
+    /** Clients connected to the members of this JVM (the test cluster has two). */
     private static int connectedClients() {
-        return HazelcastTestMember.start().getClientService().getConnectedClients().size();
+        return Hazelcast.getAllHazelcastInstances().stream()
+                .mapToInt(m -> m.getClientService().getConnectedClients().size())
+                .sum();
     }
 
     private static boolean alive(String threadName) {
