@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * IndexingService can be tested without MongoDB. failing(true) makes EVERY operation fail with
  * the MongoException of a MongoDB that does not answer.
  */
-class InMemoryIndexLog implements IndexLog {
+public class InMemoryIndexLog implements IndexLog {
 
     private final Map<Integer, Instant> log = new ConcurrentHashMap<>();
     private volatile boolean failing = false;
