@@ -458,6 +458,65 @@ class IndexingWriterTest {
         assertEquals(1L, writer.status().get("indexed"));
     }
 
+    @Test
+    void unLoteMasLargoQueElLeaseLoRenuevaYElControlNoLoDevuelveALaCola() throws Exception {
+        // A lease of 1 s, renewed every 333 ms, and a batch held 3 s inside its flush
+        CoordinationSettings base = HazelcastTestCluster.settings();
+        CoordinationSettings shortLease = new CoordinationSettings(base.members(), base.clusterName(), 1,
+                base.maxAttempts(), base.leaseCheckSeconds());
+        Coordination writerSide = Coordination.on(client, shortLease, Clock.systemUTC());
+        Coordination control = Coordination.on(client, shortLease, Clock.systemUTC());
+        inDatalake(21, 22);
+        CountDownLatch gate = new CountDownLatch(1);
+        index.flushGate = gate;
+        downloaded(21, 22);
+        IndexingWriter writer = start(writerSide, "w-a", 2);
+        assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));
+
+        int requeuedByControl = 0;
+        long leastLeft = Long.MAX_VALUE;                            // ms of lease left, at the worst moment
+        for (long end = System.nanoTime() + Duration.ofSeconds(3).toNanos(); System.nanoTime() < end; ) {
+            requeuedByControl += control.requeueExpiredLeases();   // the lease check of the Control
+            leastLeft = Math.min(leastLeft, task(21).leaseUntil() - System.currentTimeMillis());
+            Thread.sleep(50);
+        }
+        index.flushGate = null;
+        gate.countDown();
+
+        await("21 y 22 INDEXED", () -> task(21).bookState() == BookState.INDEXED && task(22).bookState() == BookState.INDEXED);
+        assertEquals(0, requeuedByControl, "el Control no vio ningún lease caducado");
+        assertTrue(leastLeft > 300, "se renueva cada tercio del lease, mucho antes de que caduque: quedaban "
+                + leastLeft + " ms");
+        assertEquals(0L, writer.status().get("lease_lost"));
+        assertEquals(2L, writer.status().get("indexed"));
+    }
+
+    @Test
+    void siElLeaseSePierdeDuranteElLoteNoSeCompletaYOtroIntentoLoIndexa() throws Exception {
+        // The renewal finds the book requeued (the writer stalled longer than the lease)
+        CoordinationSettings base = HazelcastTestCluster.settings();
+        CoordinationSettings shortLease = new CoordinationSettings(base.members(), base.clusterName(), 1,
+                base.maxAttempts(), base.leaseCheckSeconds());
+        Coordination writerSide = Coordination.on(client, shortLease, Clock.systemUTC());
+        inDatalake(31);
+        CountDownLatch gate = new CountDownLatch(1);
+        index.flushGate = gate;
+        downloaded(31);
+        IndexingWriter writer = start(writerSide, "w-a");
+        assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));
+
+        Coordination control = Coordination.on(client, HazelcastTestCluster.settings(),
+                Clock.fixed(Instant.now().plus(Duration.ofMinutes(10)), ZoneOffset.UTC));
+        assertEquals(1, control.requeueExpiredLeases());
+        Thread.sleep(700);                                      // at least one renewal sees it lost
+        index.flushGate = null;
+        gate.countDown();
+
+        await("31 INDEXED tras volver a la cola", () -> task(31).bookState() == BookState.INDEXED);
+        assertEquals(1L, writer.status().get("lease_lost"));
+        assertEquals(1L, writer.status().get("indexed"));
+    }
+
     // ---- one writer at a time (contract §5) ----
 
     @Test
