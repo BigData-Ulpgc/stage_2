@@ -15,6 +15,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -108,6 +109,19 @@ class IngestionApiTest {
         assertEquals(11, after.get("book_id").getAsInt());
         assertEquals("available", after.get("status").getAsString());
         assertEquals("datalake/range/00000-00999/11", after.get("path").getAsString());
+    }
+
+    /** Contract §4 through the API: a book whose write did not reach its marker is not stored. */
+    @Test
+    void aBookWithoutItsMarkerIsNotAvailableUntilItIsIngestedAgain() throws Exception {
+        source.book(1342);
+        post("/ingest/1342");
+        Files.delete(dataDir.resolve("datalake/range/01000-01999/1342._READY"));
+
+        assertEquals("not_available", json(get("/ingest/status/1342")).get("status").getAsString());
+        assertEquals(0, json(get("/ingest/list")).get("count").getAsInt());
+        assertEquals("downloaded", json(post("/ingest/1342")).get("status").getAsString());   // not already_available
+        assertEquals("available", json(get("/ingest/status/1342")).get("status").getAsString());
     }
 
     @Test

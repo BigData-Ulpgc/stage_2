@@ -22,10 +22,11 @@ info:
     2. The text is split into header and body at the `*** START OF` / `*** END OF` markers; the
        footer is dropped.
     3. Header and body are saved in the range datalake,
-       `DATA_DIR/datalake/range/<START>-<END>/<id>.header.txt` and `<id>.body.txt`, each with an
-       atomic write (temporary file + move). A book counts as in the datalake only when both
-       files are complete. From CF-07 a `<id>._READY` marker is written last and is what makes
-       the book available (plan §6.2).
+       `DATA_DIR/datalake/range/<START>-<END>/<id>.header.txt` and `<id>.body.txt`, then the
+       `<id>._READY` marker, each with an atomic write (temporary file + move). A book is in the
+       datalake (`available`, `already_available`, in `/ingest/list`) only when its marker exists
+       together with its header and body: a book written halfway is not, and the next
+       `POST /ingest/{book_id}` writes it again, whole (`api/contracts/datalake-readiness.md`).
 
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
