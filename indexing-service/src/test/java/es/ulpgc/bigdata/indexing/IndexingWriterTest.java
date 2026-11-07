@@ -160,6 +160,45 @@ class IndexingWriterTest {
         assertNull(task(1).owner(), "T7 libera el lease");
     }
 
+    // ---- a rebuild stops the writer (DR-10) ----
+
+    @Test
+    void conUnaReconstruccionEnMarchaNoReclamaNiCogeElLock() throws Exception {
+        long token = coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+        inDatalake(1);
+        downloaded(1);
+
+        IndexingWriter writer = start(coordination, "w-a");
+
+        await("en pausa", () -> writer.role() == IndexingWriter.Role.PAUSED);
+        Thread.sleep(STEP.multipliedBy(3).toMillis());
+        assertEquals(BookState.DOWNLOADED, task(1).bookState(), "el libro espera en index-queue");
+        assertFalse(coordination.indexWriterLock().isLocked(), "index-writer es de la reconstrucción");
+        assertEquals("paused", writer.status().get("role"));
+
+        coordination.endRebuild(token);
+        await("1 INDEXED al acabar la reconstrucción", () -> task(1).bookState() == BookState.INDEXED);
+    }
+
+    @Test
+    void elEscritorActivoSueltaElLockEnCuantoVeLaMarca() throws Exception {
+        IndexingWriter writer = start(coordination, "w-a");
+        await("activo", () -> writer.role() == IndexingWriter.Role.ACTIVE);
+
+        long token = coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+
+        await("en pausa", () -> writer.role() == IndexingWriter.Role.PAUSED);
+        assertFalse(coordination.indexWriterLock().isLocked(), "lo suelta para la reconstrucción");
+        inDatalake(2);
+        downloaded(2);
+        Thread.sleep(STEP.multipliedBy(3).toMillis());
+        assertEquals(BookState.DOWNLOADED, task(2).bookState());
+
+        coordination.endRebuild(token);
+        await("2 INDEXED", () -> task(2).bookState() == BookState.INDEXED);
+        assertEquals(IndexingWriter.Role.ACTIVE, writer.role());
+    }
+
     // ---- batches (DR-09) ----
 
     @Test

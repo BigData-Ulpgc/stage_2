@@ -77,6 +77,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * If a Hazelcast call fails, the writer waits 1, 2, 4... 30 s and tries again (the client
  * reconnects by itself); the wait starts again at 1 s as soon as the cluster answers a tryLock.
+ *
+ * A rebuild of the index (DR-10) stops the writer: while the rebuild marker exists it claims
+ * nothing. The active writer sees it before its next claim, writes no more batches and
+ * releases index-writer, which the rebuild is waiting for; the standbys do not even try to
+ * take it. The books that arrive meanwhile wait in index-queue. When the marker goes, the
+ * writer competes for the lock again and writes into the collection the rebuild published.
  */
 public final class IndexingWriter implements Runnable {
 
@@ -95,7 +101,7 @@ public final class IndexingWriter implements Runnable {
     }
 
     /** What the writer is doing, for GET /status. */
-    public enum Role { STANDBY, ACTIVE, STOPPED }
+    public enum Role { STANDBY, ACTIVE, PAUSED, STOPPED }
 
     private static final Logger LOG = LoggerFactory.getLogger(IndexingWriter.class);
 
@@ -157,6 +163,12 @@ public final class IndexingWriter implements Runnable {
                     if (holdsLock) {
                         release();                          // pending since the cluster was lost
                     }
+                    if (coordination.isRebuilding()) {      // DR-10: index-writer is the rebuild's
+                        role = Role.PAUSED;
+                        sleeper.sleep(step);
+                        continue;
+                    }
+                    role = Role.STANDBY;
                     long generation = disconnections.get();  // read BEFORE taking the lock
                     boolean holding = lock.tryLock(step);
                     backoff = MIN_BACKOFF;                  // the cluster answered: the next failure waits 1 s
@@ -236,6 +248,10 @@ public final class IndexingWriter implements Runnable {
         role = Role.ACTIVE;
         LOG.info("{}: holds index-writer, consuming {}", owner, Stage.INDEXING.queue());
         while (stillHolding(generation)) {
+            if (coordination.isRebuilding()) {
+                LOG.info("{}: a rebuild of the index runs, releasing index-writer", owner);
+                return;
+            }
             Optional<Claim> first = coordination.claim(Stage.INDEXING, owner, step);
             if (first.isPresent()) {
                 process(batchFrom(first.get(), generation));

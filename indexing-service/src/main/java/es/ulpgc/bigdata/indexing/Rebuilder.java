@@ -265,6 +265,7 @@ public final class Rebuilder implements AutoCloseable {
         IndexWriterLock lock = cluster.indexWriterLock();
         boolean locked = false;
         boolean switched = false;
+        boolean interrupted = false;
         Rebuild progress = started;
         String target = started.collection();
         try {
@@ -302,29 +303,39 @@ public final class Rebuilder implements AutoCloseable {
             if (!previous.equals(target)) {
                 worker.schedule(() -> dropIfUnused(previous), dropDelay.toMillis(), TimeUnit.MILLISECONDS);
             }
-        } catch (InterruptedException e) {
-            progress = failed(progress, switched, target, STOPPED);
-        } catch (RebuildAbortedException e) {
-            progress = failed(progress, switched, target, e.reason());
-        } catch (MongoException | MetadataRepositoryException e) {
-            progress = failed(progress, switched, target,
-                    "the index storage (MongoDB) does not answer: " + e.getMessage());
-        } catch (RuntimeException e) {
-            if (closing) {
-                // Hazelcast wraps the interrupt of shutdownNow: HazelcastException(InterruptedException)
-                progress = failed(progress, switched, target, STOPPED);
-            } else {
-                LOG.error("rebuild into {} failed", target, e);
-                progress = failed(progress, switched, target, e.toString());
-            }
+        } catch (InterruptedException | RuntimeException e) {
+            // shutdownNow interrupts this thread, and Hazelcast keeps the flag set when it wraps
+            // the interrupt: cleared, or the cleanup could not reach MongoDB nor Hazelcast and
+            // the marker would stay until its TTL.
+            interrupted = Thread.interrupted();
+            progress = failed(progress, switched, target, reasonOf(e, target));
         } finally {
+            interrupted |= Thread.interrupted();
             if (locked) {
                 quietly("release index-writer", lock::unlock);
             }
             // After its document says done or failed: never "running" without a marker.
             runningHere = false;
             quietly("end the marker", () -> cluster.endRebuild(token));
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
+    }
+
+    /** The error of the response, in English. */
+    private String reasonOf(Exception e, String target) {
+        if (closing || e instanceof InterruptedException) {
+            return STOPPED;                         // also HazelcastException(InterruptedException)
+        }
+        if (e instanceof RebuildAbortedException aborted) {
+            return aborted.reason();
+        }
+        if (e instanceof MongoException || e instanceof MetadataRepositoryException) {
+            return "the index storage (MongoDB) does not answer: " + e.getMessage();
+        }
+        LOG.error("rebuild into {} failed", target, e);
+        return e.toString();
     }
 
     /**

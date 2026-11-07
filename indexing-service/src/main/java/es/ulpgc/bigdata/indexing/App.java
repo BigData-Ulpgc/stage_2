@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -42,10 +43,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *   INDEXING_HTTP_THREADS  maximum Jetty request threads (default ServiceServer.DEFAULT_MAX_THREADS)
  *   INDEXING_THREADS       threads that prepare (read, parse, tokenize) the books of a batch (default 4)
  *   INDEX_WRITE_BATCH      the most books of index-queue written together (default 100)
+ *   INDEX_REBUILD_DROP_SECONDS  how long a rebuild keeps the old collection after the switch,
+ *                          for the Search replicas still reading it (default 60)
  *   DATA_DIR               root of the shared volume; the datalake is DATA_DIR/datalake/range (default ./data)
  *   MONGO_URI              mongodb://localhost:27017 (inside Docker: mongodb://mongo:27017)
  *   MONGO_DATABASE         search_engine
- *   MONGO_COLLECTION       inverted_index
+ *   MONGO_COLLECTION       inverted_index: the first collection; a rebuild publishes MONGO_COLLECTION_rNN
  *   HZ_MEMBERS, HZ_CLUSTER_NAME  the Hazelcast cluster (CoordinationSettings)
  * </pre>
  *
@@ -72,6 +75,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * standby otherwise. It writes in batches of up to INDEX_WRITE_BATCH books, prepared on
  * INDEXING_THREADS parser threads (DR-09). /status shows what it does in "writer" (null until
  * connected).
+ *
+ * POST /index/rebuild (DR-10, Rebuilder) runs in a thread of its own, from any replica: it
+ * needs the Hazelcast connection (the rebuild marker and index-writer), so until it is there
+ * it answers 503.
  */
 public final class App {
 
@@ -83,6 +90,8 @@ public final class App {
     static final int DEFAULT_THREADS = 4;
     static final String WRITE_BATCH = "INDEX_WRITE_BATCH";
     static final int DEFAULT_WRITE_BATCH = 100;
+    static final String REBUILD_DROP_SECONDS = "INDEX_REBUILD_DROP_SECONDS";
+    static final int DEFAULT_REBUILD_DROP_SECONDS = 60;
 
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
@@ -107,6 +116,7 @@ public final class App {
                 ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
         int threads = env.integerAtLeast(THREADS, DEFAULT_THREADS, 1);
         int writeBatch = env.integerAtLeast(WRITE_BATCH, DEFAULT_WRITE_BATCH, 1);
+        int dropSeconds = env.integerAtLeast(REBUILD_DROP_SECONDS, DEFAULT_REBUILD_DROP_SECONDS, 0);
         MongoSettings mongo = MongoSettings.fromEnv(env);
         DataLayout layout = DataLayout.fromEnv(env);
         CoordinationSettings coordination = CoordinationSettings.fromEnv(env);
@@ -116,8 +126,9 @@ public final class App {
         try {
             MongoDatabase db = client.getDatabase(mongo.database());
             PublicationRepository publications = new MongoPublicationRepository(db);
+            RangeBasedDatalake datalake = new RangeBasedDatalake(layout.datalakeDir());
             IndexingService service = new IndexingService(
-                    new RangeBasedDatalake(layout.datalakeDir()),
+                    datalake,
                     new MongoMetadataRepository(db),
                     // The collection of CURRENT (D8, DR-10), on the shared client that App closes
                     collection -> new MongoInvertedIndex(db, collection),
@@ -132,7 +143,11 @@ public final class App {
             Publisher publisher = new Publisher(publications, mongo.collection(), Clock.systemUTC(), notifier);
             AtomicReference<IndexingWriter> writer = new AtomicReference<>();
             AtomicReference<BackgroundConnection> connection = new AtomicReference<>();
-            Javalin server = new IndexingApi(service, publisher)
+            AtomicReference<Coordination> cluster = new AtomicReference<>();
+            Rebuilder rebuilder = new Rebuilder(() -> Optional.ofNullable(cluster.get()), service, datalake,
+                    publications, publisher, new MongoRebuildRepository(db), mongo.collection(), writeBatch,
+                    Duration.ofSeconds(dropSeconds), Clock.systemUTC());
+            Javalin server = new IndexingApi(service, publisher, rebuilder)
                     .create(SERVICE_NAME, httpThreads, () -> extraStatus(connection.get(), writer.get()))
                     .start(port);
 
@@ -141,8 +156,8 @@ public final class App {
                     SERVICE_NAME, server.port(), layout.datalakeDir().toAbsolutePath(),
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
             startRecovery(publisher);
-            RunningService running = new RunningService(server, client, writer, notifier, parsers);
-            running.connectInBackground(coordination, connection, service, writeBatch);
+            RunningService running = new RunningService(server, client, writer, notifier, parsers, rebuilder);
+            running.connectInBackground(coordination, connection, cluster, service, writeBatch);
             return running;
         } catch (RuntimeException e) {
             parsers.shutdownNow();
@@ -190,7 +205,8 @@ public final class App {
 
     /**
      * The running service. close() stops it in order: first the HTTP server (no new requests),
-     * then the index writer (after its current batch, see WRITER_GRACE) and the parser threads,
+     * then a running rebuild (it fails and drops its collection, CURRENT untouched), then the
+     * index writer (after its current batch, see WRITER_GRACE) and the parser threads,
      * then the notifier (what it has queued, see HazelcastPublicationNotifier.CLOSE_GRACE), then
      * the Hazelcast client, then the MongoClient they use. Closing twice does nothing (the shutdown hook and
      * a test may both call it).
@@ -208,17 +224,19 @@ public final class App {
         private final AtomicReference<IndexingWriter> writer;
         private final HazelcastPublicationNotifier notifier;
         private final ExecutorService parsers;
+        private final Rebuilder rebuilder;
         private BackgroundConnection connection;             // guarded by this
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private Thread writerThread;                         // guarded by this
 
         private RunningService(Javalin server, MongoClient client, AtomicReference<IndexingWriter> writer,
-                               HazelcastPublicationNotifier notifier, ExecutorService parsers) {
+                               HazelcastPublicationNotifier notifier, ExecutorService parsers, Rebuilder rebuilder) {
             this.server = server;
             this.client = client;
             this.writer = writer;
             this.notifier = notifier;
             this.parsers = parsers;
+            this.rebuilder = rebuilder;
         }
 
         /**
@@ -229,9 +247,11 @@ public final class App {
          */
         private synchronized void connectInBackground(CoordinationSettings settings,
                                                       AtomicReference<BackgroundConnection> forStatus,
+                                                      AtomicReference<Coordination> forRebuild,
                                                       IndexingService service, int writeBatch) {
             connection = BackgroundConnection.start(settings, connected -> {
                 notifier.connected(connected);
+                forRebuild.set(connected);
                 LOG.info("connected to Hazelcast {}", settings.members());
                 startWriter(connected, service, writeBatch);
             });
@@ -288,8 +308,9 @@ public final class App {
                 server.stop();
             } finally {
                 try {
+                    rebuilder.close();                       // a running one fails and drops its collection
                     stopWriter();
-                    parsers.shutdownNow();                   // idle: only the writer uses them
+                    parsers.shutdownNow();                   // idle: only the writer and a rebuild use them
                     notifier.close();
                     BackgroundConnection started;
                     synchronized (this) {
