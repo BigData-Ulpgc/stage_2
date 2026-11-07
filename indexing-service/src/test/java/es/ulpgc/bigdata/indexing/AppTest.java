@@ -2,13 +2,21 @@ package es.ulpgc.bigdata.indexing;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
+import es.ulpgc.bigdata.coordination.BookState;
+import es.ulpgc.bigdata.coordination.Claim;
+import es.ulpgc.bigdata.coordination.Coordination;
+import es.ulpgc.bigdata.coordination.IndexPublished;
+import es.ulpgc.bigdata.coordination.Stage;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
+import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.model.RawBook;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
@@ -21,8 +29,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -54,6 +68,9 @@ class AppTest {
         env.put("INDEXING_HTTP_THREADS", "8");
         env.put("DATA_DIR", dataDir.toString());
         env.put("MONGO_URI", mongoUri);
+        // The embedded test member, never the compose cluster of localhost:5701 (DR-08b).
+        env.put("HZ_MEMBERS", HazelcastTestMember.address());
+        env.put("HZ_CLUSTER_NAME", HazelcastTestMember.clusterName());
         return env;
     }
 
@@ -106,10 +123,17 @@ class AppTest {
                 running = App.start(Env.of(env));
 
                 HttpResponse<String> update = post("/index/update/1342");
+                HttpResponse<String> publish = post("/index/publish");
                 JsonObject status = JsonParser.parseString(get("/index/status").body()).getAsJsonObject();
 
                 assertEquals(200, update.statusCode(), update.body());
+                assertEquals(200, publish.statusCode(), publish.body());
                 assertEquals(1, status.get("books_indexed").getAsLong());
+                assertEquals(1, status.get("published_version").getAsInt());
+                assertEquals(1, status.get("books_published").getAsLong());
+                Document current = admin.getDatabase(database).getCollection("index_meta")
+                        .find(new Document("_id", "CURRENT")).first();
+                assertEquals("inverted_index", current.getString("collection"), "MONGO_COLLECTION (D8)");
                 assertNotNull(admin.getDatabase(database).getCollection("books")
                         .find(new Document("_id", 1342)).first(), "falta en books");
                 assertNotNull(admin.getDatabase(database).getCollection("inverted_index")
@@ -118,6 +142,112 @@ class AppTest {
                 admin.getDatabase(database).drop();
             }
         }
+    }
+
+    @Test
+    void alArrancarCompletaUnaPublicacionInterrumpida() throws Exception {
+        String database = "search_engine_test_app_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            MongoDatabase db = admin.getDatabase(database);
+            try {
+                // What a publication of version 1 leaves if it dies before switching CURRENT,
+                // plus book 6, indexed afterwards and never published.
+                new MongoIndexLog(db).markIndexed(List.of(5, 6), Instant.now());
+                db.getCollection("index_books").insertOne(new Document("_id", 5).append("version", 1));
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+
+                running = App.start(Env.of(env));
+
+                // The history entry is written last, after CURRENT: wait for it.
+                Document history = null;
+                for (int i = 0; i < 100 && history == null; i++) {
+                    history = db.getCollection("index_publications").find(new Document("_id", 1)).first();
+                    if (history == null) {
+                        Thread.sleep(50);
+                    }
+                }
+                assertNotNull(history, "la publicación interrumpida no se completó al arrancar");
+                assertEquals(List.of(5), history.getList("books", Integer.class));
+                Document current = db.getCollection("index_meta").find(new Document("_id", "CURRENT")).first();
+                assertEquals(1, current.getInteger("version"));
+                assertEquals(1, current.get("books", Number.class).longValue());
+                assertNull(db.getCollection("index_books").find(new Document("_id", 6)).first(),
+                        "un libro indexado después espera a un publish explícito");
+            } finally {
+                db.drop();
+            }
+        }
+    }
+
+    @Test
+    void statusDiceConnectingMientrasHazelcastNoResponde() throws Exception {
+        Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");
+        env.put("HZ_MEMBERS", "127.0.0.1:1");                // nobody listens
+
+        running = App.start(Env.of(env));
+
+        HttpResponse<String> status = get("/status");
+        assertEquals(200, status.statusCode());
+        assertEquals("connecting", JsonParser.parseString(status.body()).getAsJsonObject()
+                .get("coordination").getAsString());
+    }
+
+    @Test
+    void publicarMarcaElLibroComoPublishedYAvisaPorIndexEvents() throws Exception {
+        String database = "search_engine_test_app_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            HazelcastTestMember.reset();
+            HazelcastInstance hz = HazelcastTestMember.settings().openClient();
+            try {
+                Coordination coordination = Coordination.on(hz, HazelcastTestMember.settings(), Clock.systemUTC());
+                BlockingQueue<IndexPublished> events = new LinkedBlockingQueue<>();
+                coordination.subscribe(events::add);
+                // Book 1342 downloaded and claimed by the index writer, as in production.
+                coordination.seed(List.of(1342));
+                assertTrue(coordination.complete(coordination.claim(Stage.INGESTION, "test/w1", Duration.ofSeconds(5)).orElseThrow()));
+                Claim indexing = coordination.claim(Stage.INDEXING, "test/w1", Duration.ofSeconds(5)).orElseThrow();
+                new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir())
+                        .save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+                running = App.start(Env.of(env));
+                awaitCoordination("connected");
+
+                assertEquals(200, post("/index/update/1342").statusCode());
+                assertTrue(coordination.complete(indexing));          // T7, what the writer of DR-06b will do
+                HttpResponse<String> publish = post("/index/publish");
+
+                assertEquals(200, publish.statusCode(), publish.body());
+                assertEquals(BookState.PUBLISHED, coordination.task(1342).orElseThrow().bookState());
+                IndexPublished event = events.poll(5, TimeUnit.SECONDS);
+                assertNotNull(event, "no llegó IndexPublished");
+                JsonObject body = JsonParser.parseString(publish.body()).getAsJsonObject();
+                assertEquals(new IndexPublished(1, 1, 1, body.get("published_at").getAsString()), event);
+            } finally {
+                hz.shutdown();
+                admin.getDatabase(database).drop();
+            }
+        }
+    }
+
+    private void awaitCoordination(String expected) throws Exception {
+        String state = null;
+        for (int i = 0; i < 100 && !expected.equals(state); i++) {
+            state = JsonParser.parseString(get("/status").body()).getAsJsonObject().get("coordination").getAsString();
+            if (!expected.equals(state)) {
+                Thread.sleep(50);
+            }
+        }
+        assertEquals(expected, state);
     }
 
     private static boolean answers(MongoClient client) {

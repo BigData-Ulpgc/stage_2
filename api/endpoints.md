@@ -38,7 +38,7 @@ Consumed by another service or by an operator, never by the front-end.
 | Provider | Method and route | Consumers | Purpose | Completion |
 |---|---|---|---|---|
 | Indexing | `POST /index/update/{book_id}` | operators, validation | Index one complete book (metadata + posting lists + `index_log`) | done: indexed, visible after the next publish |
-| Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | *501 until DR-08*; then done: `CURRENT` points to the new version |
+| Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | done: `CURRENT` points to the returned version; visible `INDEXED` books become `PUBLISHED` and a new version is announced with `IndexPublished` (without Hazelcast it still publishes) |
 | Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | *501 until DR-10*; then accepted (202): follow `rebuild` in `GET /index/status` |
 | Indexing | `GET /index/status` | Control Module, operators | Books indexed and published, index size, rebuild progress | done (read-only) |
 | Ingestion | `POST /ingest/{book_id}` | operators, validation | Download a book, split it into header and body and store it in the datalake | done: stored (`downloaded`), or it already was (`already_available`) |
@@ -55,7 +55,9 @@ Consumed by another service or by an operator, never by the front-end.
 |---|---|---|---|---|
 | every service | `GET /status` | Docker healthcheck, Control Module | Liveness of the process (it does not depend on MongoDB or Hazelcast) | done (read-only) |
 
-Search adds the loaded `index_version` to its `GET /status`, and Ingestion its book `source`.
+Search adds the loaded `index_version` to its `GET /status`, and Ingestion its book `source`,
+its `coordination` (`connecting` until the cluster answers: `/status` never waits for it) and
+what its `ingest-queue` workers did.
 
 ## Interactions that are not HTTP
 
@@ -65,6 +67,6 @@ Those contracts are documented separately:
 | Contract | Between | Where |
 |---|---|---|
 | `book-state`, `ingest-queue`, `index-queue`, `index-events` (`IndexPublished`), lock `index-writer` (`IMap.lock`, not CP), `coordination-meta` | Control, Ingestion, Indexing, Search | [`api/contracts/coordination.md`](contracts/coordination.md) (CF-02) |
-| Datalake by ranges and `<id>._READY` | Ingestion → Indexing | plan §6.2 |
+| Datalake by ranges and `<id>._READY` | Ingestion → Indexing, Control | [`api/contracts/datalake-readiness.md`](contracts/datalake-readiness.md) (CF-07) |
 | Collection `books` (metadata) | Indexing → Search | plan §6.3 |
 | `inverted_index`, `index_books`, `index_meta` (`CURRENT`), `index_publications` | Indexing → Search, Control | plan §6.5 |

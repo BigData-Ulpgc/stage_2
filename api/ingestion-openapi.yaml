@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Ingestion Service API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Internal API of the **Ingestion Service** (assignment §3.2.1), plus its operational status
     endpoint. None of these endpoints is public: nginx only exposes the Search Service, and the
     Ingestion Service is reached inside the Docker network (`http://ingestion:7001`).
 
-    **Status: v0.1.0** (CF-06). The inventory of all endpoints of the system is
+    **Status: v0.2.0** (CF-06; v0.2.0 adds the worker state of GET /status, CF-08). The inventory of all endpoints of the system is
     `api/endpoints.md`; the Search API is `api/openapi.yaml`, the Indexing API
     `api/indexing-openapi.yaml`.
 
@@ -180,7 +180,9 @@ paths:
       summary: Liveness of the process
       description: |
         **Provider:** every service. **Consumers:** Docker healthcheck, Control Module. It does
-        not touch the source, the datalake or Hazelcast: 200 while the process runs.
+        not touch the source, the datalake or Hazelcast: 200 while the process runs, also while
+        the workers are still connecting to the cluster. `coordination` and `workers` only
+        report the state of the workers kept in memory.
       responses:
         '200':
           description: The process is running.
@@ -188,7 +190,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceStatus'
-              example: { service: ingestion-service, status: running, source: 'gutenberg https://www.gutenberg.org/cache/epub' }
+              example:
+                service: ingestion-service
+                status: running
+                source: 'gutenberg https://www.gutenberg.org/cache/epub'
+                coordination: connected
+                workers: { claimed: 8, downloaded: 8, already_available: 0, requeued: 0, failed: 0, lease_lost: 0,
+                           fetch_retries: 0, workers: 4, throttle_pauses: 0, paused_seconds: 0,
+                           invalid_ids_dropped: 0, ids_skipped: 0 }
 
 components:
   parameters:
@@ -253,6 +262,32 @@ components:
         source:
           type: string
           description: The book source in use (`INGESTION_SOURCE`).
+        coordination:
+          type: string
+          enum: [disabled, connecting, connected, disconnected]
+          description: |
+            The Hazelcast client of the `ingest-queue` workers (CF-08). `disabled` with
+            `INGESTION_WORKERS=0`; `connecting` until the cluster answers (the HTTP API works
+            meanwhile); `disconnected` while it is lost, the client reconnects by itself.
+        workers:
+          $ref: '#/components/schemas/WorkerStatus'
+
+    WorkerStatus:
+      type: object
+      description: What the workers of this replica did since it started; absent until connected.
+      properties:
+        workers: { type: integer, description: 'Worker threads (`INGESTION_WORKERS`).' }
+        claimed: { type: integer, description: 'Books claimed from `ingest-queue`.' }
+        downloaded: { type: integer, description: 'Fetched and stored, then `DOWNLOADED`.' }
+        already_available: { type: integer, description: 'Already in the datalake, `DOWNLOADED` without fetching.' }
+        requeued: { type: integer, description: 'Transient failure, back to `ingest-queue` with one more attempt.' }
+        failed: { type: integer, description: 'Permanent failure or no attempts left, `FAILED`.' }
+        lease_lost: { type: integer, description: 'Requeued by the Control while being worked on, then dropped.' }
+        fetch_retries: { type: integer, description: 'Retries of a transient source failure inside an attempt.' }
+        throttle_pauses: { type: integer, description: 'Pauses of the replica after a 429 or 403 of the source.' }
+        paused_seconds: { type: integer, description: 'Seconds left of the current pause (0 if none).' }
+        invalid_ids_dropped: { type: integer, description: 'Ids of `ingest-queue` that were not book ids (not 0 means a bug elsewhere).' }
+        ids_skipped: { type: integer, description: 'Ids whose book was not waiting (duplicates), dropped as the contract expects.' }
 
     Error:
       type: object

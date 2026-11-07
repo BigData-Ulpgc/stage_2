@@ -6,6 +6,8 @@ import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.config.MongoSettings;
+import es.ulpgc.bigdata.coordination.Coordination;
+import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
@@ -16,8 +18,11 @@ import io.javalin.Javalin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Entry point of the Indexing Service: the only place that knows the concrete classes
@@ -32,13 +37,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   MONGO_URI              mongodb://localhost:27017 (inside Docker: mongodb://mongo:27017)
  *   MONGO_DATABASE         search_engine
  *   MONGO_COLLECTION       inverted_index
+ *   HZ_MEMBERS, HZ_CLUSTER_NAME  the Hazelcast cluster (CoordinationSettings)
  * </pre>
  *
  * One MongoClient per process (D6): App creates it, shares its database with the four
- * repositories (books, inverted_index, index_log, index_meta) and closes it when the service
+ * repositories (books, inverted_index, index_log, publications) and closes it when the service
  * stops ("who creates, closes"). No constructor talks to MongoDB, so the service starts even
  * if MongoDB is down: GET /status answers and the endpoints that need MongoDB answer 503 until
  * it comes back (D4).
+ *
+ * Once the server is up, a background thread completes a publication interrupted by a previous
+ * crash (DR-08a, D2 and D3). In the background so that a MongoDB that does not answer never
+ * delays or stops the start; if it fails, the next POST /index/publish does the same work.
+ *
+ * Another one connects to Hazelcast (DR-08b), to mark the published books (T10) and announce
+ * each version on index-events. Connecting blocks until the cluster answers
+ * (CoordinationSettings.openClient), and GET /status must answer meanwhile, so it runs after
+ * the server, in the background; /status shows "coordination": connecting, connected or
+ * disconnected. Without Hazelcast the service publishes anyway (HazelcastPublicationNotifier).
  */
 public final class App {
 
@@ -70,45 +86,101 @@ public final class App {
                 ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
         MongoSettings mongo = MongoSettings.fromEnv(env);
         DataLayout layout = DataLayout.fromEnv(env);
+        CoordinationSettings coordination = CoordinationSettings.fromEnv(env);
 
         MongoClient client = mongo.openClient();
         try {
             MongoDatabase db = client.getDatabase(mongo.database());
+            PublicationRepository publications = new MongoPublicationRepository(db);
             IndexingService service = new IndexingService(
                     new RangeBasedDatalake(layout.datalakeDir()),
                     new MongoMetadataRepository(db),
                     mongo.openIndex(client),                 // shared client: does not own it
                     new MongoIndexLog(db),
-                    new MongoPublicationRepository(db),
+                    publications,
                     new MetadataParser(),
                     Tokenizer.standard());
-            Javalin server = new IndexingApi(service).create(SERVICE_NAME, httpThreads).start(port);
+            // The first version uses MONGO_COLLECTION; later ones keep the one of CURRENT (D8).
+            HazelcastPublicationNotifier notifier = new HazelcastPublicationNotifier(publications);
+            Publisher publisher = new Publisher(publications, mongo.collection(), Clock.systemUTC(), notifier);
+            Javalin server = new IndexingApi(service, publisher)
+                    .create(SERVICE_NAME, httpThreads, () -> Map.of("coordination", notifier.state()))
+                    .start(port);
 
             // Hosts only, never the whole URI: in production it may carry user and password.
             LOG.info("{} on port {} · datalake {} · MongoDB {} db={} index={}",
                     SERVICE_NAME, server.port(), layout.datalakeDir().toAbsolutePath(),
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
-            return new RunningService(server, client);
+            startRecovery(publisher);
+            RunningService running = new RunningService(server, client);
+            running.connectInBackground(coordination, notifier);
+            return running;
         } catch (RuntimeException e) {
             client.close();                                  // the start failed: do not leave it open
             throw e;
         }
     }
 
+    /** D2, D3: daemon, so it never keeps the JVM alive; close() makes it fail if still running. */
+    private static void startRecovery(Publisher publisher) {
+        Thread recovery = new Thread(() -> {
+            try {
+                publisher.recover().ifPresent(result -> LOG.info(
+                        "interrupted publication completed: version {} with {} books",
+                        result.version(), result.booksPublished()));
+            } catch (RuntimeException e) {
+                LOG.warn("could not check for an interrupted publication at start ({}); "
+                        + "the next POST /index/publish will", e.getMessage());
+            }
+        }, SERVICE_NAME + "-publish-recovery");
+        recovery.setDaemon(true);
+        recovery.start();
+    }
+
     /**
      * The running service. close() stops it in order: first the HTTP server (no new requests),
-     * then the MongoClient those requests use. Closing twice does nothing (the shutdown hook
-     * and a test may both call it).
+     * then the Hazelcast client, then the MongoClient those requests use. Closing twice does
+     * nothing (the shutdown hook and a test may both call it).
      */
     public static final class RunningService implements AutoCloseable {
 
         private final Javalin server;
         private final MongoClient client;
+        private final AtomicReference<Coordination> coordination = new AtomicReference<>();
         private final AtomicBoolean closed = new AtomicBoolean(false);
 
         private RunningService(Javalin server, MongoClient client) {
             this.server = server;
             this.client = client;
+        }
+
+        /** D2: daemon, so a JVM that stops does not wait for a cluster that never answers. */
+        private void connectInBackground(CoordinationSettings settings, HazelcastPublicationNotifier notifier) {
+            Thread connector = new Thread(() -> {
+                try {
+                    Coordination connected = Coordination.connect(settings);       // blocks
+                    if (!adopt(connected)) {
+                        return;                                  // closed while connecting
+                    }
+                    int marked = notifier.connected(connected);
+                    LOG.info("connected to Hazelcast {} · {} books PUBLISHED by the repair at start",
+                            settings.members(), marked);
+                } catch (RuntimeException e) {
+                    LOG.warn("Hazelcast: {} (the publications are not notified until the next start)", e.toString());
+                }
+            }, SERVICE_NAME + "-connect");
+            connector.setDaemon(true);
+            connector.start();
+        }
+
+        /** Keeps the client to close it; if the service already stopped, closes it now. */
+        private boolean adopt(Coordination connected) {
+            coordination.set(connected);
+            if (closed.get() && coordination.compareAndSet(connected, null)) {
+                connected.close();
+                return false;
+            }
+            return true;
         }
 
         /** The real port, also when it was started with port 0. */
@@ -125,7 +197,14 @@ public final class App {
             try {
                 server.stop();
             } finally {
-                client.close();                              // even if stopping the server failed
+                try {
+                    Coordination connected = coordination.getAndSet(null);
+                    if (connected != null) {
+                        connected.close();
+                    }
+                } finally {
+                    client.close();                          // even if stopping the rest failed
+                }
             }
             LOG.info("{} stopped", SERVICE_NAME);
         }

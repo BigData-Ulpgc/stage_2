@@ -2,16 +2,21 @@ package es.ulpgc.bigdata.http;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
+import io.javalin.http.HttpResponseException;
 import io.javalin.json.JavalinGson;
 import io.javalin.router.EndpointNotFound;
+import io.javalin.validation.ValidationError;
+import io.javalin.validation.ValidationException;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -29,6 +34,11 @@ import java.util.function.Supplier;
  *      ApiException            its own status and code (400 INVALID_PARAMETER...);
  *      a route that does not   404 NOT_FOUND (also a method the route does not have), instead
  *      exist                   of Javalin's plain-text "Endpoint GET /x not found";
+ *      Javalin's errors        an HttpResponseException (BadRequestResponse...) with its own
+ *                              status; a ValidationException of pathParamAsClass... and a body
+ *                              that is not valid JSON (bodyAsClass): 400 INVALID_PARAMETER.
+ *                              Without these, the first kept Javalin's body and the other two
+ *                              became a 500, an error of the client reported as ours;
  *      any other exception     500 INTERNAL_ERROR: a bug of ours, the details go to the log
  *                              and never to the client.
  *
@@ -118,6 +128,21 @@ public final class ServiceServer {
         app.exception(ApiException.class, (e, ctx) -> writeError(ctx, e.status(), e.code(), e.getMessage(), e.field()));
         app.exception(EndpointNotFound.class, (e, ctx) -> writeError(ctx, 404, "NOT_FOUND",
                 "no route " + ctx.method() + " " + ctx.path(), null));
+        // Javalin's own errors, which kept Javalin's body or became a 500 (review of #16, CF-09):
+        // its HTTP responses (BadRequestResponse...) with their status...
+        app.exception(HttpResponseException.class, (e, ctx) -> writeError(ctx, e.getStatus(),
+                codeOf(e.getStatus()), e.getMessage(), null));
+        // ...a parameter of pathParamAsClass / queryParamAsClass / a body validator...
+        app.exception(ValidationException.class, (e, ctx) -> {
+            Map.Entry<String, List<ValidationError<Object>>> first = e.getErrors().entrySet().iterator().next();
+            writeError(ctx, 400, "INVALID_PARAMETER",
+                    first.getKey() + " is not valid: " + first.getValue().get(0).getMessage(), first.getKey());
+        });
+        // ...and a request body that is not valid JSON, or not of the expected shape (bodyAsClass).
+        // JsonSyntaxException and not JsonParseException: the latter also covers WRITING JSON,
+        // which would be our bug, a 500.
+        app.exception(JsonSyntaxException.class, (e, ctx) -> writeError(ctx, 400, "INVALID_PARAMETER",
+                "the request body is not valid JSON of the expected shape", "body"));
         app.exception(Exception.class, (e, ctx) -> {
             LOG.error("Unexpected error on {} {}", ctx.method(), ctx.path(), e);
             writeError(ctx, 500, "INTERNAL_ERROR", "internal error", null);
@@ -131,6 +156,14 @@ public final class ServiceServer {
      *
      * @param field request parameter that caused the error, or null (written as null, not omitted)
      */
+    /** The code of the common format for a status Javalin answers by itself. */
+    static String codeOf(int status) {
+        if (status == 404) {
+            return "NOT_FOUND";
+        }
+        return status < 500 ? "INVALID_PARAMETER" : "INTERNAL_ERROR";
+    }
+
     public static void writeError(Context ctx, int status, String code, String message, String field) {
         Map<String, Object> error = new LinkedHashMap<>();
         error.put("code", code);

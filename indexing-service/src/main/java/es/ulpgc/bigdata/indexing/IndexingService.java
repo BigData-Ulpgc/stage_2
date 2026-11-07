@@ -91,8 +91,8 @@ public final class IndexingService {
         if (!BookIds.isValid(bookId)) {
             throw new IllegalArgumentException("book_id fuera de rango (1.." + BookIds.MAX + "): " + bookId);
         }
-        // 1. Readiness is decided ONLY by the datalake (§6.2): header + body today, also the
-        //    <id>._READY marker after DR-06, without changing this method.
+        // 1. Readiness is decided ONLY by the datalake (§6.2): the book exists when its
+        //    <id>._READY marker is there, written after its header and body (DR-06).
         BookLocation location = datalake.locate(bookId)
                 .orElseThrow(() -> new BookNotFoundException(bookId));
 

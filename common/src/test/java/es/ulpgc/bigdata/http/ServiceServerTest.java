@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.http;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.javalin.Javalin;
+import io.javalin.http.BadRequestResponse;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -153,6 +154,63 @@ class ServiceServerTest {
         assertTrue(error.get("field").isJsonNull());
     }
 
+    // --- Javalin's own errors (CF-09: the Control receives JSON) ----------------------------
+
+    @Test
+    void aBadRequestResponseOfJavalinUsesTheCommonFormat() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.get("/bad", ctx -> {
+            throw new BadRequestResponse("bad input");
+        });
+        app.start(0);
+        JsonObject error = assertError(get("/bad"), 400, "INVALID_PARAMETER");
+        assertEquals("bad input", error.get("message").getAsString());
+    }
+
+    @Test
+    void aTypedParameterThatDoesNotConvertIs400NamingIt() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.get("/items/{n}", ctx -> ctx.json(ctx.pathParamAsClass("n", Integer.class).get()));
+        app.start(0);
+        JsonObject error = assertError(get("/items/abc"), 400, "INVALID_PARAMETER");    // was a 500
+        assertEquals("n", error.get("field").getAsString());
+    }
+
+    @Test
+    void aBodyThatIsNotJsonIs400() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.post("/jobs", ctx -> ctx.json(ctx.bodyAsClass(Map.class)));
+        app.start(0);
+        JsonObject error = assertError(send("POST", "/jobs", "{not json"), 400, "INVALID_PARAMETER");   // was a 500
+        assertEquals("body", error.get("field").getAsString());
+    }
+
+    @Test
+    void aBodyOfTheWrongShapeIs400Too() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.post("/jobs", ctx -> ctx.json(ctx.bodyAsClass(Map.class)));
+        app.start(0);
+        assertError(send("POST", "/jobs", "[1, 2, 3]"), 400, "INVALID_PARAMETER");    // an array, not an object
+    }
+
+    @Test
+    void aWellFormedBodyStillWorks() throws Exception {
+        app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS);
+        app.post("/jobs", ctx -> ctx.json(ctx.bodyAsClass(Map.class)));
+        app.start(0);
+        HttpResponse<String> response = send("POST", "/jobs", "{\"book_ids\": [1342]}");
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("1342"));
+    }
+
+    @Test
+    void theCodeOfAJavalinStatus() {
+        assertEquals("NOT_FOUND", ServiceServer.codeOf(404));
+        assertEquals("INVALID_PARAMETER", ServiceServer.codeOf(400));
+        assertEquals("INVALID_PARAMETER", ServiceServer.codeOf(413));
+        assertEquals("INTERNAL_ERROR", ServiceServer.codeOf(503));
+    }
+
     @Test
     void statusStillWorksWithTheErrorHandlers() throws Exception {
         app = ServiceServer.create("test-service", ServiceServer.DEFAULT_MAX_THREADS).start(0);
@@ -178,6 +236,14 @@ class ServiceServerTest {
     private HttpResponse<String> send(String method, String path) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + path))
                 .method(method, HttpRequest.BodyPublishers.noBody())
+                .build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> send(String method, String path, String body) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + path))
+                .method(method, HttpRequest.BodyPublishers.ofString(body))
+                .header("Content-Type", "application/json")
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
