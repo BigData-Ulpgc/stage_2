@@ -4,6 +4,10 @@
 #   bash benchmarks/search/run-all.sh            all of it: about 6 h on an idle machine
 #   bash benchmarks/search/run-all.sh --check    only the checks of the machine, 1 minute
 #
+#   DATASET_DIR=/path/to/sample_dataset/book     if stage_1 is not cloned next to stage_2
+#   REDO=jmh                                     measure a committed step again (here, JMH); the old
+#                                                results are kept as results/jmh-previous
+#
 # A step whose results are finished or already committed is skipped, so after a failure the same
 # command goes on from where it stopped. At the end it commits the results; pushing them is left to you.
 set -uo pipefail
@@ -44,7 +48,14 @@ check() {
     ss -ltn 2>/dev/null | grep -qE ':(8080|7000|27017|5701) ' && say "WARNING: a port the system needs is in use (8080, 7000, 27017 or 5701)"
     [ -z "$(git status --porcelain -- . ':!benchmarks/search/results' ':!data')" ] \
         || say "WARNING: uncommitted changes; host.txt will say so. Better: git stash, or a clean clone"
-    [ -d "${DATASET_DIR:-../stage_1/sample_dataset/book}" ] || { say "MISSING: ../stage_1/sample_dataset (clone stage_1 next to stage_2)"; ok=false; }
+    local dataset="${DATASET_DIR:-../stage_1/sample_dataset/book}"
+    if [ -d "$dataset" ]; then
+        say "Sample dataset: $dataset ($(find "$dataset" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') books)"
+    else
+        say "MISSING: the sample dataset at $dataset. Clone stage_1 next to stage_2, or set"
+        say "         DATASET_DIR=/path/to/stage_1/sample_dataset/book (the folder with one subfolder per book)"
+        ok=false
+    fi
     curl -s -m 10 -o /dev/null -w '%{http_code}' https://www.gutenberg.org/ | grep -q '^[23]' \
         || say "WARNING: Project Gutenberg does not answer; the 200 real books (step 4) will be skipped"
     for file in control-module/src/main/java/es/ulpgc/bigdata/control/ControlApi.java \
@@ -64,6 +75,10 @@ pipeline_ready() {
 
 step() {    # step NAME RESULT_DIR COMMAND...
     local name="$1" dir="$2"; shift 2
+    if [[ " ${REDO:-} " == *" $(basename "$dir") "* ]] && git ls-files --error-unmatch "$dir" > /dev/null 2>&1; then
+        rm -rf "$dir-previous"
+        git mv "$dir" "$dir-previous" && say "$name: measured again (REDO); the committed results are now $dir-previous"
+    fi
     if [ -f "$dir/.done" ] || git ls-files --error-unmatch "$dir" > /dev/null 2>&1; then
         say "$name: already done ($dir is finished or committed), skipped"
         return 0
@@ -123,8 +138,11 @@ fi
 # ---- 7. Tables and figures, then commit ----
 say "Analysis"
 "$PYTHON" benchmarks/search/analyze.py >> "$LOG" 2>&1 || say "analyze.py failed, see $LOG (the measures are kept)"
-git add -f benchmarks/search/results/jmh benchmarks/search/results/load* benchmarks/search/results/mixed \
-    benchmarks/search/results/analysis benchmarks/search/results/run-all.log 2>/dev/null
+# One by one: never the smoke runs nor the folders of a step that failed (*.failed-*)
+for dir in jmh jmh-previous load load-200 load-10000 mixed analysis; do
+    [ -e "$RESULTS/$dir" ] && git add -A "$RESULTS/$dir"
+done
+git add -f "$RESULTS/run-all.log"      # *.log is ignored, but this one is part of the evidence
 git commit -q -m "test(search): benchmark results (DP-12)" \
     && say "Results committed. Now: git push origin $(git branch --show-current)" \
     || say "Nothing new to commit"
