@@ -2,6 +2,8 @@ package es.ulpgc.bigdata.indexing;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
@@ -11,7 +13,6 @@ import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.coordination.BookState;
-import es.ulpgc.bigdata.coordination.Claim;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.IndexPublished;
 import es.ulpgc.bigdata.coordination.Stage;
@@ -35,6 +36,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -193,12 +195,13 @@ class AppTest {
 
         HttpResponse<String> status = get("/status");
         assertEquals(200, status.statusCode());
-        assertEquals("connecting", JsonParser.parseString(status.body()).getAsJsonObject()
-                .get("coordination").getAsString());
+        JsonObject body = JsonParser.parseString(status.body()).getAsJsonObject();
+        assertEquals("connecting", body.get("coordination").getAsString());
+        assertTrue(body.get("writer").isJsonNull(), "sin cluster no hay escritor");
     }
 
     @Test
-    void publicarMarcaElLibroComoPublishedYAvisaPorIndexEvents() throws Exception {
+    void deLaColaAPublishedElEscritorIndexaYLaPublicacionAvisa() throws Exception {
         String database = "search_engine_test_app_" + System.nanoTime();
         try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
                 .applyConnectionString(new ConnectionString(MONGO_URI))
@@ -211,10 +214,6 @@ class AppTest {
                 Coordination coordination = Coordination.on(hz, HazelcastTestMember.settings(), Clock.systemUTC());
                 BlockingQueue<IndexPublished> events = new LinkedBlockingQueue<>();
                 coordination.subscribe(events::add);
-                // Book 1342 downloaded and claimed by the index writer, as in production.
-                coordination.seed(List.of(1342));
-                assertTrue(coordination.complete(coordination.claim(Stage.INGESTION, "test/w1", Duration.ofSeconds(5)).orElseThrow()));
-                Claim indexing = coordination.claim(Stage.INDEXING, "test/w1", Duration.ofSeconds(5)).orElseThrow();
                 new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir())
                         .save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
                 Map<String, String> env = baseEnv(MONGO_URI);
@@ -222,8 +221,16 @@ class AppTest {
                 running = App.start(Env.of(env));
                 awaitCoordination("connected");
 
-                assertEquals(200, post("/index/update/1342").statusCode());
-                assertTrue(coordination.complete(indexing));          // T7, what the writer of DR-06b will do
+                // Book 1342 seeded and downloaded, as the Control and an Ingestion worker do (T1-T3).
+                coordination.seed(List.of(1342));
+                assertTrue(coordination.complete(coordination.claim(Stage.INGESTION, "test/w1", Duration.ofSeconds(5)).orElseThrow()));
+
+                // The writer of this replica claims it from index-queue and indexes it (T6, T7).
+                awaitState(coordination, 1342, BookState.INDEXED);
+                JsonObject writer = JsonParser.parseString(get("/status").body()).getAsJsonObject().getAsJsonObject("writer");
+                assertEquals("active", writer.get("role").getAsString());
+                assertEquals(1, writer.get("indexed").getAsLong());
+
                 HttpResponse<String> publish = post("/index/publish");
 
                 assertEquals(200, publish.statusCode(), publish.body());
@@ -232,11 +239,77 @@ class AppTest {
                 assertNotNull(event, "no llegó IndexPublished");
                 JsonObject body = JsonParser.parseString(publish.body()).getAsJsonObject();
                 assertEquals(new IndexPublished(1, 1, 1, body.get("published_at").getAsString()), event);
+
+                running.close();
+                assertFalse(Thread.getAllStackTraces().keySet().stream()
+                                .anyMatch(t -> t.getName().equals("indexing-service-writer") && t.isAlive()),
+                        "close() volvió con el escritor todavía vivo");
             } finally {
+                running.close();                              // the writer stops before the client
                 hz.shutdown();
                 admin.getDatabase(database).drop();
             }
         }
+    }
+
+    @Test
+    void sinMongoElEscritorArrancaIgualYSinClusterPasaAEspera() throws Exception {
+        // A member of its own, which the test stops (stopping the shared one would break the
+        // other tests). MongoDB down (port 1): the repair at connect fails, the writer starts anyway.
+        Config config = new Config().setClusterName("indexing-app-" + UUID.randomUUID());
+        config.setProperty("hazelcast.phone.home.enabled", "false");
+        config.getJetConfig().setEnabled(false);
+        config.getNetworkConfig().setPort(5971).setPortAutoIncrement(true);
+        config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
+        config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+        HazelcastInstance member = Hazelcast.newHazelcastInstance(config);
+        try {
+            Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");
+            env.put("HZ_MEMBERS", "127.0.0.1:" + member.getCluster().getLocalMember().getAddress().getPort());
+            env.put("HZ_CLUSTER_NAME", config.getClusterName());
+            running = App.start(Env.of(env));
+            awaitWriterRole("active");
+
+            member.shutdown();
+
+            awaitWriterRole("standby");                       // stops claiming at once (contract §5)
+            awaitCoordination("disconnected");
+
+            // The cluster stays down longer than the first wait after a failure (1 s): even
+            // then the writer is not stuck in a Hazelcast call, and it stops at once.
+            Thread.sleep(2_000);
+            long start = System.nanoTime();
+            running.close();
+            Duration closing = Duration.ofNanos(System.nanoTime() - start);
+            assertTrue(closing.compareTo(App.RunningService.WRITER_GRACE.dividedBy(2)) < 0,
+                    "close() tardó " + closing.toMillis() + " ms");
+        } finally {
+            running.close();
+            member.shutdown();
+        }
+    }
+
+    private void awaitWriterRole(String expected) throws Exception {
+        String role = null;
+        for (int i = 0; i < 200 && !expected.equals(role); i++) {
+            JsonObject body = JsonParser.parseString(get("/status").body()).getAsJsonObject();
+            role = body.get("writer").isJsonNull() ? null : body.getAsJsonObject("writer").get("role").getAsString();
+            if (!expected.equals(role)) {
+                Thread.sleep(50);
+            }
+        }
+        assertEquals(expected, role);
+    }
+
+    private static void awaitState(Coordination coordination, int bookId, BookState expected) throws Exception {
+        BookState state = null;
+        for (int i = 0; i < 200 && state != expected; i++) {
+            state = coordination.task(bookId).map(t -> t.bookState()).orElse(null);
+            if (state != expected) {
+                Thread.sleep(50);
+            }
+        }
+        assertEquals(expected, state);
     }
 
     private void awaitCoordination(String expected) throws Exception {
