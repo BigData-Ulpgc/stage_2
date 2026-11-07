@@ -4,11 +4,14 @@
 Indexing Service, Search Service. **Implemented by:** `common/coordination` (CF-04); no
 service names a structure or builds a `BookTask` by hand.
 
-**Status: v1.3.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
+**Status: v1.4.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
 publication in §5, an interrupted T10 in §7, split-brain in §9); v1.2 the review notes of #19
 (dropped ids are counted, not logged, §1 and §2); v1.3 the details of the recovery found while
 implementing it (CF-10: row R of §4.1; §7: `index_books` only up to `CURRENT`, never
-backwards, read before writing, what is lost). Implemented by
+backwards, read before writing, what is lost); v1.4 the review notes of #32 (DR-08b): T10 and
+`IndexPublished` leave right after `POST /index/publish` answers, from a thread of their own;
+one event per version, the last skipped one announced on reconnecting (§6); T10 applied again
+on connecting and after each publication (§7). Implemented by
 `common/coordination` (CF-04). Changing anything in this file (names, fields, states,
 transitions) needs the approval of the other two members (plan §7). A change of the `BookTask`
 fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the stored
