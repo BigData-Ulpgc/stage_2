@@ -5,6 +5,7 @@ import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
+import es.ulpgc.bigdata.datamart.publication.MongoPublishedBooks;
 import com.mongodb.client.model.BulkWriteOptions;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Indexes;
@@ -47,10 +48,11 @@ import java.util.TreeSet;
  */
 public final class MongoPublicationRepository implements PublicationRepository {
 
-    public static final String INDEX_META = "index_meta";
-    public static final String INDEX_BOOKS = "index_books";
+    // The names the Control reads too (CF-10): defined once, in common's MongoPublishedBooks.
+    public static final String INDEX_META = MongoPublishedBooks.INDEX_META;
+    public static final String INDEX_BOOKS = MongoPublishedBooks.INDEX_BOOKS;
     public static final String INDEX_PUBLICATIONS = "index_publications";
-    public static final String CURRENT = "CURRENT";
+    public static final String CURRENT = MongoPublishedBooks.CURRENT;
 
     private static final String ID = "_id";
     private static final String VERSION = "version";
