@@ -5,6 +5,7 @@ import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
+import es.ulpgc.bigdata.datamart.publication.MongoPublishedBooks;
 import com.mongodb.client.model.BulkWriteOptions;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Indexes;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -46,10 +48,11 @@ import java.util.TreeSet;
  */
 public final class MongoPublicationRepository implements PublicationRepository {
 
-    public static final String INDEX_META = "index_meta";
-    public static final String INDEX_BOOKS = "index_books";
+    // The names the Control reads too (CF-10): defined once, in common's MongoPublishedBooks.
+    public static final String INDEX_META = MongoPublishedBooks.INDEX_META;
+    public static final String INDEX_BOOKS = MongoPublishedBooks.INDEX_BOOKS;
     public static final String INDEX_PUBLICATIONS = "index_publications";
-    public static final String CURRENT = "CURRENT";
+    public static final String CURRENT = MongoPublishedBooks.CURRENT;
 
     private static final String ID = "_id";
     private static final String VERSION = "version";
@@ -228,10 +231,13 @@ public final class MongoPublicationRepository implements PublicationRepository {
         return ids;
     }
 
-    /** One query by _id (the primary index) per IN_BATCH ids. */
+    /**
+     * One query by _id (the primary index) per IN_BATCH ids. Without repeated ids, so that an id
+     * repeated in two batches is not returned twice; the order does not matter.
+     */
     @Override
     public List<Integer> visibleAmong(Collection<Integer> bookIds, int version) {
-        List<Integer> all = new ArrayList<>(new TreeSet<>(Objects.requireNonNull(bookIds, "bookIds")));
+        List<Integer> all = new ArrayList<>(new LinkedHashSet<>(Objects.requireNonNull(bookIds, "bookIds")));
         List<Integer> visible = new ArrayList<>();
         for (int from = 0; from < all.size(); from += IN_BATCH) {
             List<Integer> batch = all.subList(from, Math.min(from + IN_BATCH, all.size()));
