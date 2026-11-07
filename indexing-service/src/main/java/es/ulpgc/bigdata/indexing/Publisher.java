@@ -48,6 +48,10 @@ import java.util.function.Function;
  * return at once: the Hazelcast one only queues the announcement (T10 and the IndexPublished
  * event) for a thread of its own. If it fails, the call still answers what was published:
  * CURRENT has already switched.
+ *
+ * The switch of a rebuild (DR-10) is one more publication, publishInto: the same steps, but the
+ * new version names the rebuilt collection and is published even if no book is new. Search
+ * sees the new collection and every book at once, with the same CAS and the same event.
  */
 public final class Publisher {
 
@@ -87,7 +91,20 @@ public final class Publisher {
      *                               not follow the contract
      */
     public PublishResult publish() {
-        return publishSelected(Unpublished::all);
+        return publishSelected(Unpublished::all, null);
+    }
+
+    /**
+     * The switch of a rebuild (DR-10): publishes a new version whose inverted index is
+     * {@code collection}, with the books not published yet, as publish does. Unlike publish it
+     * always makes a new version, also with no new book, because what changes is the collection.
+     * The caller has every book of the index in {@code collection} before calling it.
+     *
+     * @throws IllegalStateException as publish
+     */
+    public PublishResult publishInto(String collection) {
+        Objects.requireNonNull(collection, "collection");
+        return publishSelected(Unpublished::all, collection);
     }
 
     /**
@@ -99,15 +116,16 @@ public final class Publisher {
      * @return what was published; empty if nothing was interrupted
      */
     public Optional<PublishResult> recover() {
-        PublishResult result = publishSelected(Unpublished::interrupted);
+        PublishResult result = publishSelected(Unpublished::interrupted, null);
         return result.booksPublished() == 0 ? Optional.empty() : Optional.of(result);
     }
 
-    private PublishResult publishSelected(Function<Unpublished, List<Integer>> select) {
+    /** @param switchTo the collection of the new version (a rebuild); null to keep the one of CURRENT */
+    private PublishResult publishSelected(Function<Unpublished, List<Integer>> select, String switchTo) {
         lock.lock();
         try {
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                Optional<PublishResult> result = attempt(select);
+                Optional<PublishResult> result = attempt(select, switchTo);
                 if (result.isPresent()) {
                     announce(result.get());
                     return result.get();
@@ -132,7 +150,7 @@ public final class Publisher {
     }
 
     /** One publication on top of the CURRENT read now; empty if the CAS failed. */
-    private Optional<PublishResult> attempt(Function<Unpublished, List<Integer>> select) {
+    private Optional<PublishResult> attempt(Function<Unpublished, List<Integer>> select, String switchTo) {
         Optional<Publication> current = publications.current();
         if (current.isPresent()) {
             current = repair(current.get());
@@ -143,7 +161,7 @@ public final class Publisher {
         Integer currentVersion = current.map(Publication::version).orElse(null);
 
         List<Integer> books = select.apply(publications.unpublished(currentVersion));
-        if (books.isEmpty()) {
+        if (books.isEmpty() && switchTo == null) {
             return Optional.of(current
                     .map(c -> new PublishResult(c.version(), 0, c.books(), c.publishedAt()))
                     .orElse(new PublishResult(null, 0, 0, null)));
@@ -152,7 +170,9 @@ public final class Publisher {
         int next = currentVersion == null ? 1 : currentVersion + 1;
         publications.addBooks(books, next);
         long total = publications.countVisible(next);
-        String collection = current.map(this::collectionOf).orElse(defaultCollection);
+        String collection = switchTo != null
+                ? switchTo
+                : current.map(this::collectionOf).orElse(defaultCollection);
         String publishedAt = clock.instant().truncatedTo(ChronoUnit.SECONDS).toString();   // D6
 
         if (!publications.switchCurrent(currentVersion, new Publication(next, total, collection, publishedAt))) {
@@ -165,7 +185,8 @@ public final class Publisher {
         } catch (RuntimeException e) {
             LOG.warn("version {} is published, but its history entry could not be written: repaired later", next, e);
         }
-        LOG.info("published version {}: {} new books, {} visible", next, books.size(), total);
+        LOG.info("published version {}: {} new books, {} visible, collection {}",
+                next, books.size(), total, collection);
         return Optional.of(new PublishResult(next, books.size(), total, publishedAt));
     }
 
