@@ -59,10 +59,10 @@ for tool in java docker curl git "$PYTHON"; do
     command -v "$tool" > /dev/null || { echo "ERROR: $tool not found" >&2; exit 1; }
 done
 
-BOOKS="data/bench-books"
+BOOKS="./data/bench-books"
 export MONGO_DATABASE=search_benchmark
 export INGESTION_SOURCE=local INGESTION_LOCAL_HOST_DIR="$BOOKS"
-export DATALAKE_HOST_DIR="data/bench-mixed/datalake"
+export DATALAKE_HOST_DIR="./data/bench-mixed/datalake"
 export NGINX_CPUS="${NGINX_CPUS:-2}"           # as in run-load.sh, so the two can be compared
 mkdir -p "$OUT/monitor"
 

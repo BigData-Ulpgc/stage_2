@@ -90,7 +90,7 @@ fi
 FULL_STACK="$COMPOSE -f docker-compose.yml -f docker-compose.validation.yml"
 # A datalake of its own for each run: the Control rebuilds book-state from every <id>._READY it
 # finds, so the books of another experiment would end up in this index.
-export DATALAKE_HOST_DIR="${DATALAKE_HOST_DIR:-data/bench-$(basename "$OUT")/datalake}"
+export DATALAKE_HOST_DIR="${DATALAKE_HOST_DIR:-./data/bench-$(basename "$OUT")/datalake}"
 mkdir -p "$DATALAKE_HOST_DIR"
 
 # A database of its own: the loader EMPTIES the one it receives. It takes it as an argument, not from this variable.

@@ -111,7 +111,7 @@ if pipeline_ready; then
             || fail "the synthetic dataset could not be generated, see $LOG"
     fi
     step "Load, 10,000 synthetic books" "$RESULTS/load-10000" env INDEX_IDS=data/bench-books/book_ids.txt \
-        INGESTION_SOURCE=local INGESTION_LOCAL_HOST_DIR=data/bench-books OUT="$RESULTS/load-10000" \
+        INGESTION_SOURCE=local INGESTION_LOCAL_HOST_DIR=./data/bench-books OUT="$RESULTS/load-10000" \
         EXPERIMENTS=clients bash benchmarks/search/run-load.sh
 
     # ---- 6. Search while the pipeline works (§6.4, integration) ----
