@@ -355,6 +355,56 @@ class AppTest {
         }
     }
 
+    // ---- the writer thread dies (DR-13) ----
+
+    @Test
+    void siElEscritorMuereElServicioSaleConCodigo1DesdeOtroHilo() throws Exception {
+        BlockingQueue<String> exits = new LinkedBlockingQueue<>();
+        Thread writer = new Thread(() -> {
+            throw new OutOfMemoryError("prueba: Java heap space");
+        }, "test-writer");
+        writer.setUncaughtExceptionHandler(App.exitWhenWriterDies(() -> false,
+                code -> exits.add(code + " " + Thread.currentThread().getName())));
+        writer.start();
+
+        assertEquals("1 indexing-service-exit", exits.poll(5, TimeUnit.SECONDS),
+                "exit(1), y desde un hilo nuevo: el hook de parada espera al hilo del escritor");
+    }
+
+    @Test
+    void siElServicioYaSeEstaParandoNoLlamaAExit() throws Exception {
+        BlockingQueue<Integer> exits = new LinkedBlockingQueue<>();
+        Thread writer = new Thread(() -> {
+            throw new OutOfMemoryError("prueba: Java heap space");
+        }, "test-writer");
+        writer.setUncaughtExceptionHandler(App.exitWhenWriterDies(() -> true, exits::add));
+        writer.start();
+        writer.join(5_000);
+
+        assertNull(exits.poll(500, TimeUnit.MILLISECONDS), "exit dentro del hook de parada no volvería nunca");
+    }
+
+    @Test
+    void elHiloDelEscritorParaElServicioSiMuereSalvoSiYaSeEstaParando() throws Exception {
+        HazelcastTestCluster.start();                         // also when this test runs alone
+        HazelcastTestCluster.reset();
+        BlockingQueue<Integer> exits = new LinkedBlockingQueue<>();
+        running = App.start(Env.of(baseEnv("mongodb://127.0.0.1:1")), exits::add);
+        awaitWriterRole("active");
+        Thread thread = Thread.getAllStackTraces().keySet().stream()
+                .filter(t -> t.getName().equals("indexing-service-writer") && t.isAlive())
+                .findFirst().orElseThrow();
+        OutOfMemoryError oom = new OutOfMemoryError("prueba: Java heap space");
+        Thread.UncaughtExceptionHandler handler = thread.getUncaughtExceptionHandler();  // null once it ends
+
+        handler.uncaughtException(thread, oom);
+        assertEquals(1, exits.poll(5, TimeUnit.SECONDS), "el servicio sale con código 1");
+
+        running.close();
+        handler.uncaughtException(thread, oom);
+        assertNull(exits.poll(500, TimeUnit.MILLISECONDS), "parándose, no vuelve a llamar a exit");
+    }
+
     @Test
     void statusDiceConnectingMientrasHazelcastNoResponde() throws Exception {
         Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");

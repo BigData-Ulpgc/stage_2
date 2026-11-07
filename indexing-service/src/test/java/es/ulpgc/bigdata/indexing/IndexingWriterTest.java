@@ -33,8 +33,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
@@ -515,6 +517,34 @@ class IndexingWriterTest {
         await("31 INDEXED tras volver a la cola", () -> task(31).bookState() == BookState.INDEXED);
         assertEquals(1L, writer.status().get("lease_lost"));
         assertEquals(1L, writer.status().get("indexed"));
+    }
+
+    @Test
+    void unErrorAlEscribirMataAlEscritorYLosLeasesDelLoteDejanDeRenovarse() throws Exception {
+        // An OutOfMemoryError in the flush, as DR-13 met with batches of 1000 books
+        CoordinationSettings base = HazelcastTestCluster.settings();
+        CoordinationSettings shortLease = new CoordinationSettings(base.members(), base.clusterName(), 1,
+                base.maxAttempts(), base.leaseCheckSeconds());
+        Coordination writerSide = Coordination.on(client, shortLease, Clock.systemUTC());
+        inDatalake(41);
+        OutOfMemoryError oom = new OutOfMemoryError("prueba: Java heap space");
+        index.errorOnNextFlush = oom;
+        downloaded(41);
+        IndexingWriter writer = new IndexingWriter(writerSide, service, "w-a", d -> Thread.sleep(10), 1, STEP);
+        BlockingQueue<Throwable> died = new LinkedBlockingQueue<>();
+        Thread thread = new Thread(writer, "test-writer-w-a");
+        thread.setUncaughtExceptionHandler((t, e) -> died.add(e));
+        thread.start();
+
+        assertSame(oom, died.poll(10, TimeUnit.SECONDS), "el Error sale de run() y llega al manejador del hilo");
+        thread.join(5_000);
+        assertFalse(thread.isAlive());
+        assertEquals("stopped", writer.status().get("role"));
+        assertTrue(writerSide.indexWriterLock().isLocked(), "el lock sigue cogido hasta que se cierre el cliente");
+        assertEquals(BookState.INDEXING, task(41).bookState());
+        long leaseUntil = task(41).leaseUntil();
+        Thread.sleep(1_200);                                    // more than three turns of renewal
+        assertEquals(leaseUntil, task(41).leaseUntil(), "nadie renueva el lease: el Control lo devolverá a la cola");
     }
 
     // ---- one writer at a time (contract §5) ----
