@@ -109,6 +109,7 @@ $COMPOSE build >> "$OUT/compose.log" 2>&1
     grep -E '^[A-Z]+_(CPUS|MEM_LIMIT)=|^(PUBLISH_BATCH|PUBLISH_INTERVAL_S|INGESTION_WORKERS)=' .env | sed 's/^/  /'
 } > "$OUT/host.txt"
 
+# books: INDEXED or PUBLISHED, the work of the pipeline (not the wait for the next publication)
 echo "repetition,phase,books,seconds,books_per_second" > "$OUT/pipeline.csv"
 
 # One load point; the pipeline keeps working during it in the mixed phase.
@@ -131,11 +132,10 @@ for repetition in $(seq 1 "$REPETITIONS"); do
     $COMPOSE exec -T mongo mongosh --quiet "$MONGO_DATABASE" --eval 'db.dropDatabase()' > /dev/null
     $COMPOSE up -d --wait >> "$OUT/compose.log" 2>&1
 
-    start=$SECONDS
     control_seed_and_wait "$OUT/base-ids.txt" 7200
-    seconds=$((SECONDS - start))
+    seconds="$INDEXED_SECONDS"
     echo "$repetition,alone,$PUBLISHED_NOW,$seconds,$(awk "BEGIN{printf \"%.2f\", $PUBLISHED_NOW/$seconds}")" >> "$OUT/pipeline.csv"
-    echo "  base index: $PUBLISHED_NOW books in $seconds s"
+    echo "  base index: $PUBLISHED_NOW books indexed in $seconds s"
     sleep 10                                     # Search loads the last version
     java -Xmx1g benchmarks/search/LoadGenerator.java --url "$URL" --clients 32 --warmup 0 --duration 20 > /dev/null
 
@@ -145,7 +145,7 @@ for repetition in $(seq 1 "$REPETITIONS"); do
 
     # The new books enter while Search answers: the same clients, now with the pipeline busy.
     ids="$(paste -sd, "$OUT/extra-ids.txt")"
-    before="$(control_count PUBLISHED)"
+    before="$(control_done)"
     start=$SECONDS
     curl -sf -m 120 -X POST localhost:7000/control/jobs -H 'Content-Type: application/json' \
         -d "{\"book_ids\":[$ids]}" > /dev/null
@@ -154,10 +154,10 @@ for repetition in $(seq 1 "$REPETITIONS"); do
         load mixed "$clients" "$repetition"
     done
     seconds=$((SECONDS - start))
-    after="$(control_count PUBLISHED)"
+    after="$(control_done)"
     done_books=$((after - before))
     echo "$repetition,with_search_load,$done_books,$seconds,$(awk "BEGIN{printf \"%.2f\", $done_books/$seconds}")" >> "$OUT/pipeline.csv"
-    echo "  during the load: $done_books of $EXTRA books PUBLISHED in $seconds s"
+    echo "  during the load: $done_books of $EXTRA books indexed in $seconds s"
     if [ "$done_books" -ge "$EXTRA" ]; then
         echo "WARNING: the pipeline finished during the load, so part of the mixed window had it idle." >&2
         echo "         Repeat with a larger EXTRA (now $EXTRA)." >&2
