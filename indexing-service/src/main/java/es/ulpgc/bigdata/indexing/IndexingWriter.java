@@ -21,7 +21,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * The consumer of index-queue (DR-06b, coordination contract §4.1 T6-T9 and §5): the single
@@ -53,9 +56,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * </pre>
  * If complete or fail find the book changed, the writer lost it (the Control requeued it when
  * its lease expired): it is dropped, and what was written is harmless because indexing is
- * idempotent. No renewal of the lease: a batch of 100 books takes seconds, the lease 120 s. If
- * a claim fails in the middle of a batch (the cluster is lost), the books already claimed wait
- * for their lease to expire, as if the writer had died.
+ * idempotent. While a batch is written its leases are renewed every third of LEASE_SECONDS
+ * (LeaseRenewer): with a large index a batch can take longer than the lease (DR-13), and the
+ * Control would requeue books that are still being written. If a claim fails in the middle of a
+ * batch (the cluster is lost), the books already claimed wait for their lease to expire, as if
+ * the writer had died.
  *
  * The lock belongs to the THREAD that took it (IMap.lock), so the same thread takes and
  * releases it, and it is taken with tryLock in steps so that stop() is noticed while waiting.
@@ -127,6 +132,9 @@ public final class IndexingWriter implements Runnable {
     private final AtomicLong leaseLost = new AtomicLong();
     private final AtomicLong outagePauses = new AtomicLong();
     private volatile int lastBatch = 0;
+    /** Renews the leases of the batch being written; created by run(), shut down when it returns. */
+    private ScheduledExecutorService renewals;
+    private final Duration renewEvery;
 
     /** @param batchSize the most books written together (INDEX_WRITE_BATCH), at least 1 */
     public IndexingWriter(Coordination coordination, IndexingService service, String owner, Sleeper sleeper,
@@ -147,12 +155,18 @@ public final class IndexingWriter implements Runnable {
         }
         this.batchSize = batchSize;
         this.lock = coordination.indexWriterLock();
+        this.renewEvery = Duration.ofSeconds(coordination.settings().leaseSeconds()).dividedBy(3);
     }
 
     /** Until stop(): wait for the lock, then index books while holding it. */
     @Override
     public void run() {
         Duration backoff = MIN_BACKOFF;
+        renewals = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, Thread.currentThread().getName() + "-leases");
+            thread.setDaemon(true);
+            return thread;
+        });
         try {
             while (!stopping) {
                 try {
@@ -200,6 +214,7 @@ public final class IndexingWriter implements Runnable {
                 }
             }
         } finally {
+            renewals.shutdownNow();
             role = Role.STOPPED;
         }
     }
@@ -301,31 +316,66 @@ public final class IndexingWriter implements Runnable {
 
     private void process(List<Claim> batch) throws InterruptedException {
         lastBatch = batch.size();
-        Map<Integer, Claim> claims = new LinkedHashMap<>();
-        batch.forEach(claim -> claims.put(claim.bookId(), claim));
-        BatchResult result;
+        List<Integer> ids = batch.stream().map(Claim::bookId).distinct().toList();
+        LeaseRenewer renewer = new LeaseRenewer(coordination, batch, renewals, renewEvery);
+        BatchResult result = null;
+        RuntimeException storage = null;
+        RuntimeException unexpected = null;
+        Map<Integer, Claim> claims;
         try {
-            result = service.indexBatch(List.copyOf(claims.keySet()));
+            result = service.indexBatch(ids);
         } catch (MongoException | MetadataRepositoryException e) {
-            claims.values().forEach(claim -> failed(claim, ErrorCode.STORAGE_UNAVAILABLE, e.getMessage()));
+            storage = e;
+        } catch (RuntimeException e) {
+            unexpected = e;
+        } finally {
+            claims = renewer.stop();                        // the latest claims; no renewal after this
+        }
+        if (storage != null) {
+            String message = storage.getMessage();
+            forEachHeld(ids, claims, "fail", claim -> failed(claim, ErrorCode.STORAGE_UNAVAILABLE, message));
             pauseForOutage();
             return;
-        } catch (RuntimeException e) {
-            LOG.error("{}: unexpected error writing a batch of {} books", owner, claims.size(), e);
-            claims.values().forEach(claim -> failed(claim, ErrorCode.INTERNAL_ERROR, e.toString()));
+        }
+        if (unexpected != null) {
+            LOG.error("{}: unexpected error writing a batch of {} books", owner, ids.size(), unexpected);
+            String message = unexpected.toString();
+            forEachHeld(ids, claims, "fail", claim -> failed(claim, ErrorCode.INTERNAL_ERROR, message));
             return;
         }
         if (!result.indexed().isEmpty()) {
             outageDelay = Duration.ZERO;                    // MongoDB took the batch
         }
         for (UpdateResult book : result.indexed()) {
-            if (coordination.complete(claims.get(book.bookId()))) {
+            Claim claim = claims.get(book.bookId());
+            if (claim == null) {
+                lost(book.bookId(), "complete");            // lost while the batch was written
+            } else if (coordination.complete(claim)) {
                 indexed.incrementAndGet();
             } else {
                 lost(book.bookId(), "complete");
             }
         }
-        result.rejected().forEach((bookId, why) -> rejected(claims.get(bookId), why));
+        result.rejected().forEach((bookId, why) -> {
+            Claim claim = claims.get(bookId);
+            if (claim == null) {
+                lost(bookId, "fail");
+            } else {
+                rejected(claim, why);
+            }
+        });
+    }
+
+    /** {@code action} for each book whose claim is still held; the others were lost meanwhile. */
+    private void forEachHeld(List<Integer> ids, Map<Integer, Claim> claims, String step, Consumer<Claim> action) {
+        for (int id : ids) {
+            Claim claim = claims.get(id);
+            if (claim == null) {
+                lost(id, step);
+            } else {
+                action.accept(claim);
+            }
+        }
     }
 
     /** A book of the batch that could not be prepared: its code, as update's exception says. */

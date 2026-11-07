@@ -31,6 +31,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 
 /**
  * Entry point of the Indexing Service: the only place that knows the concrete classes
@@ -74,7 +76,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * consumer of index-queue, active while this replica holds the lock index-writer and a
  * standby otherwise. It writes in batches of up to INDEX_WRITE_BATCH books, prepared on
  * INDEXING_THREADS parser threads (DR-09). /status shows what it does in "writer" (null until
- * connected).
+ * connected). If the writer thread dies (an Error, such as an OutOfMemoryError), the service
+ * exits with code 1 so that Docker restarts it (exitWhenWriterDies).
  *
  * POST /index/rebuild (DR-10, Rebuilder) runs in a thread of its own, from any replica: it
  * needs the Hazelcast connection (the rebuild marker and index-writer), so until it is there
@@ -110,7 +113,13 @@ public final class App {
      * connection open.
      */
     public static RunningService start(Env env) {
+        return start(env, System::exit);
+    }
+
+    /** @param exit how the service ends the JVM when its writer dies (exitWhenWriterDies); tests record it */
+    static RunningService start(Env env, IntConsumer exit) {
         Objects.requireNonNull(env, "env");
+        Objects.requireNonNull(exit, "exit");
         int port = env.port(PORT, DEFAULT_PORT);
         int httpThreads = env.integerAtLeast(HTTP_THREADS,
                 ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
@@ -156,7 +165,7 @@ public final class App {
                     SERVICE_NAME, server.port(), layout.datalakeDir().toAbsolutePath(),
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
             startRecovery(publisher);
-            RunningService running = new RunningService(server, client, writer, notifier, parsers, rebuilder);
+            RunningService running = new RunningService(server, client, writer, notifier, parsers, rebuilder, exit);
             running.connectInBackground(coordination, connection, cluster, service, writeBatch);
             return running;
         } catch (RuntimeException e) {
@@ -204,6 +213,34 @@ public final class App {
     }
 
     /**
+     * The handler of the writer thread (DR-13). IndexingWriter.run() handles every exception, so
+     * only an Error ends that thread, for instance an OutOfMemoryError while a large batch is
+     * written. Without its writer the replica would go on answering /status as healthy while it
+     * indexes nothing, and its index-writer lock would stay taken until its Hazelcast client
+     * closes. So the service ends with exit code 1, and Docker (restart: unless-stopped) starts it
+     * again; the books of the batch wait for their lease to expire and the Control requeues them.
+     * An OutOfMemoryError may hit any other thread instead (the MongoDB driver's, Hazelcast's, an
+     * HTTP one) while the writer holds the heap: for that, docker-compose.yml starts Indexing with
+     * -XX:+ExitOnOutOfMemoryError. This handler covers the other Errors that end the writer.
+     *
+     * exit runs in a new thread: it runs the shutdown hook, and close() joins the writer thread,
+     * the one dying here. If the service is already stopping, it does nothing: exit inside the
+     * shutdown hook would never return.
+     */
+    static Thread.UncaughtExceptionHandler exitWhenWriterDies(BooleanSupplier stopping, IntConsumer exit) {
+        Objects.requireNonNull(stopping, "stopping");
+        Objects.requireNonNull(exit, "exit");
+        return (thread, error) -> {
+            if (stopping.getAsBoolean()) {
+                LOG.warn("{} ended while the service stops ({})", thread.getName(), error.toString());
+                return;
+            }
+            LOG.error("{} died; stopping the service so that it is restarted", thread.getName(), error);
+            new Thread(() -> exit.accept(1), SERVICE_NAME + "-exit").start();
+        };
+    }
+
+    /**
      * The running service. close() stops it in order: first the HTTP server (no new requests),
      * then a running rebuild (it fails and drops its collection, CURRENT untouched), then the
      * index writer (after its current batch, see WRITER_GRACE) and the parser threads,
@@ -228,15 +265,18 @@ public final class App {
         private BackgroundConnection connection;             // guarded by this
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private Thread writerThread;                         // guarded by this
+        private final IntConsumer exit;
 
         private RunningService(Javalin server, MongoClient client, AtomicReference<IndexingWriter> writer,
-                               HazelcastPublicationNotifier notifier, ExecutorService parsers, Rebuilder rebuilder) {
+                               HazelcastPublicationNotifier notifier, ExecutorService parsers, Rebuilder rebuilder,
+                               IntConsumer exit) {
             this.server = server;
             this.client = client;
             this.writer = writer;
             this.notifier = notifier;
             this.parsers = parsers;
             this.rebuilder = rebuilder;
+            this.exit = exit;
         }
 
         /**
@@ -267,6 +307,7 @@ public final class App {
                     Coordination.owner("indexing", 0), d -> Thread.sleep(d.toMillis()), writeBatch);
             connected.onConnectionChange(started::connectionChanged);
             writerThread = new Thread(started, SERVICE_NAME + "-writer");
+            writerThread.setUncaughtExceptionHandler(exitWhenWriterDies(closed::get, exit));
             writer.set(started);
             writerThread.start();
         }
