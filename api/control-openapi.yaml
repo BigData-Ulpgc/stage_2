@@ -1,0 +1,422 @@
+openapi: 3.0.3
+info:
+  title: Stage 2 Search Engine — Control Module API
+  version: 0.2.0
+  description: |
+    API of the **Control Module** (plan §3.5), plus its operational status endpoint. Internal:
+    consumed by operators, the validation and the benchmarks, never by the front-end. It is the
+    only service besides nginx published outside Docker (`localhost:7000`).
+
+    **Status: v0.2.0** (CF-09; v0.2.0 adds `recovery` to `GET /control/status`, CF-10). The inventory of all endpoints of the system is
+    `api/endpoints.md`; the coordination it drives is `api/contracts/coordination.md`.
+
+    ## Role in the workflow
+    The Control does not download or index anything. It seeds the books (`POST /control/jobs`,
+    or `CONTROL_SEED_FILE` at startup) into the Hazelcast `ingest-queue`; the Ingestion and
+    Indexing workers take them from there. Besides its API it runs two periodic tasks:
+
+    - **Expired-lease check**, every `LEASE_CHECK_SECONDS` (10 s): a book `INGESTING` or
+      `INDEXING` whose worker died or hung goes back to its queue with one more attempt, or to
+      `FAILED` with `MAX_ATTEMPTS` used (contract §4.2).
+    - **Publication**: `POST /index/publish` of the Indexing Service when `PUBLISH_BATCH` (100)
+      books are `INDEXED`, or `PUBLISH_INTERVAL_S` (30 s) after the last publication if at least
+      one is. A failed publication is retried after 1 s, 2 s, 4 s… up to 30 s. A publication
+      that made nothing new visible (`books_published: 0`) does not repeat for a full batch
+      until the interval is over.
+
+    Before each lease check, and at once when it connects, the Control checks that the cluster
+    kept its state (`coordination-meta.initialized`). If it was lost (both Hazelcast members
+    restarted), it rebuilds `book-state` from MongoDB and the datalake (contract §7, CF-10).
+
+    ## Common rules
+    - All responses are JSON (`application/json; charset=utf-8`).
+    - **Errors** use the `Error` schema of the other services: `INVALID_PARAMETER` and
+      `MISSING_PARAMETER` (400), `NOT_FOUND` (404), `COORDINATION_UNAVAILABLE` (503),
+      `INTERNAL_ERROR` (500, details only in the log).
+    - **Without the cluster.** Every `/control` route needs Hazelcast. While the Control is not
+      connected (`coordination` of `GET /status` is not `connected`) they answer 503
+      `COORDINATION_UNAVAILABLE` at once. Retrying later is safe: every route is idempotent.
+    - **Timeouts (callers).** Connect timeout 2 s; request timeout 10 s, and 60 s for a
+      `POST /control/jobs` of tens of thousands of ids (it seeds in transactions of 1,000).
+  contact:
+    name: Carlos Falcón (Ingestion Service, Control Module, coordination)
+
+servers:
+  - url: http://localhost:7000
+    description: Published on the host by Docker Compose, or the Control started directly
+  - url: http://control:7000
+    description: Inside the Docker network
+
+tags:
+  - name: internal
+    description: Consumed by an operator, the validation or the benchmarks; never by the front-end.
+  - name: operational
+    description: Health and status checks, consumed by Docker healthchecks.
+
+paths:
+  /control/jobs:
+    post:
+      tags: [internal]
+      operationId: submitJobs
+      summary: Seed books to ingest, index and publish
+      description: |
+        **Provider:** Control Module. **Consumers:** operators, validation, benchmarks.
+
+        **Completion: accepted.** A 202 means every id is in `book-state` (T1): the new ones as
+        `PENDING` and in `ingest-queue`. Downloading, indexing and publishing continue in the
+        background; follow them with `GET /control/status` and `GET /control/tasks/{book_id}`.
+
+        **Idempotency.** An id that the cluster already knows is left as it is, whatever its
+        state (`already_known`): repeating the call never downloads or indexes a book twice. To
+        try a `FAILED` book again use `POST /control/retry-failed`.
+
+        **Validation.** 1 to 100,000 ids, each a JSON integer from 1 to 999999999; duplicates
+        count once. One bad id rejects the whole request and nothing is seeded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobsRequest'
+            example: { book_ids: [1342, 84, 11] }
+      responses:
+        '202':
+          description: Every id is in `book-state`; the new ones wait in `ingest-queue`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobsResponse'
+              examples:
+                new:
+                  summary: Three new books
+                  value: { submitted: 3, added: 3, already_known: 0 }
+                repeated:
+                  summary: The same call again
+                  value: { submitted: 3, added: 0, already_known: 3 }
+        '400':
+          description: 'The body is not `{"book_ids": [...]}` with 1 to 100,000 valid ids. Nothing is seeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                badId:
+                  summary: An id that is not a book id
+                  value:
+                    error: { code: INVALID_PARAMETER, message: 'book_ids[1] is not a book id: "84" (book_id must be a positive integer (1 to 999999999, digits only))', field: book_ids }
+                missing:
+                  summary: No book_ids
+                  value:
+                    error: { code: MISSING_PARAMETER, message: 'book_ids is required', field: book_ids }
+                notJson:
+                  summary: The body is not JSON
+                  value:
+                    error: { code: INVALID_PARAMETER, message: 'the request body is not valid JSON of the expected shape', field: body }
+        '503':
+          $ref: '#/components/responses/CoordinationUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /control/status:
+    get:
+      tags: [internal]
+      operationId: controlStatus
+      summary: Books per state, queue lengths, publication and lease check
+      description: |
+        **Provider:** Control Module. **Consumers:** operators, validation, benchmarks.
+        Read-only. The counts come from the cluster (one aggregation per state); `publication`
+        and `lease_check` are what this Control did since it started.
+      responses:
+        '200':
+          description: The state of the pipeline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlStatus'
+              example:
+                coordination: connected
+                books: { PENDING: 40, INGESTING: 8, DOWNLOADED: 12, INDEXING: 4, INDEXED: 30, PUBLISHED: 900, FAILED: 6, total: 1000 }
+                queues: { ingest-queue: 40, index-queue: 12 }
+                publication:
+                  batch: 100
+                  interval_seconds: 30
+                  publications: 12
+                  version: 12
+                  last_books_published: 70
+                  total_books: 900
+                  published_at: '2026-11-04T10:06:00Z'
+                  consecutive_failures: 0
+                  last_error: null
+                lease_check: { requeued_or_failed: 3, last_check: '2026-11-04T10:06:20Z' }
+                recovery: { runs: 1, last_run: '2026-11-04T09:00:02Z', published: 850, indexed: 20, downloaded: 30,
+                            seeded: 100, millis: 1840, last_error: null }
+        '503':
+          $ref: '#/components/responses/CoordinationUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /control/tasks/{book_id}:
+    get:
+      tags: [internal]
+      operationId: controlTask
+      summary: The state of one book
+      description: |
+        **Provider:** Control Module. **Consumers:** operators, validation. Read-only: the
+        `book-state` entry of the book (contract §3), with times in ISO-8601 UTC.
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: The book is known to the cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookTask'
+              examples:
+                indexing:
+                  summary: Held by an Indexing worker
+                  value: { book_id: 1342, state: INDEXING, owner: indexing-3f2a/w1, lease_until: '2026-11-04T10:08:00Z', attempts: 0,
+                           failed_stage: null, last_error: null, enqueued_at: '2026-11-04T10:05:58Z',
+                           started_at: '2026-11-04T10:06:00Z', finished_at: '2026-11-04T10:05:58Z' }
+                failed:
+                  summary: Failed for good
+                  value: { book_id: 999999, state: FAILED, owner: null, lease_until: null, attempts: 1,
+                           failed_stage: INGESTION, last_error: 'NOT_FOUND: book 999999 is not available at the source',
+                           enqueued_at: '2026-11-04T10:05:00Z', started_at: '2026-11-04T10:05:01Z', finished_at: null }
+        '400':
+          $ref: '#/components/responses/InvalidBookId'
+        '404':
+          description: The book was never submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: { code: NOT_FOUND, message: 'book 1342 was never submitted', field: book_id }
+        '503':
+          $ref: '#/components/responses/CoordinationUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /control/retry-failed:
+    post:
+      tags: [internal]
+      operationId: retryFailed
+      summary: Put every FAILED book back at the start of the stage that failed
+      description: |
+        **Provider:** Control Module. **Consumers:** operators. **Completion: accepted.** Every
+        `FAILED` book goes back to the queue of its `failed_stage` with its attempts reset (T11;
+        `last_error` is kept). Repeating the call is safe: a book that is no longer `FAILED` is
+        not touched, so the second call answers `requeued: 0`.
+      responses:
+        '200':
+          description: The books that were requeued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetryResponse'
+              example: { requeued: 6 }
+        '503':
+          $ref: '#/components/responses/CoordinationUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /status:
+    get:
+      tags: [operational]
+      operationId: serviceStatus
+      summary: Liveness of the process
+      description: |
+        **Provider:** every service. **Consumers:** Docker healthcheck. It does not touch
+        Hazelcast: 200 while the process runs, also while it is still connecting to the cluster.
+      responses:
+        '200':
+          description: The process is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+              examples:
+                connected:
+                  value: { service: control-module, status: running, coordination: connected }
+                connecting:
+                  value: { service: control-module, status: running, coordination: connecting }
+
+components:
+  parameters:
+    BookId:
+      name: book_id
+      in: path
+      required: true
+      description: Project Gutenberg id in canonical form (ASCII digits, no sign, no leading zeros).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 999999999
+        example: 1342
+
+  schemas:
+    JobsRequest:
+      type: object
+      required: [book_ids]
+      properties:
+        book_ids:
+          type: array
+          minItems: 1
+          maxItems: 100000
+          items: { type: integer, minimum: 1, maximum: 999999999 }
+
+    JobsResponse:
+      type: object
+      required: [submitted, added, already_known]
+      properties:
+        submitted: { type: integer, minimum: 1, description: 'Distinct ids of the request.' }
+        added: { type: integer, minimum: 0, description: 'New ids, now `PENDING` in `ingest-queue`.' }
+        already_known: { type: integer, minimum: 0, description: 'Ids the cluster already had, left as they were.' }
+
+    BookState:
+      type: string
+      enum: [PENDING, INGESTING, DOWNLOADED, INDEXING, INDEXED, PUBLISHED, FAILED]
+
+    ControlStatus:
+      type: object
+      required: [coordination, books, queues]
+      properties:
+        coordination: { type: string, enum: [connected] }
+        books:
+          type: object
+          description: Books per state (every state, 0 if none) and their `total`.
+          required: [PENDING, INGESTING, DOWNLOADED, INDEXING, INDEXED, PUBLISHED, FAILED, total]
+          properties:
+            PENDING: { type: integer, minimum: 0 }
+            INGESTING: { type: integer, minimum: 0 }
+            DOWNLOADED: { type: integer, minimum: 0 }
+            INDEXING: { type: integer, minimum: 0 }
+            INDEXED: { type: integer, minimum: 0 }
+            PUBLISHED: { type: integer, minimum: 0 }
+            FAILED: { type: integer, minimum: 0 }
+            total: { type: integer, minimum: 0 }
+        queues:
+          type: object
+          required: [ingest-queue, index-queue]
+          properties:
+            ingest-queue: { type: integer, minimum: 0 }
+            index-queue: { type: integer, minimum: 0 }
+        publication:
+          type: object
+          description: The publications of this Control since it started; absent in the first moments after connecting.
+          properties:
+            batch: { type: integer, description: '`PUBLISH_BATCH`.' }
+            interval_seconds: { type: integer, description: '`PUBLISH_INTERVAL_S`.' }
+            publications: { type: integer, description: 'Successful `POST /index/publish` calls.' }
+            version: { type: integer, nullable: true, description: 'Index version of the last publication (null: none yet).' }
+            last_books_published: { type: integer, nullable: true, description: 'Books the last publication made visible.' }
+            total_books: { type: integer, nullable: true, description: 'Books visible to Search after the last publication.' }
+            published_at: { type: string, format: date-time, nullable: true }
+            consecutive_failures: { type: integer, description: 'Failed publications since the last success (0: healthy).' }
+            last_error: { type: string, nullable: true, description: 'Why the last publication failed; null after a success.' }
+        lease_check:
+          type: object
+          properties:
+            requeued_or_failed: { type: integer, description: 'Books with an expired lease requeued or failed by this Control.' }
+            last_check: { type: string, format: date-time, nullable: true }
+        recovery:
+          type: object
+          description: |
+            Rebuilds of `book-state` by this Control (contract §7): one when it starts on an empty
+            cluster, one more each time the cluster loses its state. The counts are of the last run.
+          properties:
+            runs: { type: integer, description: 'Successful rebuilds since this Control started.' }
+            last_run: { type: string, format: date-time, nullable: true }
+            published: { type: integer, nullable: true, description: 'Books restored as `PUBLISHED` (`index_books` up to `CURRENT`).' }
+            indexed: { type: integer, nullable: true, description: 'Books restored as `INDEXED` (`index_log`).' }
+            downloaded: { type: integer, nullable: true, description: 'Books restored as `DOWNLOADED` (`_READY`), back in `index-queue`.' }
+            seeded: { type: integer, nullable: true, description: 'Ids of `CONTROL_SEED_FILE` without evidence, `PENDING` again.' }
+            millis: { type: integer, nullable: true, description: 'How long the last rebuild took.' }
+            last_error:
+              type: string
+              nullable: true
+              description: Why the last attempt failed (for example MongoDB down); it is retried at the next lease check.
+
+    BookTask:
+      type: object
+      description: The `book-state` entry of a book (`api/contracts/coordination.md` §3).
+      required: [book_id, state, owner, lease_until, attempts, failed_stage, last_error, enqueued_at, started_at, finished_at]
+      properties:
+        book_id: { type: integer }
+        state: { $ref: '#/components/schemas/BookState' }
+        owner: { type: string, nullable: true, description: 'Worker holding the lease (`<service>-<hostname>/w<n>`); null outside INGESTING and INDEXING.' }
+        lease_until: { type: string, format: date-time, nullable: true }
+        attempts: { type: integer, minimum: 0, description: 'Failed attempts in the current stage.' }
+        failed_stage: { type: string, enum: [INGESTION, INDEXING, null], nullable: true }
+        last_error: { type: string, nullable: true, description: '`<CODE>: <message>` of the last failure, kept for diagnosis.' }
+        enqueued_at: { type: string, format: date-time, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+
+    RetryResponse:
+      type: object
+      required: [requeued]
+      properties:
+        requeued: { type: integer, minimum: 0 }
+
+    ServiceStatus:
+      type: object
+      required: [service, status, coordination]
+      properties:
+        service: { type: string, example: control-module }
+        status: { type: string, enum: [running] }
+        coordination:
+          type: string
+          enum: [connecting, connected, disconnected, failed, closed]
+          description: |
+            The Hazelcast client. `connecting` until the cluster answers (the `/control` routes
+            answer 503 meanwhile); `disconnected` while it is lost, the client reconnects by
+            itself; `failed` if it could not even be attempted (see `coordination_error`).
+        coordination_error:
+          type: string
+          description: Present only when something failed while connecting.
+
+    Error:
+      type: object
+      required: [error]
+      description: Same schema as the Search API (`api/openapi.yaml`).
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [INVALID_PARAMETER, MISSING_PARAMETER, NOT_FOUND, COORDINATION_UNAVAILABLE, INTERNAL_ERROR]
+            message: { type: string, description: Human-readable explanation. }
+            field:
+              type: string
+              nullable: true
+              description: Parameter that caused the error, if any.
+
+  responses:
+    InvalidBookId:
+      description: '`book_id` is not a positive integer in canonical form (1 to 999999999, digits only).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INVALID_PARAMETER, message: 'book_id must be a positive integer (1 to 999999999, digits only)', field: book_id }
+    CoordinationUnavailable:
+      description: The Control is not connected to the Hazelcast cluster. Transient; retrying later is safe.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: COORDINATION_UNAVAILABLE, message: 'the Hazelcast cluster is not available (connecting), try again later', field: null }
+    InternalError:
+      description: Unexpected error. The details are only in the log.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: INTERNAL_ERROR, message: 'internal error', field: null }
