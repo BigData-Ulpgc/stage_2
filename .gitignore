@@ -13,3 +13,5 @@ benchmarks/search/results/jmh-smoke/
 benchmarks/search/results/load-smoke/
 benchmarks/search/results/analysis-smoke/
 benchmarks/search/results/mixed-smoke/
+# Python bytecode (scripts)
+__pycache__/

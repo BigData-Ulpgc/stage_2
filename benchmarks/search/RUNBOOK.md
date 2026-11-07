@@ -9,6 +9,7 @@ it pass, because that would change what is measured. The owner of this part is D
 ```bash
 git fetch origin && git switch test/DP-12-benchmarks && git pull
 bash benchmarks/search/run-all.sh --check     # 1 minute: is the machine ready?
+# if stage_1 is not next to stage_2:  export DATASET_DIR=/path/to/stage_1/sample_dataset/book
 bash benchmarks/search/run-all.sh             # about 6 hours, unattended
 git push origin test/DP-12-benchmarks         # the script already made the commit
 ```
