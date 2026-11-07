@@ -30,6 +30,10 @@ import java.util.regex.Pattern;
  *
  * Before the load it asks every query once and keeps its total. During the load, an answer with
  * another total or index version counts as a wrong result: more replicas must not change results.
+ *
+ * With --live true the index may grow during the load (run-mixed.sh publishes new versions
+ * meanwhile). Books are only added, so an answer is wrong if its version is older than the
+ * baseline, if it has the baseline version but another total, or if its total is smaller.
  */
 public class LoadGenerator {
 
@@ -43,6 +47,9 @@ public class LoadGenerator {
 
     private record Expected(String uri, long total, long version) {
     }
+
+    /** --live true: the index grows during the load (see the class comment). */
+    private static boolean live;
 
     /** What one client saw inside the measurement window. */
     private static final class ClientResult {
@@ -68,6 +75,7 @@ public class LoadGenerator {
         int clients = positive(options, "clients", null);
         int warmupSeconds = nonNegative(options, "warmup", "15");
         int durationSeconds = positive(options, "duration", "30");
+        live = Boolean.parseBoolean(options.getOrDefault("live", "false"));
 
         HttpClient http = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
@@ -155,12 +163,22 @@ public class LoadGenerator {
             return;
         }
         String body = response.body();
-        if (number(TOTAL, body) != query.total() || number(VERSION, body) != query.version()) {
+        if (!correct(number(TOTAL, body), number(VERSION, body), query)) {
             result.wrongResults++;
             return;
         }
         result.addLatency(nanos);
         response.headers().firstValue("X-Served-By").ifPresent(replica -> result.servedBy.merge(replica, 1L, Long::sum));
+    }
+
+    static boolean correct(long total, long version, Expected query) {
+        if (!live) {
+            return total == query.total() && version == query.version();
+        }
+        if (version < query.version() || total < query.total()) {
+            return false;
+        }
+        return version > query.version() || total == query.total();
     }
 
     /** A refused connection fails at once: without this, a client would spin and load the host. */
