@@ -334,12 +334,25 @@ class PublisherTest {
     @Test
     void publishIntoTambienSeAnuncia() {
         List<PublishResult> notified = new CopyOnWriteArrayList<>();
+        List<PublishResult> switches = new CopyOnWriteArrayList<>();
         Publisher notifying = new Publisher(publications, "inverted_index",
-                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), notified::add);
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), new PublicationNotifier() {
+                    @Override
+                    public void afterPublish(PublishResult result) {
+                        notified.add(result);
+                    }
+
+                    @Override
+                    public void afterSwitch(PublishResult result) {
+                        switches.add(result);
+                    }
+                });
 
         PublishResult result = notifying.publishInto("inverted_index_r01");
+        notifying.publish();                              // nothing new: not a switch
 
-        assertEquals(List.of(result), notified, "Search recarga al recibir el evento");
+        assertEquals(List.of(result), switches, "Search recarga al recibir el evento");
+        assertEquals(1, notified.size(), "publish sigue por afterPublish");
     }
 
     // ---- notifications (DR-08b) ----

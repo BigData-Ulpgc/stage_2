@@ -127,7 +127,7 @@ public final class Publisher {
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                 Optional<PublishResult> result = attempt(select, switchTo);
                 if (result.isPresent()) {
-                    announce(result.get());
+                    announce(result.get(), switchTo != null);
                     return result.get();
                 }
                 LOG.info("CURRENT changed during the publication (attempt {} of {}): another replica published",
@@ -141,9 +141,13 @@ public final class Publisher {
     }
 
     /** DR-08b: never turns a publication that happened into an error. */
-    private void announce(PublishResult result) {
+    private void announce(PublishResult result, boolean switched) {
         try {
-            notifier.afterPublish(result);
+            if (switched) {
+                notifier.afterSwitch(result);           // a new version, even with no new book
+            } else {
+                notifier.afterPublish(result);
+            }
         } catch (RuntimeException e) {
             LOG.warn("version {} is published, but announcing it failed: repaired later", result.version(), e);
         }

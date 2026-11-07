@@ -23,4 +23,12 @@ public interface PublicationNotifier {
      * nothing has ever been published).
      */
     void afterPublish(PublishResult result);
+
+    /**
+     * After the switch of a rebuild (DR-10, Publisher.publishInto): always a new version, also
+     * when no book is new ({@code booksPublished} 0), because Search must load the new collection.
+     */
+    default void afterSwitch(PublishResult result) {
+        afterPublish(result);
+    }
 }

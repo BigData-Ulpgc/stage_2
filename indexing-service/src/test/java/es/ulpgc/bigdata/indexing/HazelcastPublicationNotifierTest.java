@@ -144,6 +144,17 @@ class HazelcastPublicationNotifierTest {
     }
 
     @Test
+    void elCambioDeUnaReconstruccionSeAnunciaAunqueNoHayaLibrosNuevos() throws Exception {
+        notifier.connected(coordination);
+
+        notifier.afterSwitch(new PublishResult(2, 0, 3, AT));
+        awaitNotifier();
+
+        assertEquals(new IndexPublished(2, 0, 3, AT), events.poll(5, TimeUnit.SECONDS),
+                "Search tiene que cargar la colección nueva");
+    }
+
+    @Test
     void sinNadaPublicadoNuncaNoMarcaNada() throws Exception {
         notifier.connected(coordination);
         indexedInBookState(5);
