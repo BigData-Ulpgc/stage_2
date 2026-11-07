@@ -8,7 +8,21 @@ the instructions to repeat every measure are in \code{benchmarks/search/}.
 
 All the valid measures come from one machine, idle during the run. \code{host.txt} records each run.
 
-\pending{Fill in from \code{host.txt}: CPU, cores, RAM, storage, operating system, JVM, Docker version and commit.}
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.2cm}X@{}}
+\toprule
+CPU & Intel Core i7-9750H, 2.60 GHz: 6 cores, 12 logical CPUs \\
+Memory & 16 GB \\
+Operating system & Ubuntu 24.04, Linux 7.0 \\
+JVM & OpenJDK 21.0.12, heap fixed at 4 GB for JMH \\
+Code & commit \code{263fb9f} for JMH \\
+\bottomrule
+\end{tabularx}
+\caption{Reference machine of the benchmarks.}
+\end{table}
+
+\pending{Add the storage, the Docker version and the commit of the load tests from their \code{host.txt}.}
 
 \subsection{Microbenchmarks with JMH}
 
@@ -36,8 +50,75 @@ Threads & 1, 2, 4 and 8 threads on the same intersection, with 100,000 books \\
 \textbf{Limitation.} Each term is assigned to books at random and independently, while real words tend to appear
 together. These results compare the cost of each step; they do not predict the response time of real queries.
 
-\pending{Insert the tables of \code{results/analysis/tables.md} and the figure \code{jmh\_pagination.png}, and explain
-how each cost grows with the size of the index and whether the position of the page matters.}
+In the synthetic index, \code{common} is in 50~\% of the books, \code{frequent} in 30~\%, \code{medium} in 10~\%
+and \code{rare} in 1~\%, so the number of matches of each query is known in advance. Every value below is the
+mean time of one search, with its 99.9~\% error in the CSV files.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}Xrrrr@{}}
+\toprule
+\textbf{Query} & \textbf{Matches} & \textbf{200 books} & \textbf{10,000} & \textbf{100,000} \\
+\midrule
+\code{common} & 50 \% & 2.7 µs & 362 µs & 6.06 ms \\
+\code{common frequent} & 15 \% & 1.5 µs & 288 µs & 3.45 ms \\
+\code{common frequent medium} & 1.5 \% & 0.8 µs & 78 µs & 0.85 ms \\
+\code{common rare} & 0.5 \% & 0.3 µs & 4.3 µs & 0.15 ms \\
+\bottomrule
+\end{tabularx}
+\caption{JMH: intersection without filters, first page of 20, one thread.}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\linewidth]{figures/jmh_intersection.pdf}
+\caption{Time per search against the size of the index, both axes logarithmic.}
+\end{figure}
+
+\textbf{What the intersection shows.}
+\begin{itemize}
+  \item \textbf{The cost follows the number of matches, not only the length of the lists.} With 100,000 books the
+        four queries all read the list of \code{common}, 50,000 ids, yet they range from 6.06~ms to 0.15~ms. A rarer
+        term makes the shortest list shorter, so the intersection walks fewer ids, and fewer matches are then checked
+        against the snapshot, filtered and sorted.
+  \item \textbf{Ten times more books cost more than ten times as much at the top of the scale.} From 10,000 to
+        100,000 books, \code{common} goes from 362~µs to 6.06~ms, 16.7 times. Sorting every match grows faster than
+        linearly, and the larger lists no longer fit in the CPU caches. These are our explanations; they were not
+        measured separately.
+\end{itemize}
+
+\textbf{Filters.} With 100,000 books and the query \code{common}, no filter takes 4.97~ms. The language filter adds
+5~\% and the author filter 12~\%, because it compares strings ignoring case; all of them together, 14~\%. The year
+filter takes 8~\% less, because it leaves fewer books to sort. Filters run in memory on the metadata of the snapshot,
+after the intersection, so they never add a query to MongoDB.
+
+\textbf{Pagination.} The position of the page does not change the cost: with 100,000 books, the first page, the middle
+one and one near the end all take about 4.84--4.87~ms, within the error, and so do pages of 100 results. Every search
+does all the work (intersection, filters, ordering of every match) before cutting the page, and the cut itself costs
+almost nothing. The other side is that the first page is not cheaper either: a user who only looks at 20 results
+pays for all of them. Caching the result of a query until the next version is published would avoid it, because a
+snapshot never changes.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\linewidth]{figures/jmh_pagination.pdf}
+\caption{Time of a page relative to the first page, pages of 20 results.}
+\end{figure}
+
+\textbf{Threads.} \code{SearchEngine} has no state of its own and the snapshot is immutable, so several threads
+search at once without locks. With 100,000 books and \code{common frequent}, 2 threads complete 1.9 times as many
+searches per second as one, 4 threads 3.6 times and 8 threads 5.7 times. Each search becomes slower as threads are
+added, from 3.31~ms with one to 4.62~ms with eight. The threads do not wait for each other, but they share the CPU
+caches and the memory bandwidth, and 8 threads exceed the 6 physical cores of the machine.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\linewidth]{figures/jmh_threads.pdf}
+\caption{Searches per second with 1 to 8 threads, against perfect scaling.}
+\end{figure}
+
+This is the cost of the code alone. A real search adds MongoDB, which returns the posting lists, HTTP and nginx: the
+load tests measure them.
 
 \subsection{Load tests}
 
