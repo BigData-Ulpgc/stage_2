@@ -16,8 +16,9 @@ git push origin test/DP-12-benchmarks         # the script already made the comm
 Before the long run: plugged in, no suspension when idle, and nothing else open (no builds, browsers,
 other containers or calls). Then send the owner the RAM, the disk type and anything unusual.
 
-If it stops (a crash, a reboot), **run the same command again**: finished steps are skipped and an
-unfinished one starts again. A failed step does not stop the others.
+If it stops (a crash, a reboot), **run the same command again**: finished steps, and those whose
+results are already committed (the JMH of 7 November), are skipped, and an unfinished one starts
+again. A failed step does not stop the others.
 
 ## What it runs, and why
 
