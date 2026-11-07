@@ -219,6 +219,9 @@ public final class App {
      * indexes nothing, and its index-writer lock would stay taken until its Hazelcast client
      * closes. So the service ends with exit code 1, and Docker (restart: unless-stopped) starts it
      * again; the books of the batch wait for their lease to expire and the Control requeues them.
+     * An OutOfMemoryError may hit any other thread instead (the MongoDB driver's, Hazelcast's, an
+     * HTTP one) while the writer holds the heap: for that, docker-compose.yml starts Indexing with
+     * -XX:+ExitOnOutOfMemoryError. This handler covers the other Errors that end the writer.
      *
      * exit runs in a new thread: it runs the shutdown hook, and close() joins the writer thread,
      * the one dying here. If the service is already stopping, it does nothing: exit inside the
