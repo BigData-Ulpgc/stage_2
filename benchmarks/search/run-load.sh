@@ -30,6 +30,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+. benchmarks/search/lib.sh
 
 MVN="${MVN:-mvn}"
 COMPOSE="${COMPOSE:-docker compose}"
@@ -87,6 +88,10 @@ if [ -z "$INDEX_IDS" ]; then
     DATASET_ABSOLUTE="$(cd "$DATASET_DIR" && { pwd -W 2>/dev/null || pwd; })"
 fi
 FULL_STACK="$COMPOSE -f docker-compose.yml -f docker-compose.validation.yml"
+# A datalake of its own for each run: the Control rebuilds book-state from every <id>._READY it
+# finds, so the books of another experiment would end up in this index.
+export DATALAKE_HOST_DIR="${DATALAKE_HOST_DIR:-./data/bench-$(basename "$OUT")/datalake}"
+mkdir -p "$DATALAKE_HOST_DIR"
 
 # A database of its own: the loader EMPTIES the one it receives. It takes it as an argument, not from this variable.
 export MONGO_DATABASE=search_benchmark
@@ -144,11 +149,22 @@ validate_before_measuring() {
     $COMPOSE stop control ingestion indexing >> "$OUT/compose.log" 2>&1
 }
 
-# Builds the index with the real services. A book that fails is reported and skipped.
+# Builds the index with the real services. With the Control (CF-09) and the index writer
+# (DR-06b), through the whole pipeline; without them, book by book through HTTP.
 build_index_from_ids() {
     local ids total=0 failed=0
     ids="$(grep -E '^[0-9]+$' "$INDEX_IDS" | tr -d '')"
     $COMPOSE exec -T mongo mongosh --quiet "$MONGO_DATABASE" --eval 'db.dropDatabase()' > /dev/null
+    if [ -f control-module/src/main/java/es/ulpgc/bigdata/control/ControlApi.java ]         && [ -f indexing-service/src/main/java/es/ulpgc/bigdata/indexing/IndexingWriter.java ]; then
+        $FULL_STACK up -d --wait mongo hz-1 hz-2 control ingestion indexing >> "$OUT/compose.log" 2>&1
+        local start=$SECONDS
+        control_seed_and_wait "$INDEX_IDS" 14400
+        INDEX_BOOKS="$PUBLISHED_NOW"
+        echo "Index built through the pipeline: $INDEX_BOOKS of $SEEDED books in $((SECONDS - start)) s"
+        echo "pipeline,$SEEDED,$INDEX_BOOKS,$((SECONDS - start))" > "$OUT/index-build.csv"
+        $COMPOSE stop control ingestion indexing >> "$OUT/compose.log" 2>&1
+        return
+    fi
     $FULL_STACK up -d --wait mongo hz-1 hz-2 ingestion indexing >> "$OUT/compose.log" 2>&1
     for id in $ids; do
         total=$((total + 1))
@@ -209,6 +225,8 @@ fi
     echo "docker: $(docker info --format '{{.NCPU}} CPUs, {{.MemTotal}} bytes, {{.OperatingSystem}}')"
     java -version 2>&1 | sed 's/^/java: /'
     echo "dataset: $DATASET_DESCRIPTION"
+    echo "ingestion source: ${INGESTION_SOURCE:-gutenberg (.env)}"
+    [ -z "${INGESTION_LOCAL_HOST_DIR:-}" ] || [ ! -f "$INGESTION_LOCAL_HOST_DIR/manifest.json" ]         || echo "synthetic dataset digest: $(grep -o '"digest": "[0-9a-f]*"' "$INGESTION_LOCAL_HOST_DIR/manifest.json")"
     echo "repetitions: $REPETITIONS, warmup: ${WARMUP}s, duration: ${DURATION}s, warm run after each start: ${WARM_RUN}s"
     echo "nginx CPUs in these tests: $BASE_NGINX_CPUS, except in the experiment named nginx<CPUs>"
     echo "limits (.env):"
