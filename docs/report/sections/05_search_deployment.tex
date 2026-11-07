@@ -79,7 +79,7 @@ Maven module as an argument.
 \midrule
 \code{nginx} & 1 & 8080 & none & 0.5 CPU, 128 MiB \\
 \code{search} & 1--4 & none & none & 2 CPU, 1 GiB each \\
-\code{indexing} & 1 & none & read-only & 2 CPU, 1 GiB \\
+\code{indexing} & 1--2 & none & read-only & 2 CPU, 1 GiB each \\
 \code{ingestion} & 1--4 & none & read-write & 1 CPU, 512 MiB each \\
 \code{control} & 1 & 7000, local only & read-only & 0.5 CPU, 384 MiB \\
 \code{hz-1}, \code{hz-2} & 2 & 5701, 5702, local only & none & 1 CPU, 768 MiB each \\
@@ -90,9 +90,11 @@ Maven module as an argument.
 \end{table}
 
 \begin{itemize}
-  \item \textbf{Replicas.} \code{docker compose up -d --scale search=3} is enough: nginx
+  \item \textbf{Replicas.} \code{docker compose up -d -{}-scale search=3} is enough: nginx
         (\code{scripts/nginx.conf}) does round-robin over the replicas, which it finds with the DNS of Docker and
         looks up again while running.
+  \item \textbf{Replicas of Indexing.} Only the replica that holds the Hazelcast lock \code{index-writer} writes; the
+        others wait and take over if it stops or dies. Two replicas therefore give availability, not more indexing.
   \item \textbf{Failures.} The public API is read-only, so nginx can safely repeat a request on another replica if
         one dies. It does not do so on a 503: a replica that answers is alive, and the others would answer the same.
         Killing one of 3 replicas during a test lost none of 2,000 requests.
