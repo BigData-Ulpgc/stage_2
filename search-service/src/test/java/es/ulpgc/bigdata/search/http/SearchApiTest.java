@@ -21,10 +21,13 @@ import io.javalin.Javalin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.OutputStream;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -230,13 +233,31 @@ class SearchApiTest {
     }
 
     @Test
-    void aBookIdThatIsNotANonNegativeIntegerIs400() throws Exception {
+    void aBookIdThatIsNotCanonicalIs400() throws Exception {
         startWithoutIndex();
 
-        assertError(get("/books/abc"), 400, "INVALID_PARAMETER", "book_id");
-        assertError(get("/books/-1"), 400, "INVALID_PARAMETER", "book_id");
-        assertError(get("/books/99999999999"), 400, "INVALID_PARAMETER", "book_id");
-        assertError(get("/books/1342"), 503, "INDEX_NOT_READY", null);
+        for (String id : List.of("abc", "-1", "0", "+84", "0084", "1000000000", "99999999999")) {
+            assertError(get("/books/" + id), 400, "INVALID_PARAMETER", "book_id");
+        }
+        assertError(get("/books/1"), 503, "INDEX_NOT_READY", null);
+        assertError(get("/books/999999999"), 503, "INDEX_NOT_READY", null);
+    }
+
+    @Test
+    void aQueryStringThatIsNotValidPercentEncodingIs400() throws Exception {
+        startWithoutIndex();
+
+        // java.net.URI refuses to build this request, as a browser would: it goes through a socket.
+        try (Socket socket = new Socket("localhost", app.port())) {
+            OutputStream out = socket.getOutputStream();
+            out.write("GET /search?q=%ZZ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+                    .getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+            String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(response.startsWith("HTTP/1.1 400"), response);
+            assertTrue(response.contains("INVALID_PARAMETER"), response);
+        }
     }
 
     // ---------------------------------------------------------------- GET /search/filters (DP-05)

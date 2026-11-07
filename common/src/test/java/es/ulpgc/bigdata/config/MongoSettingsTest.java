@@ -16,6 +16,16 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class MongoSettingsTest {
 
     @Test
+    void thePoolHasTheRequestedSizeAndABoundedWait() {
+        MongoSettings settings = new MongoSettings("mongodb://localhost:27017", "db", "c");
+
+        var pool = settings.pooledSettings(7).getConnectionPoolSettings();
+
+        assertEquals(7, pool.getMaxSize());
+        assertEquals(MongoSettings.POOL_WAIT_SECONDS, pool.getMaxWaitTime(java.util.concurrent.TimeUnit.SECONDS));
+    }
+
+    @Test
     void defaultsAreTheStage1Ones() {
         MongoSettings settings = MongoSettings.fromEnv(Env.of(Map.of()));
 

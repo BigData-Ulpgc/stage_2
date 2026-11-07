@@ -20,18 +20,24 @@ import java.util.Objects;
  *       list has it (binary search), so the cost depends on the rarest term;</li>
  *   <li>drops the ids that are not published in the snapshot;</li>
  *   <li>applies the filters on the snapshot metadata, in memory;</li>
+ *   <li>orders all the matches (ResultRanking; by default, ascending book_id);</li>
  *   <li>cuts the requested page.</li>
  * </ol>
  *
- * The shortest list is sorted, so the matches come out sorted by book_id with no extra sort.
  * Thread-safe: no state of its own; the snapshot is immutable.
  */
 public final class SearchEngine {
 
     private final PostingSource postings;
+    private final ResultRanking ranking;
 
     public SearchEngine(PostingSource postings) {
+        this(postings, ResultRanking.BY_BOOK_ID);
+    }
+
+    public SearchEngine(PostingSource postings, ResultRanking ranking) {
         this.postings = Objects.requireNonNull(postings, "postings");
+        this.ranking = Objects.requireNonNull(ranking, "ranking");
     }
 
     /** All matches counted in total; only the page [offset, offset + limit) returned. */
@@ -60,8 +66,9 @@ public final class SearchEngine {
                 matches.add(book);
             }
         }
-        int from = Math.min(query.offset(), matches.size());
-        int to = Math.min(from + query.limit(), matches.size());
-        return new Result(snapshot.version(), matches.size(), List.copyOf(matches.subList(from, to)));
+        List<BookMetadata> ranked = ranking.rank(matches, query);
+        int from = Math.min(query.offset(), ranked.size());
+        int to = Math.min(from + query.limit(), ranked.size());
+        return new Result(snapshot.version(), ranked.size(), List.copyOf(ranked.subList(from, to)));
     }
 }
