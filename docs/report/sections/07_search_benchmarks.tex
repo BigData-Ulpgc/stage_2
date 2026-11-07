@@ -13,16 +13,22 @@ All the valid measures come from one machine, idle during the run. \code{host.tx
 \begin{tabularx}{\linewidth}{@{}L{3.2cm}X@{}}
 \toprule
 CPU & Intel Core i7-9750H, 2.60 GHz: 6 cores, 12 logical CPUs \\
-Memory & 16 GB \\
+Memory and storage & 16 GB, NVMe SSD \\
 Operating system & Ubuntu 24.04, Linux 7.0 \\
 JVM & OpenJDK 21.0.12, heap fixed at 4 GB for JMH \\
+Power & Plugged in, balanced energy profile \\
 Code & commit \code{263fb9f} for JMH \\
 \bottomrule
 \end{tabularx}
 \caption{Reference machine of the benchmarks.}
 \end{table}
 
-\pending{Add the storage, the Docker version and the commit of the load tests from their \code{host.txt}.}
+\textbf{A deviation in the JMH run.} A loop of \code{docker stats} left over from an earlier test was running during the
+measures. It takes little CPU, and the errors of the results are small, but the machine was not completely idle, as
+\S6.3 of the assignment asks.
+
+\pending{Add the Docker version and the commit of the load tests from their \code{host.txt}. If JMH is measured
+again without that process, replace the numbers of this section and remove the paragraph above.}
 
 \subsection{Microbenchmarks with JMH}
 
