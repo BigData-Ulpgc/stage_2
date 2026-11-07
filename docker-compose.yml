@@ -184,6 +184,7 @@ services:
       INDEXING_HTTP_THREADS: ${INDEXING_HTTP_THREADS}
       INDEXING_THREADS: ${INDEXING_THREADS}
       INDEX_WRITE_BATCH: ${INDEX_WRITE_BATCH}
+      INDEX_REBUILD_DROP_SECONDS: ${INDEX_REBUILD_DROP_SECONDS}
       DATA_DIR: /data
     # Read-only: Indexing reads the books and writes only to MongoDB.
     volumes:

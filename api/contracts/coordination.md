@@ -4,9 +4,10 @@
 Indexing Service, Search Service. **Implemented by:** `common/coordination` (CF-04); no
 service names a structure or builds a `BookTask` by hand.
 
-**Status: v1.2.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
+**Status: v1.3.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
 publication in §5, an interrupted T10 in §7, split-brain in §9); v1.2 the review notes of #19
-(dropped ids are counted, not logged, §1 and §2). Implemented by
+(dropped ids are counted, not logged, §1 and §2); v1.3 the rebuild of the index (DR-10): the
+`rebuild` marker of `coordination-meta` (§2, §5, §6, §7). Implemented by
 `common/coordination` (CF-04). Changing anything in this file (names, fields, states,
 transitions) needs the approval of the other two members (plan §7). A change of the `BookTask`
 fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the stored
@@ -46,6 +47,7 @@ in MongoDB (§6.5). The inventory of all interactions is `api/endpoints.md`.
 | `index-events` | `ReliableTopic<IndexPublished>` | one message per published version (§6) | Indexing | Search (every replica) |
 | `locks` | `IMap<String, String>`, key `index-writer` | lock of the single index writer (§5); the map stays empty, only its lock is used | Indexing | Indexing |
 | `coordination-meta` | `IMap<String, Long>`, key `initialized` | time (epoch ms) of the last full seed or recovery; its absence means the cluster lost its state (§7) | Control | Control |
+| `coordination-meta` | key `rebuild`, with a TTL | time (epoch ms) a rebuild of the index started, its token; it exists while a rebuild runs (§5) | Indexing | Indexing |
 
 - Book ids are `int` from 1 to 999,999,999, the rule of `BookIds` in `common`. A consumer drops
   an id that is not valid and counts it (`Coordination.invalidIdsDropped()`, shown in the
@@ -179,6 +181,30 @@ because it is not the book's fault: otherwise one outage would send every book i
   an `insertOne` that fails if it exists, and a publication whose update matches nothing is
   aborted. To be stated in the report.
 
+**Rebuild of the index (DR-10).** `POST /index/rebuild` stops every index writer, from any
+Indexing replica:
+
+- The replica puts the key `rebuild` in `coordination-meta` with `putIfAbsent` and a TTL of
+  30 s: only one rebuild runs in the cluster, and a second `POST /index/rebuild` answers 409.
+  Its value (the epoch ms it started) is the token of that rebuild.
+- While the key exists, no writer claims from `index-queue`. The one holding `index-writer`
+  sees the key before its next claim, finishes the batch it has, and releases the lock. The
+  standbys do not try to take it. The rebuild takes the lock and holds it to the end. The
+  books that arrive meanwhile wait in the queue, and their leases do not run: nobody claimed
+  them. `POST /index/update` and `POST /index/publish` answer 409 in every replica.
+- The rebuild renews the TTL while it waits for the lock and before each batch, and only if
+  the key still holds its token. If the key is gone, the replica stalled longer than the TTL,
+  the writers may be writing again, and the rebuild stops without switching `CURRENT`.
+- At the end, done or failed, it removes the key only if it still holds its token (a
+  conditional `remove`), and releases the lock. If the replica dies, the key expires within
+  30 s and Hazelcast releases the lock: indexing goes on.
+- Hazelcast keeps a TTL in whole seconds and drops the fraction: under 1 s the key would be
+  born expired, so `Coordination` rejects a TTL under 1 s.
+- Without the Hazelcast connection a replica cannot see the key. Its `POST /index/update` and
+  `POST /index/publish` work as always (principle of D4: indexing does not need the cluster),
+  and before switching `CURRENT` the rebuild indexes into its collection every book published
+  or about to be published since it started.
+
 ## 6. Event `index-events`
 
 `IndexPublished` (Compact record of `common/coordination`), the same fields as the body of the
@@ -192,9 +218,11 @@ because it is not the book's fault: otherwise one outage would send every book i
 | `publishedAt` | `String` | ISO-8601 UTC, e.g. `2026-11-03T10:15:00Z` |
 
 - Indexing publishes it after `CURRENT` has switched (plan §6.5), only when a new version is
-  created (`books_published > 0`): one per version, in order, from the same thread as T10,
-  right after `POST /index/publish` answers. A version created while Indexing has no cluster
-  is announced when it connects or reconnects (only the last one, which is enough for Search).
+  created: with new books (`books_published > 0`), or the switch of a rebuild to a new
+  collection (DR-10), which may have `books_published = 0`. One per version, in order, from
+  the same thread as T10, right after `POST /index/publish` answers (or the switch). A
+  version created while Indexing has no cluster is announced when it connects or reconnects
+  (only the last one, which is enough for Search).
 - The event is only a **wake-up**: on receiving it, a Search replica reads `CURRENT` from
   MongoDB and reloads only if the version is newer than the one it serves. A lost, repeated or
   out-of-order event therefore does no harm, and the periodic check of `CURRENT`
@@ -212,7 +240,9 @@ because it is not the book's fault: otherwise one outage would send every book i
 | The Control dies | Workers keep consuming the queues; leases are not reviewed and nothing is published until it restarts. Seeding is idempotent | Restart |
 | One Hazelcast member dies | Nothing is lost (backup). While only one member runs there is no copy; when it rejoins, the partitions migrate back in 1–4 s and the cluster is not *safe* meanwhile | Hazelcast |
 | Indexing dies after `CURRENT` switched but before T10 (cluster alive) | The books are visible but stay `INDEXED` in `book-state`; the recovery below does not run, `coordination-meta` is still there | Indexing (DR-08): when it connects or reconnects, and after each publication, it applies T10 again to the `INDEXED` books that are already in `index_books` |
-| **Both members die** (or the cluster restarts) | `book-state`, the queues, the lock and `coordination-meta` are lost; clients reconnect when it is back | Control: recovery below |
+| Indexing dies during a rebuild (DR-10) | The `rebuild` key expires within 30 s and the lock is released; the writers go on writing into the collection of `CURRENT`, untouched. The half-built `inverted_index_rNN` is left behind | Hazelcast; the next rebuild drops the collection nobody reads |
+| A rebuild stalls longer than the TTL of its key | The key expires and the writers go on; the rebuild's next renewal fails and it stops without switching `CURRENT` | The rebuild itself |
+| **Both members die** (or the cluster restarts) | `book-state`, the queues, the lock and `coordination-meta` are lost, the `rebuild` key too, so a running rebuild stops at its next renewal; clients reconnect when it is back | Control: recovery below |
 
 **Recovery (CF-10).** The Control checks `coordination-meta.initialized` at startup and on every
 lease check. If it is missing, it rebuilds `book-state`, from the most advanced evidence:

@@ -1,14 +1,14 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.6.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b and its review follow-up, plan v3.3).
-    `POST /index/rebuild` answers 501 until DR-10; its contract is already the final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
+    **Status: draft v0.8.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b and its review follow-up, DR-09, DR-10, plan v3.3).
+    Every endpoint is implemented. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
 
@@ -36,9 +36,10 @@ info:
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
     - **Errors** always use the `Error` schema of the Search API, with a machine-readable `code`:
-      `INVALID_PARAMETER` (400), `NOT_FOUND` (404), `REBUILD_IN_PROGRESS` (409, from DR-10),
-      `EMPTY_BOOK` (422), `NOT_IMPLEMENTED` (501, temporary), `STORAGE_UNAVAILABLE` (503,
-      MongoDB does not answer), `INTERNAL_ERROR` (500).
+      `INVALID_PARAMETER` (400), `NOT_FOUND` (404), `REBUILD_IN_PROGRESS` (409),
+      `EMPTY_BOOK` (422), `NOT_IMPLEMENTED` (501, no endpoint answers it any more),
+      `STORAGE_UNAVAILABLE` (503, MongoDB does not answer; for a rebuild, also Hazelcast not
+      connected yet), `INTERNAL_ERROR` (500).
     - **Unknown routes.** A route that does not exist (or a method that a route does not
       have) answers 404 `NOT_FOUND` with the same `Error` schema and `field: null`, never
       the web framework's own page. All services share this rule (`ServiceServer` in `common`).
@@ -238,22 +239,29 @@ paths:
         change of tokenizer or stopwords, or to recover from a damaged index).
 
         Indexes every complete book of the datalake into a NEW collection
-        (`inverted_index_rNN`). When it finishes, `CURRENT` switches to the new collection in
-        ONE atomic operation, so searches keep working on the current index during the whole
-        rebuild and never see a half-built one. The old collection is dropped after a margin.
+        (`inverted_index_rNN`, `MONGO_COLLECTION` plus a number never used before). When it
+        finishes, `CURRENT` switches to the new collection with ONE publication (version V+1,
+        with every book, also those indexed and not published yet), so searches keep working on
+        the current index during the whole rebuild and never see a half-built one. The
+        `IndexPublished` event of that version is sent even if no book is new. The old
+        collection is dropped `INDEX_REBUILD_DROP_SECONDS` later (default 60): a Search replica
+        may still be answering from the snapshot it loaded from it.
 
         **Completion: asynchronous.** A rebuild of 100,000 books takes minutes, longer than an
         HTTP timeout, so the request is only **accepted** (202) and the work runs in the
         background. The caller observes progress, completion or failure in the `rebuild` field
-        of `GET /index/status` (`state`: `running` → `done` | `failed`).
+        of `GET /index/status` (`state`: `running` → `done` | `failed`), in any replica: the
+        progress is kept in MongoDB (`index_meta`, `_id: "REBUILD"`).
 
-        **Duplicates and concurrency.** Only one rebuild runs at a time: a second call while
-        one is running gets 409 and does not start another. While a rebuild runs,
-        `POST /index/update` and `POST /index/publish` also answer 409 (retry later; this
-        409 exists from DR-10, together with the rebuild). A
-        failed rebuild leaves the current index untouched; calling again starts from scratch.
+        **Duplicates and concurrency.** Any replica can run it, only one at a time in the
+        cluster (a marker in Hazelcast, coordination contract §5): a second call while one is
+        running gets 409 and does not start another. While a rebuild runs, `POST /index/update`
+        and `POST /index/publish` also answer 409 in every replica (retry later), and the index
+        writers consume nothing from `index-queue`: the books that arrive wait there. A failed
+        rebuild drops its collection and leaves the current index untouched; calling again
+        starts from scratch. If the replica dies, the marker expires within 30 s and indexing
+        goes on; `GET /index/status` then shows that rebuild as `failed`.
 
-        **Until DR-10** this endpoint answers 501 `NOT_IMPLEMENTED`.
       responses:
         '202':
           description: The rebuild has started; follow it with `GET /index/status`.
@@ -270,10 +278,19 @@ paths:
                 error: null
         '409':
           $ref: '#/components/responses/RebuildInProgress'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '503':
-          $ref: '#/components/responses/StorageUnavailable'
+          description: MongoDB does not answer, or the Hazelcast cluster is not connected yet; nothing started. Retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                mongo:
+                  value:
+                    error: { code: STORAGE_UNAVAILABLE, message: 'the index storage (MongoDB) does not answer', field: null }
+                hazelcast:
+                  value:
+                    error: { code: STORAGE_UNAVAILABLE, message: 'the coordination cluster (Hazelcast) is not connected yet', field: null }
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -409,8 +426,11 @@ components:
       # not let null through either. POST /index/rebuild never answers null.
       nullable: true
       description: |
-        Progress of a rebuild. In `GET /index/status` it is null when no rebuild has been started
-        since the process began.
+        Progress of a rebuild. In `GET /index/status` it is the last rebuild started in the
+        cluster, the same in every replica (kept in MongoDB); null if there never was one. A
+        rebuild whose replica died is shown as `failed` (`error`: `the replica that ran it
+        stopped`), and one stopped by a stop of the service as `failed` with `the service
+        stopped`.
       required: [state, started_at, finished_at, processed, total, error]
       properties:
         state:
@@ -467,7 +487,7 @@ components:
           minimum: 0
           description: Books visible in `published_version`.
         rebuild:
-          # Last rebuild started since the process began; null if none (see RebuildStatus).
+          # Last rebuild started in the cluster; null if none (see RebuildStatus).
           $ref: '#/components/schemas/RebuildStatus'
 
     ServiceStatus:
@@ -504,10 +524,11 @@ components:
       properties:
         role:
           type: string
-          enum: [standby, active, stopped]
+          enum: [standby, active, paused, stopped]
           description: |
             `active` while this replica holds the lock `index-writer` and consumes the queue;
-            `standby` while another replica holds it (or the cluster is not connected).
+            `standby` while another replica holds it (or the cluster is not connected); `paused`
+            while a rebuild of the index runs in some replica (DR-10).
         indexed: { type: integer, description: "Books indexed and marked INDEXED (T7)." }
         requeued: { type: integer, description: "Failed attempts sent back to the queue (T8)." }
         failed: { type: integer, description: "Books sent to FAILED (T9), permanent error or no attempts left." }
@@ -545,21 +566,13 @@ components:
           example:
             error: { code: INVALID_PARAMETER, message: 'book_id must be a positive integer (1 to 999999999, digits only)', field: book_id }
     RebuildInProgress:
-      description: A rebuild is running; retry when `GET /index/status` shows it finished. From DR-10 (until then it is never returned).
+      description: A rebuild is running in some replica; retry when `GET /index/status` shows it finished.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
           example:
             error: { code: REBUILD_IN_PROGRESS, message: 'a rebuild is running, retry later', field: null }
-    NotImplemented:
-      description: Temporary, until the task that implements the endpoint (DR-10 rebuild).
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error: { code: NOT_IMPLEMENTED, message: 'POST /index/rebuild is not implemented yet (DR-10)', field: null }
     StorageUnavailable:
       description: MongoDB does not answer within the driver timeout; nothing was changed or the change is safe to repeat. Retry later.
       content:

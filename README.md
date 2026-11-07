@@ -83,6 +83,7 @@ curl localhost:7012/status    # {"service":"indexing-service","status":"running"
 | `INGESTION_FETCH_RETRIES` | 2 | Retries of a transient source failure inside one attempt (after 1 s, 2 s…); a 429 or 403 is not retried, it pauses the replica |
 | `HZ_MEMBERS`, `HZ_CLUSTER_NAME` | `localhost:5701,localhost:5702`, `search-engine` | Hazelcast cluster of the workers (inside Docker: `hz-1:5701,hz-2:5701`) |
 | `LEASE_SECONDS`, `MAX_ATTEMPTS`, `LEASE_CHECK_SECONDS` | 120, 3, 10 | Leases and attempts of the coordination contract (`api/contracts/coordination.md` §8) |
+| `INDEX_REBUILD_DROP_SECONDS` | 60 | How long `POST /index/rebuild` keeps the old collection of the index after the switch, for the Search replicas still reading it |
 
 The request thread pool is always set explicitly (`common` → `ServiceServer`): a Jetty
 `QueuedThreadPool` with max `<SERVICE>_HTTP_THREADS`, min 8, idle timeout 60 s. These are the

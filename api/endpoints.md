@@ -39,7 +39,7 @@ Consumed by another service or by an operator, never by the front-end.
 |---|---|---|---|---|
 | Indexing | `POST /index/update/{book_id}` | operators, validation | Index one complete book (metadata + posting lists + `index_log`) | done: indexed, visible after the next publish |
 | Indexing | `POST /index/publish` | Control Module | Publish the indexed books as a new index version (`CURRENT`) | done: `CURRENT` points to the returned version; visible `INDEXED` books become `PUBLISHED` and a new version is announced with `IndexPublished` (without Hazelcast it still publishes) |
-| Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | *501 until DR-10*; then accepted (202): follow `rebuild` in `GET /index/status` |
+| Indexing | `POST /index/rebuild` | operators | Rebuild the whole index from the datalake into a new collection | done (DR-10): accepted (202), follow `rebuild` in `GET /index/status` of any replica |
 | Indexing | `GET /index/status` | Control Module, operators | Books indexed and published, index size, rebuild progress | done (read-only) |
 | Ingestion | `POST /ingest/{book_id}` | operators, validation | Download a book, split it into header and body and store it in the datalake | done: stored (`downloaded`), or it already was (`already_available`) |
 | Ingestion | `GET /ingest/status/{book_id}` | operators, validation | Whether a book is complete in the datalake | done (read-only) |
