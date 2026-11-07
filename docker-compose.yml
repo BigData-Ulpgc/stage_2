@@ -179,6 +179,8 @@ services:
       dockerfile: docker/service.Dockerfile
       args: { MODULE: indexing-service }
     image: stage2/indexing-service
+    # docker compose stop waits this long before SIGKILL: the index writer finishes its batch.
+    stop_grace_period: 15s
     cpus: ${INDEXING_CPUS}
     mem_limit: ${INDEXING_MEM_LIMIT}
     environment:

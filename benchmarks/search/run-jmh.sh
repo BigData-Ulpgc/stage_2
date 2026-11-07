@@ -51,7 +51,7 @@ run_jmh() {
 {
     echo "date_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "commit: $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- search-service || echo ' + uncommitted changes')"
-    echo "uname: $(uname -a)"
+    echo "uname: $(uname -srmo 2>/dev/null || uname -srm)"
     echo "logical_cpus: $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo unknown)"
     if [ -r /proc/cpuinfo ]; then
         echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')"
