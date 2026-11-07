@@ -70,6 +70,7 @@ public final class MongoFixtureLoader {
             db.getCollection(IndexSnapshotLoader.INDEX_META).drop();
             db.getCollection(IndexSnapshotLoader.INDEX_BOOKS).drop();
             db.getCollection(MongoIndexLog.DEFAULT_COLLECTION).drop();
+            db.getCollection("index_publications").drop();      // the history of DR-08, rebuilt by the next publication
             index.clear();
             MongoMetadataRepository metadata = new MongoMetadataRepository(db);
             metadata.clear();
