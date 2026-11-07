@@ -35,10 +35,36 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
         </dependency>
+        <!-- JMH: test scope, so nothing of it reaches search-service.jar (enunciado §6.3). -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!--
+              JMH generates its harness with an annotation processor. Since JDK 23 javac does not run
+              the processors it finds on the classpath, so it has to be named here.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.openjdk.jmh</groupId>
+                            <artifactId>jmh-generator-annprocess</artifactId>
+                            <version>${jmh.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <!-- configuration inherited from the parent's pluginManagement -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -55,4 +81,40 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Benchmark jar, apart from the service jar: mvn -P benchmarks package gives target/search-benchmarks.jar -->
+        <profile>
+            <id>benchmarks</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <version>3.7.1</version>
+                        <executions>
+                            <execution>
+                                <id>benchmarks-jar</id>
+                                <phase>package</phase>
+                                <goals><goal>single</goal></goals>
+                                <configuration>
+                                    <finalName>search-benchmarks</finalName>
+                                    <appendAssemblyId>false</appendAssemblyId>
+                                    <attach>false</attach>
+                                    <descriptors>
+                                        <descriptor>src/test/assembly/benchmarks.xml</descriptor>
+                                    </descriptors>
+                                    <archive>
+                                        <manifest>
+                                            <mainClass>org.openjdk.jmh.Main</mainClass>
+                                        </manifest>
+                                    </archive>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
