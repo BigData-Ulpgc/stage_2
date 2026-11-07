@@ -76,7 +76,7 @@ or a FAIL, so a route that disappears does not go unnoticed. With `docker-compos
 | Control | `GET /control/status` | 200, books per state and queues |
 | Control | `GET /control/tasks/0084`, `/999999` | 400 `INVALID_PARAMETER`, 404 `NOT_FOUND`, field `book_id` |
 | Control | `POST /control/jobs` with an invalid id, an empty list or a body that is not JSON | 400 `INVALID_PARAMETER`, and nothing is seeded |
-| Control | `POST /control/retry-failed` | 200 with `requeued` |
+| Control | `POST /control/retry-failed` | 200 with `requeued`. It does change data if there are `FAILED` books: they go back to their queue |
 
 **Interactions that are not HTTP**, checked by the script: the 2 Hazelcast members form one cluster,
 Search serves the version of `CURRENT`, and Indexing and the Control cannot write in the datalake.

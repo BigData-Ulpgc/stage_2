@@ -9,8 +9,9 @@
 #
 # The expected results are those of the 15 books of the sample dataset. The public API is called
 # through nginx and the internal ones inside the Docker network, as the services call each other.
-# Run it right after loading the dataset. It does not change any data, except POST /index/publish
-# once DR-08 exists: with nothing new to publish, it creates no version, which the script checks.
+# Run it right after loading the dataset. It changes no data, with two exceptions: POST /index/publish,
+# which with nothing new to publish creates no version (the script checks it), and POST
+# /control/retry-failed, which sends any FAILED book back to its queue. No check seeds a book.
 #
 # SKIP means an endpoint declared in its contract that answers 501 (not implemented yet). When it
 # is implemented, the check runs without touching this script. Any other answer is a PASS or a
@@ -48,7 +49,7 @@ call() {
     else
         local output
         local data=()
-        if [[ -n "${REQUEST_BODY:-}" ]]; then data=(-d "$REQUEST_BODY"); fi
+        if [[ -n "${REQUEST_BODY:-}" ]]; then data=(-H 'Content-Type: application/json' -d "$REQUEST_BODY"); fi
         output=$($COMPOSE exec -T "$3" curl -s -g -m 20 -w '\n%{http_code}' -X "$1" "${data[@]+"${data[@]}"}" "http://localhost:$4$2" 2>/dev/null | tr -d '\r')
         code="${output##*$'\n'}"
         code="${code:-000}"       # the container does not answer
