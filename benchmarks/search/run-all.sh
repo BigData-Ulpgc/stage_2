@@ -4,8 +4,8 @@
 #   bash benchmarks/search/run-all.sh            all of it: about 6 h on an idle machine
 #   bash benchmarks/search/run-all.sh --check    only the checks of the machine, 1 minute
 #
-# A step whose results already exist is skipped, so after a failure the same command goes on
-# from where it stopped. At the end it commits the results; pushing them is left to you.
+# A step whose results are finished or already committed is skipped, so after a failure the same
+# command goes on from where it stopped. At the end it commits the results; pushing them is left to you.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -64,8 +64,8 @@ pipeline_ready() {
 
 step() {    # step NAME RESULT_DIR COMMAND...
     local name="$1" dir="$2"; shift 2
-    if [ -f "$dir/.done" ]; then
-        say "$name: already done ($dir), skipped"
+    if [ -f "$dir/.done" ] || git ls-files --error-unmatch "$dir" > /dev/null 2>&1; then
+        say "$name: already done ($dir is finished or committed), skipped"
         return 0
     fi
     if [ -e "$dir" ]; then
