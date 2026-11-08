@@ -1,0 +1,152 @@
+\section{Microservice implementation: Indexing}
+\label{sec:indexing}
+
+Indexing turns the complete books of the datalake into the inverted index and the metadata in MongoDB, and decides
+when a new version of the index becomes visible to Search. It is written in Java 17 with Javalin and Gson. Its HTTP
+API, \code{api/indexing-openapi.yaml}, has five endpoints: \code{POST /index/update/\{book\_id\}} indexes one book,
+\code{POST /index/publish} and \code{POST /index/rebuild} publish and rebuild the index, and \code{GET /index/status}
+and \code{GET /status} report its state. Its MongoDB side is specified in \code{index-publication.md} and its
+Hazelcast side in \code{coordination.md}, both in \code{api/contracts/}. Its main classes are:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{5.3cm}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Class} & \textbf{Responsibility} \\
+\midrule
+\code{IndexingApi} & Validates the requests and turns results and exceptions into the HTTP answers of the contract \\
+\code{IndexingService} & Reads, parses and tokenizes books, and writes them: one book (\code{update}) or a batch
+  (\code{indexBatch}) \\
+\code{IndexingWriter} & The consumer of \code{index-queue}: holds \code{index-writer}, claims batches, completes or
+  fails each book \\
+\code{LeaseRenewer} & Renews the leases of the batch being written \\
+\code{Publisher} & Publishes a new version of the index with a conditional switch of \code{CURRENT} \\
+\code{HazelcastPublicationNotifier} & After a publication, announces \code{IndexPublished} and marks the books
+  \code{PUBLISHED}, in a thread of its own \\
+\code{Rebuilder} & \code{POST /index/rebuild}: rebuilds the whole index into a new collection and switches to it \\
+\code{MongoPublicationRepository} & The publication collections: \code{index\_meta}, \code{index\_books},
+  \code{index\_publications}, \code{index\_log} \\
+\bottomrule
+\end{tabularx}
+\caption{Structure of the Indexing Service. The datalake, the tokenizer, the metadata parser and the MongoDB stores of
+the index and the metadata are in \code{common}, shared with the other services.}
+\end{table}
+
+\textbf{One book, one batch.} Both ways in index the same way, in two steps. \emph{Prepare} reads the header and the
+body of each book from the datalake, parses the metadata (title, author, language, year) and tokenizes the body with the
+tokenizer of Stage~1, the same one Search uses for queries: ASCII letters in lower case and digits, tokens of at least
+2 characters, without stopwords. It runs in parallel on a pool of
+\code{INDEXING\_THREADS} (4). \emph{Write} runs in one thread and in this order: the metadata of every book of the batch
+with one bulk write into \code{books}, the posting lists with one bulk write into the inverted index, and \emph{last}
+one entry per book in \code{index\_log}. The inverted index sends one \code{\$addToSet} upsert per \emph{distinct} term
+of the batch, so a common word is written once per batch, not once per book. A book that cannot be prepared is left
+out and reported, and never stops the others. A write that fails fails the whole batch.
+
+\textbf{Why \code{index\_log} goes last.} It is the evidence that a book is complete in the index: the publication
+takes its books from it, the book becomes \code{INDEXED} in Hazelcast only after it, and the recovery of the Control
+(Section~\ref{sec:recovery}) reads it. A process that dies in the middle of a batch leaves no entry, so the book is
+indexed again and never published half written.
+
+\subsection{Readiness, task ownership and retries}
+
+\textbf{Readiness.} Indexing reads a book only if its \code{\_READY} marker is in the datalake
+(Section~\ref{sec:readiness}). Otherwise \code{POST /index/update} answers 404 and the queue writer fails the book with
+\code{NOT\_READY}, which puts it back in the queue.
+
+\textbf{Task ownership.} One thread per replica runs \code{IndexingWriter}. It first takes the Hazelcast lock
+\code{index-writer}: only its holder consumes \code{index-queue}, and another replica waits as a standby and takes over
+when the holder stops or dies. The holder claims a book, waiting for one, and then the books already waiting, without
+waiting, up to \code{INDEX\_WRITE\_BATCH} (100). With few books a batch has one book and nothing waits for more; with a
+backlog the batches fill up by themselves. After the write, it completes each indexed book (\code{INDEXED}). Each
+claim has a lease of \code{LEASE\_SECONDS} (120~s). A batch on a large index can take longer than that (about 33~s per
+batch at 10,000 books, Section~\ref{sec:benchmarks-indexing}), so \code{LeaseRenewer} renews the leases of the batch
+every third of the lease while it is written. Without it, the Control would requeue books that are still being written.
+
+\textbf{Retries.} Each failure goes back to Hazelcast with a code of the coordination contract:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{4.6cm}L{4cm}X@{}}
+\toprule
+\textbf{Failure} & \textbf{Code} & \textbf{What happens} \\
+\midrule
+Book not complete in the datalake & \code{NOT\_READY} & Requeued, one attempt more \\
+Book without indexable terms & \code{EMPTY\_BOOK} & \code{FAILED} at once; nothing is written \\
+MongoDB does not answer & \code{STORAGE\_UNAVAILABLE} & The whole batch is requeued \emph{without} counting an attempt,
+  and the writer waits 1, 2, 4\ldots{} up to 30~s before its next claim \\
+Anything else & \code{INTERNAL\_ERROR} & Requeued, one attempt more \\
+\bottomrule
+\end{tabularx}
+\caption{Failures of the queue writer.}
+\end{table}
+
+If completing or failing a book finds that its task changed, the writer had lost it (the Control requeued it after its
+lease expired), and the result is dropped. When the client loses the cluster, the writer stops claiming at once, and
+takes the lock again before writing anything when the cluster is back. In real failover runs, a standby replica
+took over 2.8~s after a \code{SIGTERM} of the holder and 4.0~s after a \code{kill -9}, and the 17 books the dead holder had
+claimed came back through their leases.
+
+\subsection{Idempotency}
+
+Indexing a book twice leaves the index exactly as indexing it once, so every retry is safe:
+\begin{itemize}
+  \item the posting lists use \code{\$addToSet}, so an id is never added twice, and the unique index on \code{term} keeps
+        one document per term;
+  \item \code{books} and \code{index\_log} are upserts by \code{\_id};
+  \item two replicas, or two threads, writing the same new term at once meet on the unique index. MongoDB retries such
+        an upsert by itself because its filter is an equality on the unique key, so neither fails.
+\end{itemize}
+A test with two \code{IndexingService} of 4 threads each, indexing the same books at once against a real MongoDB,
+checks that the index ends as after a single run. \code{docs/robustness.md} lists each failure, what must happen and
+the test that proves it, and the mutants those tests catch.
+
+\subsection{Publication of completed index updates}
+
+Search must never show a book half written, and must see all the books of a version at once. A version is a document
+\code{CURRENT} in \code{index\_meta}, and a book is visible when \code{index\_books} gives it a version $\le$
+\code{CURRENT}. \code{Publisher} publishes on top of \code{CURRENT} = V in four steps:
+\begin{enumerate}
+  \item the books to publish are those of \code{index\_log} that are not in \code{index\_books}: complete by
+        construction;
+  \item it records them in \code{index\_books} with version V+1, with \code{\$setOnInsert}: a book keeps forever the
+        first version in which it became visible. Search still shows V;
+  \item it switches \code{CURRENT} to V+1 \emph{only if it is still V}, a conditional update. This is the instant the
+        books become visible, all at once;
+  \item it writes the entry of V+1 in \code{index\_publications}, the history.
+\end{enumerate}
+A process that dies between steps 2 and 3 leaves books above \code{CURRENT}, invisible, and the next publication
+completes them. If the conditional switch fails, another replica published first, and the publication is repeated on
+top of the new \code{CURRENT}, up to 3 times. The Control decides \emph{when} to publish
+(Section~\ref{sec:ingestion-control}); Indexing does it.
+
+After answering, the publication is announced from a thread of its own: the \code{IndexPublished} event on
+\code{index-events}, one per version and in order while connected, and the transition of the published books from
+\code{INDEXED} to \code{PUBLISHED} in Hazelcast. A slow Hazelcast therefore never holds the publication nor its HTTP
+request. Without the cluster the last version is kept and announced on reconnection; a lost event does no harm,
+because Search also checks \code{CURRENT} every 5~s.
+
+\subsection{Full rebuild of the index}
+
+\code{POST /index/rebuild} indexes every complete book of the datalake again into a \emph{new} collection,
+\code{inverted\_index\_rNN}, while Search keeps reading the current one. It is needed when the tokenizer changes, for
+instance. Any replica can start it:
+\begin{enumerate}
+  \item it puts a marker in Hazelcast (\code{putIfAbsent} with a TTL of 30~s), so only one rebuild runs. While the
+        marker exists no writer claims from the queue, and update and publish answer 409 in every replica. A thread of
+        the rebuild renews the TTL every 10~s, also in the middle of a batch; if the replica dies, the marker expires
+        and indexing goes on;
+  \item it takes \code{index-writer}, which the queue writer releases at the end of its batch, and indexes every book
+        into \code{rNN} in batches;
+  \item a safety pass indexes into \code{rNN} every book published meanwhile in the old collection (a replica without
+        Hazelcast does not see the marker);
+  \item it switches with one more publication, V+1 on \code{rNN} with every book: Search sees the new collection, and
+        every book, at once;
+  \item the old collection is dropped after \code{INDEX\_REBUILD\_DROP\_SECONDS} (60~s), well above the 5~s in which a
+        Search replica still serves its old snapshot.
+\end{enumerate}
+If anything fails before the switch, \code{rNN} is dropped and \code{CURRENT} is untouched.
+
+\textbf{Availability.} \code{GET /status} never touches MongoDB, so it answers from the first second. The connection to
+Hazelcast is made in the background after the HTTP server starts; until then, and whenever the cluster is lost,
+\code{POST /index/update} and \code{POST /index/publish} keep working, because indexing a book does not need the
+cluster. If MongoDB does not answer, they answer 503 \code{STORAGE\_UNAVAILABLE}, and retrying is safe.

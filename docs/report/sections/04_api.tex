@@ -105,13 +105,10 @@ Most of the work between services does not use HTTP:
         \code{IndexPublished} event, the lock of the index writer, leases and the transitions of a book.
   \item \textbf{Datalake readiness} (\code{api/contracts/datalake-readiness.md}): ranges of folders and the
         \code{<id>.\_READY} marker, written last, which says a book is complete.
-  \item \textbf{Publication in MongoDB:} \code{index\_books}, \code{index\_meta} (\code{CURRENT}) and
+  \item \textbf{Publication in MongoDB} (\code{api/contracts/index-publication.md}): \code{index\_books}, \code{index\_meta} (\code{CURRENT}) and
         \code{index\_publications}. Switching \code{CURRENT} changes one document, so a new version appears
         all at once. The index itself is not copied, because the entries of a written book never change.
 \end{itemize}
-
-\pending{Link the contract of the publication when \code{api/contracts/index-publication.md} exists (plan,
-owner Daniel Rodríguez). Today the inventory cites the plan, which is not in the repository.}
 
 \subsection{Validation evidence}
 
