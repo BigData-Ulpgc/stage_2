@@ -1,0 +1,2 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit"
+"es.ulpgc.bigdata.indexing.benchmark.MetadataParserBenchmark.parseAll","avgt",1,20,21.170044,0.723539,"us/op"

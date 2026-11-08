@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: threads"
+"es.ulpgc.bigdata.indexing.benchmark.PrepareBatchBenchmark.indexBatch","avgt",1,20,4296.776497,169.905982,"us/op",1
+"es.ulpgc.bigdata.indexing.benchmark.PrepareBatchBenchmark.indexBatch","avgt",1,20,3130.159287,125.932830,"us/op",2
+"es.ulpgc.bigdata.indexing.benchmark.PrepareBatchBenchmark.indexBatch","avgt",1,20,2119.371937,87.446044,"us/op",4
+"es.ulpgc.bigdata.indexing.benchmark.PrepareBatchBenchmark.indexBatch","avgt",1,20,2052.391823,39.166849,"us/op",8
