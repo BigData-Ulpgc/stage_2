@@ -21,6 +21,8 @@
 # Variables: BASE (books of the base index), EXTRA (books processed during the load), CLIENTS,
 # WARMUP, DURATION, REPETITIONS, OUT, MVN, COMPOSE.
 set -euo pipefail
+# awk printf follows LC_NUMERIC: with es_ES it writes 2,54 and breaks pipeline.csv
+export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"

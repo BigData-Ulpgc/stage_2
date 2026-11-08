@@ -119,8 +119,8 @@ Same index and clients; *mixed* = the Control, Ingestion and Indexing process ne
 
 | pipeline | reps | books per second |
 |---|---|---|
-| alone | 3 | 2.00 ± 0.00 |
-| with search load | 3 | 0.00 ± 0.00 |
+| alone | 3 | 2.42 ± 0.23 |
+| with search load | 3 | 0.91 ± 0.04 |
 
 ## Mean CPU (% of one core, all replicas added) and peak memory (MiB)
 

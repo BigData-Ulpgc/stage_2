@@ -3413,3 +3413,5 @@ Results in benchmarks/search/results/mixed
 13:10:52 Analysis
 192 load points and 49 JMH rows in /home/daniel/Documentos/Universidad/4Year/Big_Data/Stage_2/stage_2/benchmarks/search/results/analysis
 WARNING: clients r1 c256 rep1: 3 HTTP errors, 0 wrong results, 0 connection errors
+13:10:54 Results committed. Now: git push origin test/DP-12-benchmarks
+13:10:54 All done

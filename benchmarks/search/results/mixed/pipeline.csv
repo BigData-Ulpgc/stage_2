@@ -1,7 +1,7 @@
 repetition,phase,books,seconds,books_per_second
-1,alone,2000,786,2,54
-1,with_search_load,150,163,0,92
-2,alone,2000,777,2,57
-2,with_search_load,139,161,0,86
-3,alone,2000,929,2,15
-3,with_search_load,153,162,0,94
+1,alone,2000,786,2.54
+1,with_search_load,150,163,0.92
+2,alone,2000,777,2.57
+2,with_search_load,139,161,0.86
+3,alone,2000,929,2.15
+3,with_search_load,153,162,0.94
