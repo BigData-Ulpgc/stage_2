@@ -170,3 +170,20 @@ levels and the limits of `.env`.
   steady rate to be precise. It shows the start-up.
 - The books are synthetic (DR-16). Their vocabulary has the frequencies of real books, so the
   posting lists of the frequent terms grow as they would.
+
+## Figures for the report (DR-14)
+
+```bash
+python3 benchmarks/plot.py            # needs matplotlib; writes benchmarks/indexing/results/figures/
+```
+
+It reads only what is committed (the results of DR-12 and DR-13), so it runs without Docker in a
+few seconds. Same colors, ink and size as the figures of `benchmarks/search/analyze.py`.
+
+| Figure | What it shows | Source |
+|---|---|---|
+| `index_threads.png` | Books/s against `INDEXING_THREADS`: the CPU part alone (JMH) goes from 233 to 487, the whole path into MongoDB stays at about 15 | `jmh/PrepareBatchBenchmark.csv`, `summary.csv` (`index_threads`) |
+| `index_threads_cpu.png` | Mean CPU of Indexing (14–18 %) and MongoDB (about 100 %) in those runs | `summary.csv` (`cpu_indexing`, `cpu_mongo`) |
+| `index_rate.png` | Books/s against the books already in the index, in blocks of 500: the 3 runs of 10,000 and the run of 30,000 lie on one curve | `runs/index_scale-*/timeline.csv` |
+| `index_probe.png` | Adding 100 ids to one posting list: `$addToSet` against `$push` (log-log) | `probe.csv` |
+| `index_publish.png` | Each `POST /index/publish` of 1, 10 and 50 new books on 10,000, and the median | `summary.csv` (`index_publish_*`) |
