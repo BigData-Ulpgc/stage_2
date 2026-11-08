@@ -26,7 +26,8 @@ import java.util.TreeSet;
  * For the recovery of the Control (CF-10, coordination contract §7): a published book is
  * PUBLISHED again. Read-only. Like the other repositories it receives the database of the client
  * the service shares and does not talk to MongoDB until it is used; its errors are the driver's
- * MongoException. The names are Indexing's (MongoPublicationRepository), which writes them.
+ * MongoException. The names of the collections and of CURRENT are defined here, once: Indexing's
+ * MongoPublicationRepository, which writes them, uses these constants.
  */
 public final class MongoPublishedBooks {
 
