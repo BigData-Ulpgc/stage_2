@@ -1,0 +1,9 @@
+label: index_threads-t2-n2000-rep3
+started: 20261108T022018Z
+host cpus: 12, host memory bytes: 16594280448, docker: 28.3.3
+
+container limits (NanoCpus: 1000000000 = 1 CPU; Memory in bytes; 0 = no limit):
+hz-1 NanoCpus=1000000000 Memory=805306368
+hz-2 NanoCpus=1000000000 Memory=805306368
+mongo NanoCpus=2000000000 Memory=1073741824
+stage_2-ingestion-1 NanoCpus=1000000000 Memory=536870912

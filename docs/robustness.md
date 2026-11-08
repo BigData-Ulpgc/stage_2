@@ -1,4 +1,4 @@
-# Robustness of indexing and publication (DR-11)
+# Robustness of indexing and publication (DR-11, DR-10)
 
 What can fail while a book goes from `index-queue` to Search, what must happen then, and which
 test proves it. The tests are in `indexing-service/src/test/java/es/ulpgc/bigdata/indexing/`.
@@ -34,6 +34,10 @@ The three rules that all the rows depend on:
 | MongoDB is down | The whole batch goes back to the queue without spending attempts, and is indexed when MongoDB returns | `IndexingWriterTest.conMongoCaidoTodoElLoteVuelveALaColaSinGastarIntentosYLuegoSeIndexa` (*Hazelcast*) |
 | A book is not complete in the datalake yet | It goes back to the queue until it runs out of attempts | `IndexingWriterTest.unLibroSinReadyVuelveALaColaHastaAgotarLosIntentos` (*Hazelcast*) |
 | The writer loses the lease of a book | It drops the book, and another attempt indexes it | `IndexingWriterTest.siPierdeElLeaseDescartaElLibroYOtroIntentoLoIndexa` (*Hazelcast*) |
+| A batch takes longer than the lease (a large index, DR-13) | The writer renews the leases of its batch every third of the lease, so the Control does not requeue books that are still being written | `IndexingWriterTest.unLoteMasLargoQueElLeaseLoRenuevaYElControlNoLoDevuelveALaCola` (*Hazelcast*) |
+| A book of the batch is requeued anyway while the batch is written | The writer does not complete it, and another attempt indexes it | `IndexingWriterTest.siElLeaseSePierdeDuranteElLoteNoSeCompletaYOtroIntentoLoIndexa` (*Hazelcast*) |
+| The writer thread dies (an `Error`, such as an `OutOfMemoryError` writing a large batch) | The service exits with code 1 and Docker restarts it, instead of answering `/status` as healthy without indexing; the books of the batch wait for their lease to expire and the Control requeues them | `IndexingWriterTest.unErrorAlEscribirMataAlEscritorYLosLeasesDelLoteDejanDeRenovarse` (*Hazelcast*), `AppTest.siElEscritorMuereElServicioSaleConCodigo1DesdeOtroHilo`, `siElServicioYaSeEstaParandoNoLlamaAExit`, `elHiloDelEscritorParaElServicioSiMuereSalvoSiYaSeEstaParando` (*Hazelcast*) |
+| The heap fills up while a batch is written (`OutOfMemoryError` in any thread: the MongoDB driver's, Hazelcast's, an HTTP one) | The JVM ends (`-XX:+ExitOnOutOfMemoryError`, Indexing in `docker-compose.yml`) and Docker restarts the service | Real run: see the PR of this fix (batches of 1000 books with 768 MB of heap) |
 | Two replicas | Only one writes, and the other takes over when it stops | `IndexingWriterTest.conDosEscritoresSoloUnoIndexaYElOtroTomaElRelevo` (*Hazelcast*), `AppTest.conDosIndexingSoloUnoEscribeEnLotesYAlPararloElOtroTomaElRelevo` (*Hazelcast*, *Mongo*) |
 | The cluster is lost | The writer stops claiming books, releases `index-writer` and goes on when the cluster returns | `IndexingWriterTest.sinClusterDejaDeReclamarSueltaElLockYAlVolverSigue` (*Hazelcast*) |
 | The cluster is lost and returns during a book | Never two writers at once | `IndexingWriterTest.unaReconexionDuranteUnLibroNoDejaDosEscritores`, `unaReconexionCortaConElLockAunSuyoLoSueltaYLoVuelveATomar` (*Hazelcast*) |
@@ -58,6 +62,26 @@ The three rules that all the rows depend on:
 | T10 fails | The event is sent anyway, and the next publication marks the states | `HazelcastPublicationNotifierTest.siT10FallaElEventoSaleIgualYLaSiguientePublicacionMarcaLosEstados` (*Hazelcast*) |
 | The cluster is lost with an event queued | It is not sent then; it is announced when the cluster returns | `HazelcastPublicationNotifierTest.siSePierdeElClusterConUnEventoEnColaNoSeEnviaYSeAnunciaAlVolver`, `desconectadoSeSaltaYAlVolverSeAnunciaLaVersionYSeMarcanLosEstados` (*Hazelcast*) |
 
+## The rebuild of the index (DR-10)
+
+`POST /index/rebuild` fills a new collection `inverted_index_rNN` and switches `CURRENT` to it
+with one publication (coordination contract §5). Until the switch, Search reads the old
+collection, so every failure before it leaves the index as it was.
+
+| Failure | What must happen | Test |
+|---|---|---|
+| Two rebuilds at once, from any replicas | Only one runs, the other gets 409 | `RebuilderTest.siHayOtraEnMarchaRespondeQueYaHayUna`, `IndexingApiRebuildTest.mientrasReconstruyeRebuildUpdateYPublishResponden409` (*Hazelcast*), `CoordinationTest.soloUnaReconstruccionALaVez` (*Hazelcast*) |
+| The writer of `index-queue` is writing a batch | The rebuild waits for `index-writer`; the writer finishes its batch, releases it and claims nothing more | `RebuilderTest.esperaAQueElEscritorSuelteElLockAntesDeTocarNada`, `IndexingWriterTest.elEscritorActivoSueltaElLockEnCuantoVeLaMarca`, `conUnaReconstruccionEnMarchaNoReclamaNiCogeElLock` (*Hazelcast*) |
+| An update writes into the old collection during the rebuild | The book is indexed into the new one too, before the switch | `RebuilderTest.unLibroEscritoEnLaColeccionViejaMientrasEsperaTambienEntra` (*Hazelcast*) |
+| MongoDB fails during the rebuild | The new collection is dropped, `CURRENT` is untouched, the state is `failed` | `RebuilderTest.siFallaAntesDelCambioBorraSuColeccionYCurrentNoCambia` (*Hazelcast*) |
+| The marker expires (the replica stalled longer than its TTL) | The rebuild stops without switching | `RebuilderTest.siLaMarcaCaducaSeDetieneSinCambiarCurrent`, `CoordinationTest.laMarcaCaducaSiNadieLaRenuevaYEntoncesYaNoSePuedeRenovar`, `unaReconstruccionCaducadaNoQuitaNiRenuevaLaMarcaDeLaSiguiente` (*Hazelcast*) |
+| The service stops during the rebuild | The rebuild fails, drops its collection and removes its marker at once | `RebuilderTest.alCerrarElServicioLaReconstruccionFallaYBorraSuColeccion` (*Hazelcast*), `AppTest.pararElServicioEnMitadDeUnaReconstruccionNoDejaNadaColgado` (*Hazelcast*, *Mongo*) |
+| The replica dies during the rebuild | The marker expires, indexing goes on, and the status shows it as `failed` | `CoordinationTest.laMarcaCaducaSiNadieLaRenueva…`, `RebuilderTest.unaQueDiceRunningSinMarcaEsDeUnaReplicaQueMurio` (*Hazelcast*) |
+| A collection left by a rebuild that died | The next rebuild drops it, and never reuses its name | `RebuilderTest.borraLasColeccionesHuerfanasYNuncaReutilizaSuNombre`, `trasUnFalloLaSiguienteEmpiezaDeCeroYNoReutilizaElNombre` (*Hazelcast*) |
+| Search still reads the old collection after the switch | It is dropped only after `INDEX_REBUILD_DROP_SECONDS`, also by another rebuild | `RebuilderTest.laColeccionViejaSeBorraTrasElMargenYNoAntes`, `noBorraLaColeccionQueOtraReconstruccionDejoEsperandoSuMargen` (*Hazelcast*), `AppTest.reconstruyeDeExtremoAExtremoYBorraLaColeccionVieja` (*Hazelcast*, *Mongo*) |
+| After the switch | Every write goes to the new collection, in every replica, without restarting | `IndexingServiceCollectionTest.currentSeLeeAntesDeCadaEscrituraYCadaColeccionSeAbreUnaVez`, `AppTest.trasUnaReconstruccionIndexaEnLaColeccionDeCurrent` (*Mongo*) |
+| The switch has no new book | It is a new version anyway, and it is announced, so Search loads the new collection | `PublisherTest.publishIntoCambiaLaColeccionAunqueNoHayaLibrosNuevos`, `HazelcastPublicationNotifierTest.elCambioDeUnaReconstruccionSeAnunciaAunqueNoHayaLibrosNuevos` (*Hazelcast*) |
+
 ## Real runs (DR-09, two replicas, `INDEX_WRITE_BATCH=20`)
 
 - **SIGTERM to the active replica** after 100 books: the standby takes over **2.8 s** later,
@@ -66,6 +90,29 @@ The three rules that all the rows depend on:
   The 17 books the dead replica had claimed stayed `INDEXING` until their lease expired. Then a
   stand-in for the Control's lease check (`requeueExpiredLeases`) put them back in the queue,
   and the survivor indexed them.
+
+## Real runs (DR-10, two Indexing replicas and Search, 2,000 synthetic books)
+
+The jars of the branch on the host, against a cluster of two Hazelcast members and a MongoDB of
+their own, with `INDEX_WRITE_BATCH=100` and `INDEX_REBUILD_DROP_SECONDS=20`. Replica A held
+`index-writer`, B was the standby, and Search answered `q=house` (1,876 results) all along.
+
+- **A rebuild started on B**, the standby. A released `index-writer` before its next claim,
+  and both writers said `paused`. A second rebuild, an update and a publication got 409 in
+  both replicas, and both showed the same progress, 100 books at a time. 2,000 books took
+  **145 s** (about 73 ms per book, the cost of indexing measured in DR-09). Search answered
+  from version 1 until the switch and then served version 2 on `inverted_index_r01`, with the
+  same 1,876 results. `inverted_index` was dropped 20 s later, and an update afterwards
+  answered 200.
+- **`kill -9` to B after its first batch.** A answered 409 until the marker expired, **29 s**
+  later. Then its status said `failed` ("the replica that ran it stopped"), its writer was
+  `active` again, and updates answered 200. Search stayed on version 2 the whole time.
+  `inverted_index_r02` was left behind.
+- **B restarted, and a rebuild from A:** it dropped `inverted_index_r02`, built
+  `inverted_index_r03` in 140 s and switched to version 3. `inverted_index_r01` was dropped
+  20 s later.
+- **SIGTERM to B during a rebuild:** it stopped in **1.4 s**, dropped `inverted_index_r04` and
+  removed the marker, so A's writer was `active` again 1.7 s after the signal.
 
 ## How the new tests were checked (mutation testing)
 

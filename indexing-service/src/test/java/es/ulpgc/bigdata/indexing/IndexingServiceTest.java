@@ -599,6 +599,8 @@ class IndexingServiceTest {
         final AtomicInteger flushes = new AtomicInteger();
         /** If not null, the next flush throws it (once). */
         volatile RuntimeException failNextFlushWith = null;
+        /** If not null, the next flush throws it (once): an OutOfMemoryError, for instance. */
+        volatile Error errorOnNextFlush = null;
         /** If not null, flush counts down flushEntered and then waits until the test opens the gate. */
         volatile CountDownLatch flushGate = null;
         final CountDownLatch flushEntered = new CountDownLatch(1);
@@ -629,6 +631,11 @@ class IndexingServiceTest {
                 if (failure != null) {
                     failNextFlushWith = null;
                     throw failure;
+                }
+                Error error = errorOnNextFlush;
+                if (error != null) {
+                    errorOnNextFlush = null;
+                    throw error;
                 }
                 CountDownLatch gate = flushGate;
                 if (gate != null) {

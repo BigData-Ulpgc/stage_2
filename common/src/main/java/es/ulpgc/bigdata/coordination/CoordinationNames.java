@@ -19,10 +19,15 @@ public final class CoordinationNames {
     public static final String LOCKS = "locks";
     /** Key of the single index writer lock in {@link #LOCKS}. */
     public static final String INDEX_WRITER_LOCK = "index-writer";
-    /** IMap&lt;String, Long&gt;: marker of an initialized cluster. */
+    /** IMap&lt;String, Long&gt;: marker of an initialized cluster, and of a rebuild of the index. */
     public static final String COORDINATION_META = "coordination-meta";
     /** Key in {@link #COORDINATION_META}: epoch ms of the last full seed or recovery. */
     public static final String INITIALIZED = "initialized";
+    /**
+     * Key in {@link #COORDINATION_META}: epoch ms when the running rebuild of the index started
+     * (DR-10). It has a TTL that the rebuild renews, so it disappears if its replica dies.
+     */
+    public static final String REBUILD = "rebuild";
 
     private CoordinationNames() {
     }

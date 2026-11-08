@@ -268,6 +268,93 @@ class PublisherTest {
                 current.publishedAt(), current.collection()));
     }
 
+    // ---- the switch of a rebuild (DR-10) ----
+
+    @Test
+    void publishIntoCambiaLaColeccionAunqueNoHayaLibrosNuevos() {
+        indexed(1, 2);
+        publisher.publish();
+
+        PublishResult result = publisher.publishInto("inverted_index_r01");
+
+        assertEquals(new PublishResult(2, 0, 2, AT), result);
+        assertEquals(new Publication(2, 2, "inverted_index_r01", AT), publications.current().orElseThrow());
+        assertEquals(new PublishedVersion(2, List.of(), 2, AT, "inverted_index_r01"), publications.historyOf(2));
+    }
+
+    @Test
+    void publishIntoPublicaTambienLosLibrosPendientes() {
+        indexed(1);
+        publisher.publish();
+        indexed(5, 6);                                    // indexed by the rebuild, never published
+
+        PublishResult result = publisher.publishInto("inverted_index_r01");
+
+        assertEquals(new PublishResult(2, 2, 3, AT), result);
+        assertEquals(List.of(5, 6), publications.historyOf(2).books(), "visibles a la vez que la colección nueva");
+    }
+
+    @Test
+    void publishIntoSinCurrentEsLaPrimeraVersion() {
+        PublishResult result = publisher.publishInto("inverted_index_r01");
+
+        assertEquals(new PublishResult(1, 0, 0, AT), result);
+        assertEquals(new Publication(1, 0, "inverted_index_r01", AT), publications.current().orElseThrow());
+    }
+
+    @Test
+    void trasPublishIntoLasPublicacionesConservanLaColeccionNueva() {
+        indexed(1);
+        publisher.publishInto("inverted_index_r01");
+        indexed(2);
+
+        publisher.publish();
+
+        assertEquals("inverted_index_r01", publications.current().orElseThrow().collection());
+    }
+
+    @Test
+    void siOtraReplicaPublicaAntesPublishIntoSeRepiteSobreSuVersion() {
+        indexed(1);
+        publisher.publish();
+        AtomicBoolean first = new AtomicBoolean(true);
+        publications.beforeSwitch(() -> {
+            if (first.getAndSet(false)) {
+                publications.addBooks(List.of(9), 2);
+                otherReplicaPublishes(new Publication(2, 2, "inverted_index", "2026-11-05T09:00:00Z"), List.of(9));
+            }
+        });
+
+        PublishResult result = publisher.publishInto("inverted_index_r01");
+
+        assertEquals(new PublishResult(3, 0, 2, AT), result);
+        assertEquals("inverted_index_r01", publications.current().orElseThrow().collection());
+    }
+
+    @Test
+    void publishIntoTambienSeAnuncia() {
+        List<PublishResult> notified = new CopyOnWriteArrayList<>();
+        List<PublishResult> switches = new CopyOnWriteArrayList<>();
+        Publisher notifying = new Publisher(publications, "inverted_index",
+                Clock.fixed(Instant.parse(AT), ZoneOffset.UTC), new PublicationNotifier() {
+                    @Override
+                    public void afterPublish(PublishResult result) {
+                        notified.add(result);
+                    }
+
+                    @Override
+                    public void afterSwitch(PublishResult result) {
+                        switches.add(result);
+                    }
+                });
+
+        PublishResult result = notifying.publishInto("inverted_index_r01");
+        notifying.publish();                              // nothing new: not a switch
+
+        assertEquals(List.of(result), switches, "Search recarga al recibir el evento");
+        assertEquals(1, notified.size(), "publish sigue por afterPublish");
+    }
+
     // ---- notifications (DR-08b) ----
 
     @Test

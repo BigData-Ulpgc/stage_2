@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -161,6 +162,160 @@ class AppTest {
     }
 
     @Test
+    void trasUnaReconstruccionIndexaEnLaColeccionDeCurrent() throws Exception {
+        String database = "search_engine_test_app_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            MongoDatabase db = admin.getDatabase(database);
+            try {
+                // What a rebuild (DR-10) leaves: CURRENT names a collection other than MONGO_COLLECTION.
+                assertTrue(new MongoPublicationRepository(db).switchCurrent(null,
+                        new Publication(1, 0, "inverted_index_r01", "2026-11-06T10:00:00Z")));
+                new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir())
+                        .save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+                running = App.start(Env.of(env));
+
+                assertEquals(200, post("/index/update/1342").statusCode());
+                assertEquals(200, post("/index/publish").statusCode());
+
+                assertNotNull(db.getCollection("inverted_index_r01").find(new Document("term", "elizabeth")).first(),
+                        "las posting lists van a la colección que lee Search");
+                assertEquals(0, db.getCollection("inverted_index").countDocuments(), "y no a MONGO_COLLECTION");
+                Document current = db.getCollection("index_meta").find(new Document("_id", "CURRENT")).first();
+                assertEquals(2, current.getInteger("version"));
+                assertEquals("inverted_index_r01", current.getString("collection"), "publish la conserva");
+            } finally {
+                db.drop();
+            }
+        }
+    }
+
+    @Test
+    void reconstruyeDeExtremoAExtremoYBorraLaColeccionVieja() throws Exception {
+        String database = "search_engine_test_app_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            MongoDatabase db = admin.getDatabase(database);
+            try {
+                HazelcastTestCluster.reset();
+                RangeBasedDatalake datalake = new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir());
+                datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+                env.put("INDEX_REBUILD_DROP_SECONDS", "1");
+                running = App.start(Env.of(env));
+                assertEquals(200, post("/index/update/1342").statusCode());
+                assertEquals(200, post("/index/publish").statusCode());
+                datalake.save(new RawBook(11, IndexingServiceTest.HEADER_1342, "Alice and a fortune."));
+
+                HttpResponse<String> started = post("/index/rebuild");
+                for (int i = 0; i < 100 && started.statusCode() == 503; i++) {   // Hazelcast connects in the background
+                    Thread.sleep(100);
+                    started = post("/index/rebuild");
+                }
+                assertEquals(202, started.statusCode(), started.body());
+                JsonObject rebuild = null;
+                for (int i = 0; i < 200; i++) {
+                    rebuild = JsonParser.parseString(get("/index/status").body()).getAsJsonObject()
+                            .getAsJsonObject("rebuild");
+                    if (!rebuild.get("state").getAsString().equals("running")) {
+                        break;
+                    }
+                    Thread.sleep(50);
+                }
+
+                assertEquals("done", rebuild.get("state").getAsString(), rebuild.toString());
+                Document current = db.getCollection("index_meta").find(new Document("_id", "CURRENT")).first();
+                assertEquals(2, current.getInteger("version"));
+                assertEquals("inverted_index_r01", current.getString("collection"));
+                assertEquals(2, current.get("books", Number.class).longValue(), "el libro 11 entra con el cambio");
+                assertNotNull(db.getCollection("inverted_index_r01").find(new Document("term", "alice")).first());
+                for (int i = 0; i < 100 && collections(db).contains("inverted_index"); i++) {
+                    Thread.sleep(50);
+                }
+                assertFalse(collections(db).contains("inverted_index"),
+                        "la vieja se borra tras INDEX_REBUILD_DROP_SECONDS");
+            } finally {
+                db.drop();
+            }
+        }
+    }
+
+    @Test
+    void pararElServicioEnMitadDeUnaReconstruccionNoDejaNadaColgado() throws Exception {
+        String database = "search_engine_test_app_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            MongoDatabase db = admin.getDatabase(database);
+            HazelcastInstance hz = HazelcastTestCluster.settings().openClient();
+            CountDownLatch release = new CountDownLatch(1);
+            Thread writer = null;
+            try {
+                HazelcastTestCluster.reset();
+                Coordination coordination = Coordination.on(hz, HazelcastTestCluster.settings(), Clock.systemUTC());
+                CountDownLatch taken = new CountDownLatch(1);
+                writer = new Thread(() -> {                         // the writer of another replica
+                    coordination.indexWriterLock().lock();
+                    taken.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        coordination.indexWriterLock().unlock();
+                    }
+                });
+                writer.start();
+                assertTrue(taken.await(5, TimeUnit.SECONDS));
+                new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir())
+                        .save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+                running = App.start(Env.of(env));
+                HttpResponse<String> started = post("/index/rebuild");
+                for (int i = 0; i < 100 && started.statusCode() == 503; i++) {
+                    Thread.sleep(100);
+                    started = post("/index/rebuild");
+                }
+                assertEquals(202, started.statusCode(), started.body());
+                Thread.sleep(300);                                  // it waits for index-writer now
+
+                running.close();                                    // docker stop
+                running = null;
+
+                assertFalse(coordination.isRebuilding(), "la marca se quita al parar, sin esperar a su TTL");
+                Document rebuild = db.getCollection("index_meta").find(new Document("_id", "REBUILD")).first();
+                assertEquals("FAILED", rebuild.getString("state"));
+                assertEquals("the service stopped", rebuild.getString("error"));
+                assertNull(db.getCollection("index_meta").find(new Document("_id", "CURRENT")).first(),
+                        "CURRENT no se toca");
+            } finally {
+                release.countDown();
+                if (writer != null) {
+                    writer.join(5000);
+                }
+                hz.shutdown();
+                db.drop();
+            }
+        }
+    }
+
+    private static List<String> collections(MongoDatabase db) {
+        return db.listCollectionNames().into(new ArrayList<>());
+    }
+
+    @Test
     void alArrancarCompletaUnaPublicacionInterrumpida() throws Exception {
         String database = "search_engine_test_app_" + System.nanoTime();
         try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
@@ -198,6 +353,56 @@ class AppTest {
                 db.drop();
             }
         }
+    }
+
+    // ---- the writer thread dies (DR-13) ----
+
+    @Test
+    void siElEscritorMuereElServicioSaleConCodigo1DesdeOtroHilo() throws Exception {
+        BlockingQueue<String> exits = new LinkedBlockingQueue<>();
+        Thread writer = new Thread(() -> {
+            throw new OutOfMemoryError("prueba: Java heap space");
+        }, "test-writer");
+        writer.setUncaughtExceptionHandler(App.exitWhenWriterDies(() -> false,
+                code -> exits.add(code + " " + Thread.currentThread().getName())));
+        writer.start();
+
+        assertEquals("1 indexing-service-exit", exits.poll(5, TimeUnit.SECONDS),
+                "exit(1), y desde un hilo nuevo: el hook de parada espera al hilo del escritor");
+    }
+
+    @Test
+    void siElServicioYaSeEstaParandoNoLlamaAExit() throws Exception {
+        BlockingQueue<Integer> exits = new LinkedBlockingQueue<>();
+        Thread writer = new Thread(() -> {
+            throw new OutOfMemoryError("prueba: Java heap space");
+        }, "test-writer");
+        writer.setUncaughtExceptionHandler(App.exitWhenWriterDies(() -> true, exits::add));
+        writer.start();
+        writer.join(5_000);
+
+        assertNull(exits.poll(500, TimeUnit.MILLISECONDS), "exit dentro del hook de parada no volvería nunca");
+    }
+
+    @Test
+    void elHiloDelEscritorParaElServicioSiMuereSalvoSiYaSeEstaParando() throws Exception {
+        HazelcastTestCluster.start();                         // also when this test runs alone
+        HazelcastTestCluster.reset();
+        BlockingQueue<Integer> exits = new LinkedBlockingQueue<>();
+        running = App.start(Env.of(baseEnv("mongodb://127.0.0.1:1")), exits::add);
+        awaitWriterRole("active");
+        Thread thread = Thread.getAllStackTraces().keySet().stream()
+                .filter(t -> t.getName().equals("indexing-service-writer") && t.isAlive())
+                .findFirst().orElseThrow();
+        OutOfMemoryError oom = new OutOfMemoryError("prueba: Java heap space");
+        Thread.UncaughtExceptionHandler handler = thread.getUncaughtExceptionHandler();  // null once it ends
+
+        handler.uncaughtException(thread, oom);
+        assertEquals(1, exits.poll(5, TimeUnit.SECONDS), "el servicio sale con código 1");
+
+        running.close();
+        handler.uncaughtException(thread, oom);
+        assertNull(exits.poll(500, TimeUnit.MILLISECONDS), "parándose, no vuelve a llamar a exit");
     }
 
     @Test

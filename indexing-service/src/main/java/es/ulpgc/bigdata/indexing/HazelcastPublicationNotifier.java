@@ -128,8 +128,17 @@ public final class HazelcastPublicationNotifier implements PublicationNotifier, 
     /** Only queues: returns at once even if Hazelcast is slow. */
     @Override
     public void afterPublish(PublishResult result) {
-        Objects.requireNonNull(result, "result");
-        if (result.booksPublished() > 0) {              // nothing new: no event to announce
+        afterVersion(result, Objects.requireNonNull(result, "result").booksPublished() > 0);
+    }
+
+    /** DR-10: the switch of a rebuild is a new version even with no new book; Search must reload. */
+    @Override
+    public void afterSwitch(PublishResult result) {
+        afterVersion(Objects.requireNonNull(result, "result"), true);
+    }
+
+    private void afterVersion(PublishResult result, boolean newVersion) {
+        if (newVersion) {                               // nothing new: no event to announce
             if (connectedNow().isEmpty()) {
                 skip(result);
             } else {

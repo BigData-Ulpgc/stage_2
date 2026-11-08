@@ -33,8 +33,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
@@ -158,6 +160,45 @@ class IndexingWriterTest {
         assertEquals(IndexingWriter.Role.ACTIVE, writer.role());
         assertEquals(2L, writer.status().get("indexed"));
         assertNull(task(1).owner(), "T7 libera el lease");
+    }
+
+    // ---- a rebuild stops the writer (DR-10) ----
+
+    @Test
+    void conUnaReconstruccionEnMarchaNoReclamaNiCogeElLock() throws Exception {
+        long token = coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+        inDatalake(1);
+        downloaded(1);
+
+        IndexingWriter writer = start(coordination, "w-a");
+
+        await("en pausa", () -> writer.role() == IndexingWriter.Role.PAUSED);
+        Thread.sleep(STEP.multipliedBy(3).toMillis());
+        assertEquals(BookState.DOWNLOADED, task(1).bookState(), "el libro espera en index-queue");
+        assertFalse(coordination.indexWriterLock().isLocked(), "index-writer es de la reconstrucción");
+        assertEquals("paused", writer.status().get("role"));
+
+        coordination.endRebuild(token);
+        await("1 INDEXED al acabar la reconstrucción", () -> task(1).bookState() == BookState.INDEXED);
+    }
+
+    @Test
+    void elEscritorActivoSueltaElLockEnCuantoVeLaMarca() throws Exception {
+        IndexingWriter writer = start(coordination, "w-a");
+        await("activo", () -> writer.role() == IndexingWriter.Role.ACTIVE);
+
+        long token = coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+
+        await("en pausa", () -> writer.role() == IndexingWriter.Role.PAUSED);
+        assertFalse(coordination.indexWriterLock().isLocked(), "lo suelta para la reconstrucción");
+        inDatalake(2);
+        downloaded(2);
+        Thread.sleep(STEP.multipliedBy(3).toMillis());
+        assertEquals(BookState.DOWNLOADED, task(2).bookState());
+
+        coordination.endRebuild(token);
+        await("2 INDEXED", () -> task(2).bookState() == BookState.INDEXED);
+        assertEquals(IndexingWriter.Role.ACTIVE, writer.role());
     }
 
     // ---- batches (DR-09) ----
@@ -417,6 +458,93 @@ class IndexingWriterTest {
         await("11 INDEXED tras volver a la cola", () -> task(11).bookState() == BookState.INDEXED);
         assertEquals(1L, writer.status().get("lease_lost"));
         assertEquals(1L, writer.status().get("indexed"));
+    }
+
+    @Test
+    void unLoteMasLargoQueElLeaseLoRenuevaYElControlNoLoDevuelveALaCola() throws Exception {
+        // A lease of 1 s, renewed every 333 ms, and a batch held 3 s inside its flush
+        CoordinationSettings base = HazelcastTestCluster.settings();
+        CoordinationSettings shortLease = new CoordinationSettings(base.members(), base.clusterName(), 1,
+                base.maxAttempts(), base.leaseCheckSeconds());
+        Coordination writerSide = Coordination.on(client, shortLease, Clock.systemUTC());
+        Coordination control = Coordination.on(client, shortLease, Clock.systemUTC());
+        inDatalake(21, 22);
+        CountDownLatch gate = new CountDownLatch(1);
+        index.flushGate = gate;
+        downloaded(21, 22);
+        IndexingWriter writer = start(writerSide, "w-a", 2);
+        assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));
+
+        int requeuedByControl = 0;
+        long leastLeft = Long.MAX_VALUE;                            // ms of lease left, at the worst moment
+        for (long end = System.nanoTime() + Duration.ofSeconds(3).toNanos(); System.nanoTime() < end; ) {
+            requeuedByControl += control.requeueExpiredLeases();   // the lease check of the Control
+            leastLeft = Math.min(leastLeft, task(21).leaseUntil() - System.currentTimeMillis());
+            Thread.sleep(50);
+        }
+        index.flushGate = null;
+        gate.countDown();
+
+        await("21 y 22 INDEXED", () -> task(21).bookState() == BookState.INDEXED && task(22).bookState() == BookState.INDEXED);
+        assertEquals(0, requeuedByControl, "el Control no vio ningún lease caducado");
+        assertTrue(leastLeft > 300, "se renueva cada tercio del lease, mucho antes de que caduque: quedaban "
+                + leastLeft + " ms");
+        assertEquals(0L, writer.status().get("lease_lost"));
+        assertEquals(2L, writer.status().get("indexed"));
+    }
+
+    @Test
+    void siElLeaseSePierdeDuranteElLoteNoSeCompletaYOtroIntentoLoIndexa() throws Exception {
+        // The renewal finds the book requeued (the writer stalled longer than the lease)
+        CoordinationSettings base = HazelcastTestCluster.settings();
+        CoordinationSettings shortLease = new CoordinationSettings(base.members(), base.clusterName(), 1,
+                base.maxAttempts(), base.leaseCheckSeconds());
+        Coordination writerSide = Coordination.on(client, shortLease, Clock.systemUTC());
+        inDatalake(31);
+        CountDownLatch gate = new CountDownLatch(1);
+        index.flushGate = gate;
+        downloaded(31);
+        IndexingWriter writer = start(writerSide, "w-a");
+        assertTrue(index.flushEntered.await(5, TimeUnit.SECONDS));
+
+        Coordination control = Coordination.on(client, HazelcastTestCluster.settings(),
+                Clock.fixed(Instant.now().plus(Duration.ofMinutes(10)), ZoneOffset.UTC));
+        assertEquals(1, control.requeueExpiredLeases());
+        Thread.sleep(700);                                      // at least one renewal sees it lost
+        index.flushGate = null;
+        gate.countDown();
+
+        await("31 INDEXED tras volver a la cola", () -> task(31).bookState() == BookState.INDEXED);
+        assertEquals(1L, writer.status().get("lease_lost"));
+        assertEquals(1L, writer.status().get("indexed"));
+    }
+
+    @Test
+    void unErrorAlEscribirMataAlEscritorYLosLeasesDelLoteDejanDeRenovarse() throws Exception {
+        // An OutOfMemoryError in the flush, as DR-13 met with batches of 1000 books
+        CoordinationSettings base = HazelcastTestCluster.settings();
+        CoordinationSettings shortLease = new CoordinationSettings(base.members(), base.clusterName(), 1,
+                base.maxAttempts(), base.leaseCheckSeconds());
+        Coordination writerSide = Coordination.on(client, shortLease, Clock.systemUTC());
+        inDatalake(41);
+        OutOfMemoryError oom = new OutOfMemoryError("prueba: Java heap space");
+        index.errorOnNextFlush = oom;
+        downloaded(41);
+        IndexingWriter writer = new IndexingWriter(writerSide, service, "w-a", d -> Thread.sleep(10), 1, STEP);
+        BlockingQueue<Throwable> died = new LinkedBlockingQueue<>();
+        Thread thread = new Thread(writer, "test-writer-w-a");
+        thread.setUncaughtExceptionHandler((t, e) -> died.add(e));
+        thread.start();
+
+        assertSame(oom, died.poll(10, TimeUnit.SECONDS), "el Error sale de run() y llega al manejador del hilo");
+        thread.join(5_000);
+        assertFalse(thread.isAlive());
+        assertEquals("stopped", writer.status().get("role"));
+        assertTrue(writerSide.indexWriterLock().isLocked(), "el lock sigue cogido hasta que se cierre el cliente");
+        assertEquals(BookState.INDEXING, task(41).bookState());
+        long leaseUntil = task(41).leaseUntil();
+        Thread.sleep(1_200);                                    // more than three turns of renewal
+        assertEquals(leaseUntil, task(41).leaseUntil(), "nadie renueva el lease: el Control lo devolverá a la cola");
     }
 
     // ---- one writer at a time (contract §5) ----

@@ -4,14 +4,16 @@ import java.util.Objects;
 
 /**
  * Message of index-events (contract §6): the same fields as the 200 of POST /index/publish.
- * Indexing publishes it after CURRENT has switched, only when a new version is created.
+ * Indexing publishes it after CURRENT has switched, only when a new version is created: with
+ * new books, or the switch of a rebuild to a new collection (DR-10), which may have none.
  *
  * It is only a wake-up: a Search replica that receives it reads CURRENT from MongoDB and
  * reloads only if the version is newer than the one it serves. A lost, repeated or
  * out-of-order message therefore does no harm.
  *
  * @param version        version that CURRENT points to now
- * @param booksPublished books that became visible in this version (> 0)
+ * @param booksPublished books that became visible in this version: more than 0, except the
+ *                       switch of a rebuild
  * @param totalBooks     books visible in total
  * @param publishedAt    ISO-8601 UTC, e.g. 2026-11-03T10:15:00Z
  */
