@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Ingestion Service API
-  version: 0.2.0
+  version: 0.2.1
   description: |
     Internal API of the **Ingestion Service** (assignment §3.2.1), plus its operational status
     endpoint. None of these endpoints is public: nginx only exposes the Search Service, and the
     Ingestion Service is reached inside the Docker network (`http://ingestion:7001`).
 
-    **Status: v0.2.0** (CF-06; v0.2.0 adds the worker state of GET /status, CF-08). The inventory of all endpoints of the system is
+    **Status: v0.2.1** (CF-06; v0.2.0 adds the worker state of GET /status, CF-08; v0.2.1 the states `failed` and `closed` of `coordination`, and `coordination_error`). The inventory of all endpoints of the system is
     `api/endpoints.md`; the Search API is `api/openapi.yaml`, the Indexing API
     `api/indexing-openapi.yaml`.
 
@@ -265,11 +265,20 @@ components:
           description: The book source in use (`INGESTION_SOURCE`).
         coordination:
           type: string
-          enum: [disabled, connecting, connected, disconnected]
+          enum: [disabled, connecting, connected, disconnected, failed, closed]
           description: |
             The Hazelcast client of the `ingest-queue` workers (CF-08). `disabled` with
             `INGESTION_WORKERS=0`; `connecting` until the cluster answers (the HTTP API works
-            meanwhile); `disconnected` while it is lost, the client reconnects by itself.
+            meanwhile); `disconnected` while it is lost, the client reconnects by itself;
+            `failed` if the connection could not even be attempted (a configuration error, see
+            `coordination_error`); `closed` while the service stops. The same states as the Control.
+        coordination_error:
+          type: string
+          description: |
+            Present only when something failed: why the connection `failed`, or, with
+            `coordination` still `connected`, why the workers could not start (then `workers` is
+            absent and the replica ingests nothing). The same field as in `GET /control/status`.
+          example: 'java.lang.IllegalStateException: no usable member address'
         workers:
           $ref: '#/components/schemas/WorkerStatus'
 
