@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: threads"
+"es.ulpgc.bigdata.ingestion.benchmark.CoordinationBenchmark.claimAndComplete","avgt",1,20,1631.119477,107.538890,"us/op",1
+"es.ulpgc.bigdata.ingestion.benchmark.CoordinationBenchmark.claimAndComplete","avgt",1,20,1052.221286,65.891489,"us/op",2
+"es.ulpgc.bigdata.ingestion.benchmark.CoordinationBenchmark.claimAndComplete","avgt",1,20,581.009261,18.565454,"us/op",4
+"es.ulpgc.bigdata.ingestion.benchmark.CoordinationBenchmark.claimAndComplete","avgt",1,20,363.755043,14.512963,"us/op",8

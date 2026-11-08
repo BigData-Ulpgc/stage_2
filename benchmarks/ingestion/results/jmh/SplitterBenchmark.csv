@@ -1,0 +1,4 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: book"
+"es.ulpgc.bigdata.ingestion.benchmark.SplitterBenchmark.split","avgt",1,20,11.505512,1.035819,"us/op",short
+"es.ulpgc.bigdata.ingestion.benchmark.SplitterBenchmark.split","avgt",1,20,79.317998,5.770379,"us/op",median
+"es.ulpgc.bigdata.ingestion.benchmark.SplitterBenchmark.split","avgt",1,20,453.750909,15.187195,"us/op",long

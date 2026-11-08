@@ -4,19 +4,24 @@
 Indexing Service, Search Service. **Implemented by:** `common/coordination` (CF-04); no
 service names a structure or builds a `BookTask` by hand.
 
-**Status: v1.3.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
+**Status: v1.4.** v1.0 approved in PR #17; v1.1 adds its review notes (fencing of the
 publication in §5, an interrupted T10 in §7, split-brain in §9); v1.2 the review notes of #19
 (dropped ids are counted, not logged, §1 and §2); v1.3 the details of the recovery found while
 implementing it (CF-10: row R of §4.1; §7: `index_books` only up to `CURRENT`, never
-backwards, read before writing, what is lost). Implemented by
+backwards, read before writing, what is lost); v1.4 the review notes of #32 (DR-08b): T10 and
+`IndexPublished` leave right after `POST /index/publish` answers, from a thread of their own;
+one event per version, the last skipped one announced on reconnecting (§6); T10 applied again
+on connecting and after each publication (§7). Implemented by
 `common/coordination` (CF-04). Changing anything in this file (names, fields, states,
 transitions) needs the approval of the other two members (plan §7). A change of the `BookTask`
 fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the stored
 entries keep the old format.
 
 This contract covers what goes through Hazelcast. The other non-HTTP contracts are the datalake
-by ranges and `<id>._READY` (plan §6.2), the `books` collection (§6.3) and the index publication
-in MongoDB (§6.5). The inventory of all interactions is `api/endpoints.md`.
+by ranges and `<id>._READY` ([`datalake-readiness.md`](datalake-readiness.md)), and the
+`books` collection and the index publication in MongoDB
+([`index-publication.md`](index-publication.md)). The inventory of all interactions is
+`api/endpoints.md`.
 
 ## 1. Principles
 
@@ -115,7 +120,7 @@ stateDiagram-v2
 | T7 | `INDEXING` → `INDEXED` | Indexing (owner) | The book is in `index_log` (after its posting lists). Clears the lease, `attempts = 0`, sets `finishedAt` | — |
 | T8 | `INDEXING` → `DOWNLOADED` | Indexing (owner) on a transient error; Control on an expired lease | As T4 | offer `index-queue` |
 | T9 | `INDEXING` → `FAILED` | As T5 | `failedStage = INDEXING` | — |
-| T10 | `INDEXED` → `PUBLISHED` | Indexing | During `POST /index/publish`, after `CURRENT` points to the new version. Plain `replace`, no queue: if it is interrupted, §7 fixes it from `index_books` | — |
+| T10 | `INDEXED` → `PUBLISHED` | Indexing | Right after `POST /index/publish` answers, once `CURRENT` points to the new version, from a thread of its own (a slow cluster never delays the answer). Plain `replace`, no queue: if it is interrupted, §7 fixes it from `index_books` | — |
 | T11 | `FAILED` → `PENDING` or `DOWNLOADED` | Control | `POST /control/retry-failed`: back to the start of `failedStage`, `attempts = 0`, `failedStage = null` (`lastError` is kept) | offer `ingest-queue` or `index-queue` |
 | R | (absent) or `PENDING` → `DOWNLOADED`, `INDEXED` or `PUBLISHED` | Control | Recovery after the cluster lost its state (§7), from the persistent evidence. Any other existing state is left as it is | offer `index-queue` for `DOWNLOADED` |
 
@@ -127,14 +132,15 @@ harmless.
 
 The HTTP administration endpoints (`POST /ingest/{id}`, `POST /index/update/{id}`) run the same
 work outside this flow and do not change `book-state`. A book indexed that way is published
-with the next version anyway (the publication reads `index_log`, plan §6.5).
+with the next version anyway (the publication reads `index_log`, `index-publication.md` §7).
 
 ### 4.2 Leases
 
 - The claim (T2, T6) writes `leaseUntil = now + LEASE_SECONDS`. Each claimant reads
   `LEASE_SECONDS` from its own environment (default 120 s, much longer than one download or
-  indexing). A worker that needs longer may renew: `replace` of its own entry with a later
-  `leaseUntil`.
+  indexing). Indexing claims up to `INDEX_WRITE_BATCH` books and writes them together: the
+  lease must cover the whole batch, which takes seconds. A worker that needs longer may renew:
+  `replace` of its own entry with a later `leaseUntil`.
 - Every `LEASE_CHECK_SECONDS` (default 10 s) the Control queries
   `state IN ('INGESTING', 'INDEXING') AND leaseUntil < now` and applies T4/T8, or T5/T9 when
   the attempts are used up, with `lastError = LEASE_EXPIRED`.
@@ -194,7 +200,11 @@ because it is not the book's fault: otherwise one outage would send every book i
 | `publishedAt` | `String` | ISO-8601 UTC, e.g. `2026-11-03T10:15:00Z` |
 
 - Indexing publishes it after `CURRENT` has switched (plan §6.5), only when a new version is
-  created (`books_published > 0`).
+  created (`books_published > 0`): one per version, in order while connected, from the same
+  thread as T10, right after `POST /index/publish` answers. A version created while Indexing
+  has no cluster is announced when it connects or reconnects (only the last one, which is
+  enough for Search); that announcement may come after the one of a newer version published
+  at the same moment.
 - The event is only a **wake-up**: on receiving it, a Search replica reads `CURRENT` from
   MongoDB and reloads only if the version is newer than the one it serves. A lost, repeated or
   out-of-order event therefore does no harm, and the periodic check of `CURRENT`
@@ -211,7 +221,7 @@ because it is not the book's fault: otherwise one outage would send every book i
 | Indexing dies while holding `index-writer` | The lock is released in 5–60 s and a standby replica takes over | Hazelcast |
 | The Control dies | Workers keep consuming the queues; leases are not reviewed and nothing is published until it restarts. Seeding is idempotent | Restart |
 | One Hazelcast member dies | Nothing is lost (backup). While only one member runs there is no copy; when it rejoins, the partitions migrate back in 1–4 s and the cluster is not *safe* meanwhile | Hazelcast |
-| Indexing dies after `CURRENT` switched but before T10 (cluster alive) | The books are visible but stay `INDEXED` in `book-state`; the recovery below does not run, `coordination-meta` is still there | Indexing (DR-08): at startup and before each publication it applies T10 again to the `INDEXED` books that are already in `index_books` |
+| Indexing dies after `CURRENT` switched but before T10 (cluster alive) | The books are visible but stay `INDEXED` in `book-state`; the recovery below does not run, `coordination-meta` is still there | Indexing (DR-08): when it connects or reconnects, and after each publication, it applies T10 again to the `INDEXED` books that are already in `index_books` |
 | **Both members die** (or the cluster restarts) | `book-state`, the queues, the lock and `coordination-meta` are lost; clients reconnect when it is back | Control: recovery below |
 
 **Recovery (CF-10).** The Control checks `coordination-meta.initialized` at startup and on every

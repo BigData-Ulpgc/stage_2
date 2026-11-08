@@ -1,5 +1,5 @@
-# Dataset común: 200 libros de Gutenberg en inglés (tipo Text), todos con marcadores START/END.
-# Los 15 primeros son los originales; el resto, los más descargados y ficción clásica.
+# Common dataset: 200 English books of Project Gutenberg (type Text), all with START/END markers.
+# The first 15 are the original sample; the rest, the most downloaded books and classic fiction.
 1342
 84
 11

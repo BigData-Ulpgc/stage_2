@@ -69,5 +69,5 @@ Those contracts are documented separately:
 |---|---|---|
 | `book-state`, `ingest-queue`, `index-queue` (consumed by the Indexing writer that holds `index-writer`), `index-events` (`IndexPublished`), lock `index-writer` (`IMap.lock`, not CP), `coordination-meta` | Control, Ingestion, Indexing, Search | [`api/contracts/coordination.md`](contracts/coordination.md) (CF-02) |
 | Datalake by ranges and `<id>._READY` | Ingestion → Indexing, Control | [`api/contracts/datalake-readiness.md`](contracts/datalake-readiness.md) (CF-07) |
-| Collection `books` (metadata) | Indexing → Search | plan §6.3 |
-| `inverted_index`, `index_books`, `index_meta` (`CURRENT`), `index_publications` | Indexing → Search, Control | plan §6.5 |
+| Collection `books` (metadata) | Indexing → Search | [`api/contracts/index-publication.md`](contracts/index-publication.md) §3 (DR) |
+| `inverted_index`, `index_log`, `index_books`, `index_meta` (`CURRENT`), `index_publications` | Indexing → Search, Control | [`api/contracts/index-publication.md`](contracts/index-publication.md) (DR) |
