@@ -118,23 +118,29 @@ def load_table(rows, *keys):
 
 
 def monitor_summary(run_dirs):
-    """Mean CPU and peak memory of each kind of container, per configuration."""
+    """
+    Mean CPU and peak memory of each kind of container, per configuration: the size of the
+    index, the experiment, replicas, Jetty threads, pool and clients. All of them are in the key,
+    or the runs of different indexes, threads or pools would be averaged together.
+    """
     totals = defaultdict(lambda: defaultdict(list))
     memory = defaultdict(lambda: defaultdict(float))
     for run_dir in run_dirs:
+        size = dataset_size(run_dir)
         for path in sorted((run_dir / "monitor").glob("*/containers.csv")):
             label = path.parent.name.split("_")[0]
             match = re.match(r"(.+)-r(\d+)-t(\d+)-p(\d+)-c(\d+)-rep(\d+)", label)
             if not match:
                 continue
-            experiment, replicas, _, _, clients, repetition = match.groups()
+            experiment, replicas, threads, pool, clients, repetition = match.groups()
+            key = (size, experiment, int(replicas), int(threads), int(pool), int(clients))
             per_sample = defaultdict(lambda: defaultdict(float))
             for row in read_csv(path):
+                if row["container"] in ("", "-"):        # an empty line of docker stats
+                    continue
                 kind = re.sub(r"^[^-]*-|-\d+$", "", row["container"]) if row["container"].count("-") >= 2 else row["container"]
                 per_sample[row["timestamp"]][kind] += float(row["cpu_pct"])
-                key = (experiment, int(replicas), int(clients))
                 memory[key][kind] = max(memory[key][kind], float(row["mem_used_mib"]))
-            key = (experiment, int(replicas), int(clients))
             for sample in per_sample.values():
                 for kind, cpu in sample.items():
                     totals[key][kind].append(cpu)
@@ -183,11 +189,14 @@ def write_tables(load, jmh, monitor, warnings, path, mixed_lines=()):
     out += list(mixed_lines)
     if monitor:
         out += ["", "## Mean CPU (% of one core, all replicas added) and peak memory (MiB)", "",
-                "| experiment | replicas | clients | container | CPU % | memory MiB |", "|---|---|---|---|---|---|"]
+                "Limits: Search and MongoDB 2 CPUs each (per replica), nginx 2 CPUs except in nginx<CPUs>.", "",
+                "| books | experiment | replicas | http threads | mongo pool | clients | container | CPU % | memory MiB |",
+                "|---|---|---|---|---|---|---|---|---|"]
         for key in sorted(monitor):
             for kind in sorted(monitor[key]):
                 cpu, mem = monitor[key][kind]
-                out.append(f"| {key[0]} | {key[1]} | {key[2]} | {kind} | {cpu:.0f} | {mem:.0f} |")
+                cells = " | ".join(str(k) for k in key)
+                out.append(f"| {cells} | {kind} | {cpu:.0f} | {mem:.0f} |")
     if jmh:
         out += ["", "## JMH: mean time per search (one row per configuration)", ""]
         for name in sorted({r["benchmark"] for r in jmh}):
@@ -239,12 +248,13 @@ def line_figure(plt, rows, series_key, series_name, metric, ylabel, title, path)
     plt.close(fig)
 
 
-def cpu_figure(plt, monitor, path):
-    keys = sorted(k for k in monitor if k[0] == "clients")
+def cpu_figure(plt, monitor, size, path):
+    """CPU per container with the most clients, for each number of replicas, on one index."""
+    keys = sorted(k for k in monitor if k[0] == size and k[1] == "clients")
     if not keys:
         return
-    top = max(k[2] for k in keys)
-    keys = [k for k in keys if k[2] == top]
+    top = max(k[5] for k in keys)
+    keys = [k for k in keys if k[5] == top]
     kinds = ["search", "mongo", "nginx"]
     fig, ax = plt.subplots(figsize=(6.4, 3.8), dpi=200)
     width = 0.8 / len(kinds)
@@ -252,8 +262,9 @@ def cpu_figure(plt, monitor, path):
         values = [monitor[k].get(kind, (0, 0))[0] for k in keys]
         positions = [i + index * width for i in range(len(keys))]
         ax.bar(positions, values, width=width - 0.02, color=COLORS[index], label=kind)
-    style(ax, f"Mean CPU with {top} clients", "Search replicas", "CPU (% of one core, replicas added)", logx=False)
-    ax.set_xticks([i + width * (len(kinds) - 1) / 2 for i in range(len(keys))], [str(k[1]) for k in keys])
+    style(ax, f"Mean CPU with {top} clients, index of {size} books", "Search replicas",
+          "CPU (% of one core, replicas added)", logx=False)
+    ax.set_xticks([i + width * (len(kinds) - 1) / 2 for i in range(len(keys))], [str(k[2]) for k in keys])
     ax.legend(frameon=False, labelcolor=MUTED)
     fig.tight_layout()
     fig.savefig(path)
@@ -307,7 +318,8 @@ def figures(load, jmh, monitor, out, mixed_rows=()):
         if len({r["mongo_pool"] for r in rows}) > 1:
             line_figure(plt, rows, "mongo_pool", "pool", "p95_ms", "p95 latency (ms)",
                         f"MongoDB connections, 1 replica, {size} books", out / f"p95_pool_{tag}.png")
-    cpu_figure(plt, monitor, out / "cpu_containers.png")
+    for size in sorted({k[0] for k in monitor}):
+        cpu_figure(plt, monitor, size, out / f"cpu_containers_{size}books.png")
     if mixed_rows:
         mixed_figure(plt, mixed_rows, out / "p95_mixed.png")
     pagination = [r for r in jmh if r["benchmark"] == "PaginationBenchmark"]
