@@ -1,0 +1,115 @@
+\section{Design decisions: storage and concurrency}
+\label{sec:decisions-storage}
+
+\subsection{Storage selection}
+
+Stage~1 compared several structures for each store and chose, for 200 books, a datalake with one folder per book and a
+monolithic JSON inverted index. Stage~2 must index tens of thousands of books with several processes sharing the data,
+so the group moved to structures that Stage~1 had already implemented and tested:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{2.2cm}L{3.3cm}X@{}}
+\toprule
+\textbf{Store} & \textbf{Choice} & \textbf{Why} \\
+\midrule
+Datalake & \emph{range}: one folder per 1,000 ids, such as \code{01000-01999/} &
+  With one folder per book the root holds one entry per book, hundreds of thousands. With \emph{range} each folder has
+  at most about 3,000 files (header, body and \code{\_READY} of each book), and the folder of a book is computed from
+  its id, never searched. Files are the cheapest way to keep raw text, and the only store on disk besides MongoDB. \\
+Inverted index & MongoDB: one document \code{\{term, postings\}} per term, unique index on \code{term} &
+  The monolithic JSON is held whole in memory and rewritten whole at each flush; Stage~1 itself noted that it had to
+  change beyond about 2,000 books. In MongoDB a flush sends only the terms that changed, a query reads only the
+  documents of its terms, and many processes can read and write it at once. \\
+Metadata & MongoDB: collection \code{books}, one document per book &
+  By volume SQLite was enough (about 30~MB for 100,000 books). The reason is Stage~3: a SQLite file cannot be shared
+  between machines, and MongoDB was already deployed. Search reads the metadata by \code{\_id} and filters in memory. \\
+Publication & MongoDB: four collections &
+  \code{index\_meta}, \code{index\_books}, \code{index\_publications} and \code{index\_log}. The version of the index must change for Search in one atomic step, and a conditional update of one document
+  (\code{CURRENT}) gives it without any lock (Section~\ref{sec:indexing}). \\
+\bottomrule
+\end{tabularx}
+\caption{Storage of each kind of data. The datalake is the only persistent truth on disk; everything else is in one
+MongoDB database.}
+\label{tab:storage}
+\end{table}
+
+\textbf{What the measures say about this choice} (Section~\ref{sec:benchmarks-indexing}). With 30,000 books the index has
+651,565 terms and 94.7 million ids, and takes 1.11~GB on disk. Its longest posting list, the word \emph{said}, holds
+29,898 ids in 318~KB: far from the 16~MB limit of a MongoDB document, and reading it takes 2.8~ms. One document per
+term is therefore enough for queries at this scale. The cost is on the write side. \code{\$addToSet} compares each new
+id with the whole list to keep it free of duplicates, so adding 100 ids costs 6~ms on a list of 1,000 ids and 233~ms on
+one of 100,000. Since the frequent terms hold almost one id per book, every batch pays for the size of the index, and
+the indexing rate falls from about 17 to 1 book per second between an empty index and 30,000 books.
+
+\textbf{What would fix it, and why it was not done.} \code{\$push} is 14 to 20 times faster on long lists, but it accepts
+duplicates, and idempotency is what makes every retry of the pipeline safe (Section~\ref{sec:indexing}). Avoiding
+duplicates without \code{\$addToSet} would need another mechanism, such as writing a batch only once per book with a
+check in \code{index\_log}. The other option is to split each posting list into buckets of bounded size, which keeps
+\code{\$addToSet} cheap but changes the contract of the index and the reads of Search. Both are proposed for Stage~3, not
+measured.
+
+\subsection{Concurrency model of Indexing}
+
+One Indexing process runs these threads:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.6cm}L{2.2cm}X@{}}
+\toprule
+\textbf{Threads} & \textbf{How many} & \textbf{What they do} \\
+\midrule
+Jetty pool & up to \code{INDEXING\_HTTP\_THREADS} (250) & One per HTTP request \\
+Parsers & \code{INDEXING\_THREADS} (4) & Read, parse and tokenize the books of a batch, in parallel \\
+Queue writer & 1 & Holds \code{index-writer}, claims, writes, completes \\
+Lease renewer & 1 & Renews the leases of the batch being written \\
+Notifier & 1 & Announces each publication and marks its books \code{PUBLISHED} \\
+Rebuild & 1, and 1 for its marker & Only while a rebuild runs \\
+\bottomrule
+\end{tabularx}
+\caption{Threads of one Indexing process. The Hazelcast client and the MongoDB driver add their own.}
+\end{table}
+
+\textbf{Many parsers, one writer.} Preparing a book is pure CPU and independent of the others, so it runs in parallel.
+Writing is not: the pending changes of the inverted index are one map per process, and the order of the writes
+(metadata, posting lists, \code{index\_log}) is what makes a book complete. So writes go one at a time, whether they come
+from the queue writer or from \code{POST /index/update}. Between replicas, the \code{index-writer} lock leaves a single
+writer in the whole system; more replicas are standbys for failover, not more throughput. A second writer would update
+the same documents as the first, because the frequent terms are in almost every book: the two would contend on the same
+posting lists in MongoDB and add no capacity where it is missing.
+
+\textbf{Protection of the shared state.}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.6cm}L{3.8cm}X@{}}
+\toprule
+\textbf{Shared state} & \textbf{Shared by} & \textbf{Protection} \\
+\midrule
+Pending posting lists & Threads of one process & A lock around add and flush \\
+Writing the index & Replicas of Indexing & Hazelcast lock \code{index-writer}, held by one thread \\
+Leases of the claimed books & Writer and Control & Conditional replace of the task in \code{book-state} \\
+\code{CURRENT} & Replicas that publish & Conditional update: only from V to V+1 \\
+Version of a published book & Publications & \code{\$setOnInsert}: it never changes \\
+Posting lists and metadata & Replicas, retries & Idempotent writes: \code{\$addToSet}, upserts by \code{\_id} \\
+Rebuild marker & Replicas & \code{putIfAbsent} with a TTL and a token; renewed and removed only by its owner \\
+\bottomrule
+\end{tabularx}
+\caption{How Indexing protects each piece of shared state.}
+\end{table}
+
+\subsection{Where threads and replicas help, and where they contend}
+
+\begin{itemize}
+  \item \textbf{More parser threads help the CPU part only.} Alone, preparing a batch goes from 233 to 487 books per
+        second between 1 and 8 threads, and stops improving at 4. Inside the deployment the whole path into MongoDB
+        stays at 15 books per second whatever the threads: CPU is not what limits indexing.
+  \item \textbf{More Indexing replicas do not add throughput} by design: they are standbys. What they add is
+        failover, measured at 2.8 to 4.0~s.
+  \item \textbf{MongoDB is the shared resource.} Indexing writes the index that Search reads. With the pipeline
+        running, Indexing processed 2.42 books per second alone and 0.91 while Search was under load, and with 128
+        clients the p95 of Search rose from 109 to 160~ms. On one host they also share its CPUs.
+  \item \textbf{What would help}, for Stage~3: a cheaper write than \code{\$addToSet} on long lists, a larger MongoDB
+        cache (the index exceeds its 0.25~GB from about 10,000 books), and MongoDB on a machine of its own, away from
+        the other services.
+\end{itemize}

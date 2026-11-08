@@ -1,0 +1,90 @@
+\section{Benchmarks and results: consolidation}
+\label{sec:consolidation}
+
+This part puts the measures of the three services side by side: one host, the configurations measured, and where each
+part of the system saturates.
+
+\subsection{The host}
+
+Every valid measure ran on one machine, recorded by the \code{host.txt} of each run:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.4cm}X@{}}
+\toprule
+CPU & Intel Core i7-9750H, 2.60~GHz: 6 cores, 12 logical CPUs \\
+Memory and storage & 16~GB; NVMe SSD \\
+Operating system & Ubuntu 24.04.5, Linux 7.0 \\
+Docker & 28.3.3, sees the 12 CPUs and 16~GB \\
+JVM & OpenJDK 21.0.12 for JMH and the drivers; the images run Java 17 \\
+Power & Plugged in, balanced energy profile \\
+\bottomrule
+\end{tabularx}
+\caption{Reference machine of all the benchmarks.}
+\label{tab:host}
+\end{table}
+
+The deployment limits each container (\code{.env}): MongoDB 2 CPUs and 1~GB with a 0.25~GB cache; Indexing 2 CPUs and
+1~GB; Search 2 CPUs per replica; Ingestion 1 CPU and 512~MB; each Hazelcast member 1 CPU and 768~MB; the Control and
+nginx 0.5 CPUs. All the limits together exceed the 12 CPUs of the host only in the Search experiments with 4 replicas.
+
+\subsection{What was measured}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.1cm}L{2.2cm}L{2.2cm}X@{}}
+\toprule
+\textbf{Experiment} & \textbf{Scope} & \textbf{Replicas} & \textbf{Threads and clients} \\
+\midrule
+Ingestion JMH & component, host & -- & 1, 2, 4, 8 workers \\
+Indexing JMH & component, host & -- & 1, 2, 4, 8 parser threads \\
+Search JMH & component, host & -- & 1, 2, 4, 8 threads \\
+Indexing, threads & Indexing + MongoDB + Hazelcast, Docker & 1 Indexing & 1, 2, 4, 8 parser threads; 2,000 books \\
+Indexing, scale & same & 1 Indexing & 4 threads; 200, 10,000, 30,000 books \\
+Indexing, publication & same & 1 Indexing & 1, 10, 50 new books on 10,000 \\
+Search, load & Search + MongoDB + nginx, Docker & 1, 2, 4 Search & 1 to 256 closed-loop clients; 250 Jetty threads; pool of 50;
+  index of 15, 197 and 10,000 books \\
+Search with the pipeline & complete pipeline, Docker & 1 of each & 32 and 128 clients on 2,000 books while the
+  pipeline processes new ones \\
+\bottomrule
+\end{tabularx}
+\caption{The experiments, each labelled with what it measures. Every configuration was repeated 3 times, except the
+30,000 books of Indexing (once). Client concurrency, replicas and threads are kept apart.}
+\label{tab:experiments}
+\end{table}
+
+\subsection{Bottlenecks and scaling trends}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{1.9cm}L{4.4cm}X@{}}
+\toprule
+\textbf{Service} & \textbf{Measured rate} & \textbf{What limits it} \\
+\midrule
+Ingestion & 473 $\mu$s per book with 1 worker, 155 with 8 (local source, JMH) &
+  The coordination: claim and complete cost 1.6~ms per book with 1 thread and 0.36 with 8, more than the ingestion
+  itself. With Project Gutenberg the download is far longer than both. \\
+Indexing & 15 books/s on 2,000 books; 5.5 on 10,000; 2.0 on 30,000 &
+  MongoDB: the cost of \code{\$addToSet} grows with each posting list, and one writer sends one stream of writes.
+  Threads and replicas of Indexing do not change it (Section~\ref{sec:benchmarks-indexing}). \\
+Search & about 7,500 req/s on 15 books; 950 on 10,000 books with 1 replica, 2,600 with 4 &
+  On a small index the throughput is flat from 8 clients whatever the replicas, so the limit is outside Search: the
+  generator and nginx share the CPUs of the host. On 10,000 books each query reads long posting lists, and replicas
+  help: 4 give 2.7 times the throughput of one, so the work of Search itself limits it (Section~\ref{sec:benchmarks}). \\
+The whole system & with the pipeline running, Search 2,600 req/s and Indexing 0.91 books/s at the same time &
+  MongoDB and the CPUs of the host are shared: indexing drops from 2.42 to 0.91 books/s while Search is under load,
+  and the p95 of Search with 128 clients rises from 109 to 160~ms. \\
+\bottomrule
+\end{tabularx}
+\caption{Where each part of the system saturates on the reference machine.}
+\label{tab:bottlenecks}
+\end{table}
+
+\textbf{Threads and replicas.} Threads help where the work is CPU inside one process: the workers of Ingestion and the
+parsers of Indexing in JMH, and the replicas of Search when queries are long. They do not help where the limit is a shared
+resource: the queue of Hazelcast for Ingestion with small books, and MongoDB for Indexing. Indexing replicas are
+standbys by design, so their effect is failover, not throughput.
+
+\textbf{What was not measured.} The full pipeline with several Ingestion replicas and Project Gutenberg as the source
+(the measures use the local source, so that the network does not dominate); 100,000 books, because indexing them at the
+measured rate would take most of a day; and two machines, which is Stage~3.
