@@ -63,6 +63,9 @@ class RebuilderTest {
     private Rebuilder rebuilder;
     /** The index of this collection fails its first flush, as MongoDB going down. */
     private volatile String failingCollection = null;
+    /** The flush of this collection waits for slowGate, as a long batch. */
+    private volatile String slowCollection = null;
+    private final CountDownLatch slowGate = new CountDownLatch(1);
 
     @BeforeAll
     static void connect() {
@@ -94,6 +97,9 @@ class RebuilderTest {
         IndexingServiceTest.SpyIndex index = new IndexingServiceTest.SpyIndex();
         if (collection.equals(failingCollection)) {
             index.failNextFlushWith = new MongoException("MongoDB no responde (simulado)");
+        }
+        if (collection.equals(slowCollection)) {
+            index.flushGate = slowGate;
         }
         return index;
     }
@@ -321,6 +327,31 @@ class RebuilderTest {
         }
         assertEquals(1, publications.current().orElseThrow().version());
         assertFalse(collections.containsKey("inverted_index_r01"));
+    }
+
+    @Test
+    void unLoteQueTardaMasQueLaMarcaNoLaDejaCaducar() throws Exception {
+        // On an index of 10,000 books one batch takes about 33 s, longer than MARKER_TTL (review
+        // of #55). Here the TTL is 2 s and the flush of rNN waits 5 s: a renewal before each batch
+        // only would find the marker gone at the next one.
+        indexedAndPublished();
+        rebuilder.close();
+        rebuilder = new Rebuilder(() -> Optional.of(coordination), service, datalake, publications, publisher,
+                repository, DEFAULT, 2, DROP_DELAY, Clock.systemUTC(), Duration.ofSeconds(2));
+        slowCollection = "inverted_index_r01";
+
+        rebuilder.start();
+        await("el primer lote abre rNN", () -> collections.containsKey("inverted_index_r01"));
+        assertTrue(collections.get("inverted_index_r01").flushEntered.await(10, TimeUnit.SECONDS),
+                "el primer lote no llegó al flush");
+        Thread.sleep(5000);                                         // two TTLs and a half in one batch
+        assertTrue(coordination.isRebuilding(), "la marca sigue viva en mitad del lote");
+        slowGate.countDown();
+        Rebuild done = finished();
+
+        assertEquals(Rebuild.State.DONE, done.state(), String.valueOf(done.error()));
+        assertEquals("inverted_index_r01", publications.current().orElseThrow().collection());
+        assertFalse(coordination.isRebuilding(), "la marca se quita al terminar");
     }
 
     @Test

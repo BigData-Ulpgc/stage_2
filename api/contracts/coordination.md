@@ -199,9 +199,12 @@ Indexing replica:
   standbys do not try to take it. The rebuild takes the lock and holds it to the end. The
   books that arrive meanwhile wait in the queue, and their leases do not run: nobody claimed
   them. `POST /index/update` and `POST /index/publish` answer 409 in every replica.
-- The rebuild renews the TTL while it waits for the lock and before each batch, and only if
-  the key still holds its token. If the key is gone, the replica stalled longer than the TTL,
-  the writers may be writing again, and the rebuild stops without switching `CURRENT`.
+- A thread of the rebuild renews the TTL every 10 s (a third of it) for as long as the rebuild
+  runs, also in the middle of a batch: on an index of 10,000 books one batch of 100 takes
+  about 33 s, longer than the TTL. It renews only if the key still holds its token. The
+  rebuild also checks the key while it waits for the lock and before each batch: if it is
+  gone, the replica stalled longer than the TTL or the cluster lost it, the writers may be
+  writing again, and the rebuild stops without switching `CURRENT`.
 - At the end, done or failed, it removes the key only if it still holds its token (a
   conditional `remove`), and releases the lock. If the replica dies, the key expires within
   30 s and Hazelcast releases the lock: indexing goes on.
@@ -249,7 +252,7 @@ Indexing replica:
 | One Hazelcast member dies | Nothing is lost (backup). While only one member runs there is no copy; when it rejoins, the partitions migrate back in 1–4 s and the cluster is not *safe* meanwhile | Hazelcast |
 | Indexing dies after `CURRENT` switched but before T10 (cluster alive) | The books are visible but stay `INDEXED` in `book-state`; the recovery below does not run, `coordination-meta` is still there | Indexing (DR-08): when it connects or reconnects, and after each publication, it applies T10 again to the `INDEXED` books that are already in `index_books` |
 | Indexing dies during a rebuild (DR-10) | The `rebuild` key expires within 30 s and the lock is released; the writers go on writing into the collection of `CURRENT`, untouched. The half-built `inverted_index_rNN` is left behind | Hazelcast; the next rebuild drops the collection nobody reads |
-| A rebuild stalls longer than the TTL of its key | The key expires and the writers go on; the rebuild's next renewal fails and it stops without switching `CURRENT` | The rebuild itself |
+| The replica of a rebuild stalls longer than the TTL of its key (a long pause, or no Hazelcast) | The key expires and the writers go on; the rebuild's next check fails and it stops without switching `CURRENT` | The rebuild itself |
 | **Both members die** (or the cluster restarts) | `book-state`, the queues, the lock and `coordination-meta` are lost, the `rebuild` key too, so a running rebuild stops at its next renewal; clients reconnect when it is back | Control: recovery below |
 
 **Recovery (CF-10).** The Control checks `coordination-meta.initialized` at startup and on every
@@ -295,6 +298,11 @@ Read by `common/coordination` from environment variables, with these defaults:
   Stage 3 it can.
 - Leases compare clocks of different processes. On one host they share the clock; in Stage 3,
   on several machines, they need NTP, or a margin larger than the expected clock skew.
+- The rebuild fails open without Hazelcast (§5). A replica without the cluster that indexes a
+  book with `POST /index/update` between the safety pass of a rebuild and its switch writes
+  the postings into the old collection. The switch still publishes the book, so it is visible
+  but without terms in `inverted_index_rNN`: Search does not find it until the next rebuild.
+  It needs a replica without the cluster inside a window of milliseconds, so it is left as is.
 - Transactions cost extra round trips per transition. Their cost is part of the coordination
   cost measured in CF-13.
 
