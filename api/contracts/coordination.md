@@ -20,8 +20,10 @@ fields also means emptying the cluster (`docker compose restart hz-1 hz-2`): the
 entries keep the old format.
 
 This contract covers what goes through Hazelcast. The other non-HTTP contracts are the datalake
-by ranges and `<id>._READY` (plan §6.2), the `books` collection (§6.3) and the index publication
-in MongoDB (§6.5). The inventory of all interactions is `api/endpoints.md`.
+by ranges and `<id>._READY` ([`datalake-readiness.md`](datalake-readiness.md)), and the
+`books` collection and the index publication in MongoDB
+([`index-publication.md`](index-publication.md)). The inventory of all interactions is
+`api/endpoints.md`.
 
 ## 1. Principles
 
@@ -133,7 +135,7 @@ harmless.
 
 The HTTP administration endpoints (`POST /ingest/{id}`, `POST /index/update/{id}`) run the same
 work outside this flow and do not change `book-state`. A book indexed that way is published
-with the next version anyway (the publication reads `index_log`, plan §6.5).
+with the next version anyway (the publication reads `index_log`, `index-publication.md` §7).
 
 ### 4.2 Leases
 

@@ -1,0 +1,13 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: books","Param: terms"
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,2.575515,0.122990,"us/op",200,common
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,1.447850,0.074900,"us/op",200,common_frequent
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,0.303973,0.002276,"us/op",200,common_rare
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,0.796203,0.038356,"us/op",200,common_frequent_medium
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,373.334082,47.446720,"us/op",10000,common
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,287.033156,7.698444,"us/op",10000,common_frequent
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,4.370445,0.405143,"us/op",10000,common_rare
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,78.452228,8.949907,"us/op",10000,common_frequent_medium
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,4915.618161,359.088666,"us/op",100000,common
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,3105.090250,93.655605,"us/op",100000,common_frequent
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,154.995476,12.158674,"us/op",100000,common_rare
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,835.925265,58.713840,"us/op",100000,common_frequent_medium
