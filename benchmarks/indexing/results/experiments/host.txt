@@ -1,0 +1,28 @@
+date_utc: 2026-11-08T01:53:34Z
+commit: 3c8ebaf
+os: Linux 7.0.0-42-generic x86_64 GNU/Linux
+logical_cpus: 12
+cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+memory: 16205352 kB
+disk: 287G (80G free) on /dev/nvme0n1p6
+docker: 28.3.3, 12 CPUs, 16594280448 bytes, Ubuntu 24.04.5 LTS
+java (driver): openjdk version "21.0.12.1" 2026-08-18
+java (driver): OpenJDK Runtime Environment (build 21.0.12.1+1-1-24.04.4-Ubuntu)
+java (driver): OpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-24.04.4-Ubuntu, mixed mode, sharing)
+dataset: benchmarks/indexing/data/experiments/books, digest 2cd44ef4abcf1aa4241c4955b499da452bc410866038dd909a8b4bbcbad63e84
+experiments: probe threads scale publish
+threads: 1 2 4 8 on 2000 books; scale: 200 10000 30000 (30000 and more: 1 repetitions)
+publish: 1 10 50 new books, 10 times each, on 10000 books
+repetitions: 3, INDEX_WRITE_BATCH: 100, INDEXING_THREADS outside the threads experiment: 4
+limits (.env):
+  HZ_HEAP=512m
+  MONGO_MEM_LIMIT=1g
+  MONGO_CACHE_GB=0.25
+  MONGO_CPUS=2
+  HZ_CPUS=1
+  HZ_MEM_LIMIT=768m
+  INGESTION_CPUS=1
+  INGESTION_MEM_LIMIT=512m
+  INDEXING_CPUS=2
+  INDEXING_MEM_LIMIT=1g
+  JAVA_HEAP_PERCENT=75
