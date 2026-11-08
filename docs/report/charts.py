@@ -112,9 +112,96 @@ def pagination():
     plt.close(fig)
 
 
+# ---- Load tests (run-load.sh): one panel per index size ----
+
+RESULTS = JMH.parent
+LOADS = [("load", "15 books"), ("load-200", "197 books"), ("load-10000", "10,000 books")]
+
+
+def load_points(folder, metric):
+    """{replicas: [(clients, mean over the repetitions)]} of the clients experiment."""
+    path = RESULTS / folder / "summary.csv"
+    if not path.exists():
+        return {}
+    with open(path, newline="", encoding="utf-8") as handle:
+        data = [r for r in csv.DictReader(handle) if r["experiment"] == "clients"]
+    by = {}
+    for r in data:
+        by.setdefault((int(r["replicas"]), int(r["clients"])), []).append(float(r[metric]))
+    out = {}
+    for (replicas, clients), values in sorted(by.items()):
+        out.setdefault(replicas, []).append((clients, sum(values) / len(values)))
+    return out
+
+
+def load_figure(metric, ylabel, title, name, log_y=False):
+    panels = [(label, load_points(folder, metric)) for folder, label in LOADS]
+    panels = [(label, points) for label, points in panels if points]
+    if not panels:
+        return
+    fig, axes = plt.subplots(1, len(panels), figsize=(6.4, 2.7), sharey=log_y)
+    for ax, (label, points) in zip(axes, panels):
+        for i, replicas in enumerate(sorted(points)):
+            xs, ys = zip(*points[replicas])
+            ax.plot(xs, ys, color=COLORS[i], marker=MARKERS[i], linewidth=1.8, markersize=4,
+                    label=f"{replicas} replica{'s' if replicas > 1 else ''}")
+        ax.set_xscale("log", base=2)
+        ax.set_xticks([1, 8, 32, 128, 256], ["1", "8", "32", "", "256"])
+        if log_y:
+            ax.set_yscale("log")
+        else:
+            ax.set_ylim(bottom=0)
+        style(ax, label, "clients", ylabel if ax is axes[0] else "")
+        ax.tick_params(labelsize=7)
+    axes[0].legend(frameon=False, labelcolor=MUTED, fontsize=7)
+    fig.suptitle(title, x=0.01, ha="left", fontsize=10, color=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / name)
+    plt.close(fig)
+
+
+def load_cpu():
+    """Mean CPU of Search (replicas added), MongoDB and nginx with 128 clients, against their limits."""
+    import sys
+    sys.path.insert(0, str(RESULTS.parent))
+    from analyze import monitor_summary
+    panels = []
+    for folder, label in LOADS:
+        if (RESULTS / folder / "summary.csv").exists():
+            summary = monitor_summary([RESULTS / folder])
+            keys = sorted(k for k in summary if k[1] == "clients" and k[5] == 128)
+            if keys:
+                panels.append((label, [(k[2], summary[k]) for k in keys]))
+    if not panels:
+        return
+    fig, axes = plt.subplots(1, len(panels), figsize=(6.4, 2.7), sharey=True)
+    kinds = [("search", "Search"), ("mongo", "MongoDB"), ("nginx", "nginx")]
+    width = 0.26
+    for ax, (label, rows_) in zip(axes, panels):
+        for i, (kind, name) in enumerate(kinds):
+            xs = [j + (i - 1) * width for j in range(len(rows_))]
+            ax.bar(xs, [cpu.get(kind, (0, 0))[0] for _, cpu in rows_], width=width - 0.03, color=COLORS[i],
+                   label=name)
+        ax.axhline(200, color=MUTED, linestyle="--", linewidth=0.8)
+        ax.set_xticks(range(len(rows_)), [str(r) for r, _ in rows_])
+        style(ax, label, "Search replicas", "CPU, % of one core" if ax is axes[0] else "")
+        ax.tick_params(labelsize=7)
+    axes[0].legend(frameon=False, labelcolor=MUTED, fontsize=7, loc="upper left")
+    fig.suptitle("Mean CPU with 128 clients (dashed: 2 CPUs, the limit of MongoDB and of each Search replica)",
+                 x=0.01, ha="left", fontsize=9, color=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / "load_cpu.pdf")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     intersection()
     threads()
     pagination()
+    load_figure("throughput_rps", "requests per second", "Throughput against clients, by index size",
+                "load_throughput.pdf")
+    load_figure("p95_ms", "p95 (ms, log)", "p95 latency against clients, by index size", "load_p95.pdf",
+                log_y=True)
+    load_cpu()
     print("figures in", OUT)
