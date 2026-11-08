@@ -1,0 +1,147 @@
+\section{Design decisions: coordination}
+\label{sec:decisions-coordination}
+
+\subsection{Why Hazelcast}
+
+The services need four things from their coordination: queues of work that several replicas can share, a state per
+book that several processes change at the same time, one lock (the single index writer) and one event (a new version).
+Table~\ref{tab:alternatives} compares the options we considered.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.4cm}X@{}}
+\toprule
+\textbf{Alternative} & \textbf{Why we did not choose it} \\
+\midrule
+Control files of Stage 1 & Plain text files do not survive several processes writing at the same time \\
+Orchestrator with SQLite & It works, but the orchestrator calls each replica and must know its address; with shared
+  queues, adding a replica changes nothing in the Control \\
+Broker (RabbitMQ, Kafka) & Acknowledgements and persistence, but one more technology, and no shared state, locks or
+  compare-and-set: the state of each book would need yet another store \\
+MongoDB for coordination too & It could keep the state of each book, but it has no blocking queues, topics or
+  distributed locks; polling a collection for work would load the database that Search reads \\
+Shared memory (\code{mmap}) & Only exists on one machine: the assignment would force a redesign for Stage 3 \\
+\textbf{Hazelcast} & Queues, a map with compare-and-set and queries, transactions, locks and a reliable topic in one
+  dependency. It is used the same way on one machine and on a cluster: for Stage 3 the configuration changes, not the code \\
+\bottomrule
+\end{tabularx}
+\caption{Coordination alternatives.}
+\label{tab:alternatives}
+\end{table}
+
+Hazelcast has three limits, which shaped the rest of the design:
+\begin{enumerate}
+  \item \textbf{It is only in memory.} If both members stop, every state is lost. Hence the principle that a state is
+    written only after its evidence is on disk, and the recovery of the Control (Section~\ref{sec:recovery}).
+  \item \textbf{Its queues have no acknowledgements.} An id taken by a worker that dies is gone from the queue. Hence the
+    leases in \code{book-state}, reviewed by the Control (Section~\ref{sec:ownership}).
+  \item \textbf{Its strongly consistent primitives are not free.} The CP Subsystem, and with it \code{FencedLock}, is an
+    Enterprise feature in 5.7: \code{getCPSubsystem().getLock()} throws \code{UnsupportedOperationException} (measured
+    before writing the contract). The index writer uses \code{IMap.lock} instead, which has no fencing token.
+\end{enumerate}
+
+\subsection{How the shared state is protected}
+
+\textbf{One library.} Every access to Hazelcast is a method of \code{Coordination} in \code{common}, one per
+transition of the contract. No service names a structure or builds a value by hand, so the rules below hold
+everywhere by construction, and they are tested once against embedded members.
+
+\textbf{Compare-and-set, not locks.} A transition reads the entry, builds the next value and writes it with
+\code{replace(id, expected, next)}, which the member applies only if the stored bytes are still the expected ones.
+Two workers that race for a book cannot both win, and nobody holds a lock while it downloads. We did not use an
+\code{EntryProcessor}, which would run our code on the members: the members run the official image without our
+classes, and the values are Compact records that the members can store, compare and query field by field without them.
+
+\textbf{Transactions where a queue is involved.} Claiming a book (poll and \code{INGESTING}) and completing an
+ingestion (\code{DOWNLOADED} and the offer to \code{index-queue}) each touch a map and a queue. They run in one
+\code{TWO\_PHASE} transaction, which survives the death of a member during the commit. Without it, a crash between the
+two operations would leave a book \code{DOWNLOADED} that no queue holds, or an id taken from the queue that no state
+records.
+
+\textbf{Duplicates are harmless.} The queues are work to do, \code{book-state} is the truth. An id can be twice in a
+queue (a requeue racing with a late completion, a seed repeated by hand): whoever takes it checks its state in the
+claim and drops it if it is not waiting. Together with idempotent work (atomic files, upserts, \code{\$addToSet},
+\code{putIfAbsent}), this is why at-least-once delivery is enough and exactly-once is never needed.
+
+\textbf{Fencing where it matters.} \code{IMap.lock} has no fencing token: a writer that froze and comes back late is not
+stopped by Hazelcast. For the index this costs at most repeated work, because its writes are idempotent and its claims
+fail once the Control has requeued its books. A publication is not idempotent (a late writer could move \code{CURRENT}
+back), so Indexing uses the version itself as the token: \code{CURRENT} only moves from V to V+1 with a conditional
+update, and a publication whose update matches nothing is aborted.
+
+\subsection{Single machine, replicas, threads and ports}
+
+\textbf{Two Hazelcast members on one host.} One member would be enough on one machine; two show the behaviour of the
+cluster that Stage 3 needs: partitions spread over members, one backup of every entry, a member that dies without losing
+anything, and clients that move to the other member. On one host they share its failures, so this is evidence of the
+mechanism, not real high availability.
+
+\textbf{Ingestion: replicas and workers.} Ingestion scales by adding processes (\code{--scale ingestion=N}) or threads
+(\code{INGESTION\_WORKERS}). Both pull from the same queue, so the work is shared without any configuration, and
+correctness does not depend on the counts. Downloading is mostly waiting on the network, which favours several workers
+per process (4 by default); the limit is Gutenberg, which throttles a client that downloads too fast. With the local
+source the work is CPU and disk, and each container has one CPU, so beyond a few workers only more replicas help.
+
+\textbf{One Control.} It is not in the path of any book, so one is enough and its absence only delays leases and
+publications. A second one would be safe, because every transition is a compare-and-set and the publication is
+idempotent, but it would double the lease queries and the calls to Indexing for nothing. Stage 3 needs a leader election
+instead (Section~\ref{sec:stage3}).
+
+\textbf{Ports.} Only nginx is published to the network. The Control, the Hazelcast members and MongoDB have no
+authentication, so they are published on \code{127.0.0.1} only, for the administrator, the tests and the services run
+from an IDE. Ingestion and Indexing are reached only inside the Docker network. The clients use \code{SINGLE\_MEMBER}
+routing: the members announce their Docker-internal addresses, which a process on the host cannot reach, so a client
+talks only to the addresses it was given and moves to the next one if its member dies.
+
+\subsection{Where replication helps and where it contends}
+
+\begin{itemize}
+  \item \textbf{\code{book-state} is partitioned} by book id over the 271 partitions of the cluster, so claims of
+    different books touch different partitions and do not contend.
+  \item \textbf{Each queue lives in one partition}, on one member: every claim of every worker goes through it. This
+    serializes the claims, and it is the first point of contention of the coordination when the work per book is small
+    (the local source). With Gutenberg the download is far longer than a claim, so it should not show there.
+  \item \textbf{Each book costs two transactions} (claim and completion), each with the round trips of a two-phase
+    commit. That is the coordination cost per book, measured on its own with JMH and inside the running system with the
+    metrics of CF-12.
+  \item \textbf{The datalake is one disk.} More Ingestion replicas write to the same file system; each book is three
+    small files and three atomic moves in the same range folder.
+  \item \textbf{Indexing has a single writer by design.} More Indexing replicas would only be standbys; its parallelism is
+    in the threads that parse, inside one process.
+\end{itemize}
+
+\textbf{Measured.} With JMH (Section~\ref{sec:benchmarks-ingestion}), claiming and completing a book costs 1.6~ms with
+one worker, 3.4 times the local ingestion of the book, and 0.36~ms per book with 8 workers, because concurrent workers
+overlap their round trips. So with small books the coordination, not the work, sets the rate of a replica; with the
+download from Project Gutenberg it is the other way round. The contention of several replicas on the single partition of
+each queue was not measured: the integration experiments of Ingestion were not run.
+
+\subsection{Failure tests}
+\label{sec:failure-tests}
+
+The scenarios of \code{scripts/chaos/} (CF-11) cause each failure in the middle of a real run on Docker Compose and check
+the end state against the contract. Each one leaves a \code{report.md} with what was expected, what happened and the
+evidence (the states, a timeline of the books and the logs of every service).
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.3cm}XL{3.4cm}@{}}
+\toprule
+\textbf{Failure} & \textbf{Expected} & \textbf{Result} \\
+\midrule
+SIGKILL of one of two Ingestion replicas while it ingests & Its books are requeued when their lease expires and the
+  other replica finishes them; no book \code{FAILED} or duplicated & \pending{kill-ingestion} \\
+SIGKILL of one Hazelcast member & Nothing lost (backup), the clients carry on, no recovery; the member rejoins &
+  \pending{kill-hazelcast-member} \\
+SIGKILL of the Control while Indexing indexes & The workers keep going, nothing is published until it is back; it rebuilds
+  nothing & \pending{kill-control} \\
+Both members killed and started empty & The Control rebuilds \code{book-state} from the evidence; the books without
+  evidence are sent again; none with \code{\_READY} is ingested again; all end \code{PUBLISHED} &
+  \pending{restart-hazelcast} \\
+\bottomrule
+\end{tabularx}
+\caption{Documented failure tests. Each run checks that every book reaches its final state exactly once, that none is
+\code{FAILED}, and that every book is complete in the datalake and, with Indexing, in \code{index\_log} and
+\code{index\_books}.}
+\label{tab:failure-tests}
+\end{table}

@@ -1,0 +1,11 @@
+# Carga de consultas común (semántica AND)
+adventure
+island
+love
+ship sea
+king queen
+monster creature
+whale
+detective crime
+war peace
+mother father

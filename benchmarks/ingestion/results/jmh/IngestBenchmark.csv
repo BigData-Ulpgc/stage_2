@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: threads"
+"es.ulpgc.bigdata.ingestion.benchmark.IngestBenchmark.ingestRound","avgt",1,20,473.343308,7.731468,"us/op",1
+"es.ulpgc.bigdata.ingestion.benchmark.IngestBenchmark.ingestRound","avgt",1,20,270.393440,4.231344,"us/op",2
+"es.ulpgc.bigdata.ingestion.benchmark.IngestBenchmark.ingestRound","avgt",1,20,175.125582,3.765882,"us/op",4
+"es.ulpgc.bigdata.ingestion.benchmark.IngestBenchmark.ingestRound","avgt",1,20,154.861585,1.949095,"us/op",8

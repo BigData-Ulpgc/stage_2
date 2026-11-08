@@ -21,9 +21,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -43,6 +46,7 @@ class IndexingApiTest {
     private InMemoryIndexLog indexLog;
     private InMemoryPublicationRepository publications;
     private Javalin app;
+    private Rebuilder rebuilder;
 
     @BeforeEach
     void setUp() {
@@ -54,12 +58,17 @@ class IndexingApiTest {
         IndexingService service = new IndexingService(datalake, metadata, index, indexLog, publications,
                 new MetadataParser(), Tokenizer.standard());
         Publisher publisher = new Publisher(publications, "inverted_index", Clock.systemUTC());
-        app = new IndexingApi(service, publisher).create("indexing-service", 8).start(0);
+        // Without Hazelcast: the rebuild with the cluster is in IndexingApiRebuildTest.
+        rebuilder = new Rebuilder(Optional::empty, service, datalake, publications, publisher,
+                new InMemoryRebuildRepository(new ConcurrentHashMap<>()), "inverted_index", 100,
+                Duration.ofSeconds(60), Clock.systemUTC());
+        app = new IndexingApi(service, publisher, rebuilder).create("indexing-service", 8).start(0);
     }
 
     @AfterEach
     void tearDown() {
         app.stop();
+        rebuilder.close();
     }
 
     // --- POST /index/update/{book_id} ------------------------------------------------
@@ -255,15 +264,17 @@ class IndexingApiTest {
         assertError(response, "INTERNAL_ERROR", null);
     }
 
-    // --- 501 until DR-10 ------------------------------------------------------------
+    // --- POST /index/rebuild without Hazelcast (DR-10) --------------------------------
 
     @Test
-    void rebuildResponde501HastaDR10() throws Exception {
+    void rebuildSinHazelcastDa503YUpdateSigue() throws Exception {
         HttpResponse<String> response = post("/index/rebuild");
 
-        assertEquals(501, response.statusCode());
-        JsonObject error = assertError(response, "NOT_IMPLEMENTED", null);
-        assertEquals("POST /index/rebuild is not implemented yet (DR-10)", error.get("message").getAsString());
+        assertEquals(503, response.statusCode());
+        JsonObject error = assertError(response, "STORAGE_UNAVAILABLE", null);
+        assertEquals("the coordination cluster (Hazelcast) is not connected yet", error.get("message").getAsString());
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+        assertEquals(200, post("/index/update/1342").statusCode(), "indexar no depende de Hazelcast (D4)");
     }
 
     // --- GET /index/status ----------------------------------------------------------
@@ -281,7 +292,7 @@ class IndexingApiTest {
         assertEquals(0.0, body.get("index_size_MB").getAsDouble());
         assertTrue(body.get("published_version").isJsonNull());
         assertEquals(0, body.get("books_published").getAsLong());
-        assertTrue(body.get("rebuild").isJsonNull(), "sin rebuild hasta DR-10");
+        assertTrue(body.get("rebuild").isJsonNull(), "null si nunca hubo una reconstrucción");
     }
 
     @Test

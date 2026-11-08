@@ -1,0 +1,554 @@
+experiment,component,scope,deployment,client_concurrency,replicas,threads,dataset_size,repetition,metric,value,unit
+index_posting_update,indexing,integration,docker,1,1,1,1000,1,addtoset_latency,6.073,ms
+index_posting_update,indexing,integration,docker,1,1,1,1000,1,push_latency,1.243,ms
+index_posting_update,indexing,integration,docker,1,1,1,10000,1,addtoset_latency,27.062,ms
+index_posting_update,indexing,integration,docker,1,1,1,10000,1,push_latency,1.928,ms
+index_posting_update,indexing,integration,docker,1,1,1,100000,1,addtoset_latency,232.571,ms
+index_posting_update,indexing,integration,docker,1,1,1,100000,1,push_latency,11.877,ms
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput,14.638,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_total,14.32,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,seconds_per_book,0.0683153,s/book
+index_threads,indexing,integration,docker,1,1,1,2000,1,startup,7.303,s
+index_threads,indexing,integration,docker,1,1,1,2000,1,duration,139.666,s
+index_threads,indexing,integration,docker,1,1,1,2000,1,failed,0,books
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_00_010,18.1291,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_10_020,19.9422,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_20_030,18.1324,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_30_040,18.1357,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_40_050,15.3445,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_50_060,13.2873,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_60_070,13.297,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_70_080,11.7343,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_80_090,11.7336,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,throughput_pct_90_100,10.4987,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,1,cpu_indexing,13.19,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,1,cpu_ingestion,0.847231,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,1,cpu_mongo,101.395,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,1,cpu_hazelcast,7.06062,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,1,mem_max_indexing,460.5,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,1,mem_max_ingestion,276.1,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,1,mem_max_mongo,474.5,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,1,mem_max_hazelcast,338.2,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput,15.044,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_total,14.736,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,seconds_per_book,0.0664717,s/book
+index_threads,indexing,integration,docker,1,1,2,2000,1,startup,6.293,s
+index_threads,indexing,integration,docker,1,1,2,2000,1,duration,135.722,s
+index_threads,indexing,integration,docker,1,1,2,2000,1,failed,0,books
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_00_010,18.1077,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_10_020,24.919,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_20_030,16.6168,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_30_040,19.9422,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_40_050,15.341,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_50_060,13.2635,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_60_070,13.2846,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_70_080,12.4657,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_80_090,11.7323,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,throughput_pct_90_100,11.0791,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,1,cpu_indexing,15.4502,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,1,cpu_ingestion,0.97381,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,1,cpu_mongo,100.924,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,1,cpu_hazelcast,12.3727,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,1,mem_max_indexing,462.2,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,1,mem_max_ingestion,277.1,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,1,mem_max_mongo,476,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,1,mem_max_hazelcast,337.4,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput,15.337,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_total,14.958,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,seconds_per_book,0.0652018,s/book
+index_threads,indexing,integration,docker,1,1,4,2000,1,startup,6.312,s
+index_threads,indexing,integration,docker,1,1,4,2000,1,duration,133.708,s
+index_threads,indexing,integration,docker,1,1,4,2000,1,failed,0,books
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_00_010,18.1192,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_10_020,22.1508,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_20_030,18.1225,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_30_040,19.9402,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_40_050,16.6127,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_50_060,13.2935,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_60_070,14.244,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_70_080,12.4626,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_80_090,11.7281,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,throughput_pct_90_100,11.0748,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,1,cpu_indexing,14.371,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,1,cpu_ingestion,0.73629,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,1,cpu_mongo,103.406,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,1,cpu_hazelcast,9.36113,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,1,mem_max_indexing,472.8,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,1,mem_max_ingestion,276,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,1,mem_max_mongo,508.3,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,1,mem_max_hazelcast,335.3,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput,14.907,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_total,14.63,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,seconds_per_book,0.0670826,s/book
+index_threads,indexing,integration,docker,1,1,8,2000,1,startup,7.304,s
+index_threads,indexing,integration,docker,1,1,8,2000,1,duration,136.706,s
+index_threads,indexing,integration,docker,1,1,8,2000,1,failed,0,books
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_00_010,18.1143,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_10_020,22.1508,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_20_030,18.1209,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_30_040,18.1242,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_40_050,15.3351,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_50_060,13.2952,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_60_070,13.2935,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_70_080,12.4618,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_80_090,11.7281,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,throughput_pct_90_100,11.076,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,1,cpu_indexing,18.015,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,1,cpu_ingestion,0.222188,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,1,cpu_mongo,100.153,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,1,cpu_hazelcast,10.7927,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,1,mem_max_indexing,465.1,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,1,mem_max_ingestion,279.2,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,1,mem_max_mongo,557.5,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,1,mem_max_hazelcast,337,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput,14.916,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_total,14.53,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,seconds_per_book,0.0670421,s/book
+index_threads,indexing,integration,docker,1,1,1,2000,2,startup,6.299,s
+index_threads,indexing,integration,docker,1,1,1,2000,2,duration,137.649,s
+index_threads,indexing,integration,docker,1,1,1,2000,2,failed,0,books
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_00_010,18.0897,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_10_020,22.1607,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_20_030,18.134,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_30_040,18.134,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_40_050,15.3468,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_50_060,13.3014,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_60_070,14.2521,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_70_080,11.7364,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_80_090,11.7357,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,throughput_pct_90_100,10.5003,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,2,cpu_indexing,13.9284,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,2,cpu_ingestion,0.696875,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,2,cpu_mongo,99.9445,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,2,cpu_hazelcast,7.28672,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,2,mem_max_indexing,505,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,2,mem_max_ingestion,279.4,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,2,mem_max_mongo,552.2,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,2,mem_max_hazelcast,325.5,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput,15.2,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_total,14.856,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,seconds_per_book,0.0657895,s/book
+index_threads,indexing,integration,docker,1,1,2,2000,2,startup,6.298,s
+index_threads,indexing,integration,docker,1,1,2,2000,2,duration,134.624,s
+index_threads,indexing,integration,docker,1,1,2,2000,2,failed,0,books
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_00_010,18.1192,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_10_020,24.9345,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_20_030,18.1258,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_30_040,18.1307,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_40_050,15.3457,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_50_060,13.3014,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_60_070,14.2511,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_70_080,12.4719,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_80_090,11.7364,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,throughput_pct_90_100,11.0828,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,2,cpu_indexing,15.1022,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,2,cpu_ingestion,0.676825,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,2,cpu_mongo,101.367,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,2,cpu_hazelcast,10.3033,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,2,mem_max_indexing,465.9,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,2,mem_max_ingestion,280.9,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,2,mem_max_mongo,555.9,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,2,mem_max_hazelcast,329,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput,15.046,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_total,14.733,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,seconds_per_book,0.0664628,s/book
+index_threads,indexing,integration,docker,1,1,4,2000,2,startup,6.307,s
+index_threads,indexing,integration,docker,1,1,4,2000,2,duration,135.749,s
+index_threads,indexing,integration,docker,1,1,4,2000,2,failed,0,books
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_00_010,19.8787,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_10_020,19.9402,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_20_030,18.1274,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_30_040,19.9382,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_40_050,15.3386,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_50_060,13.2926,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_60_070,14.244,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_70_080,12.4611,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_80_090,11.7165,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,throughput_pct_90_100,10.4921,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,2,cpu_indexing,13.5222,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,2,cpu_ingestion,0.135873,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,2,cpu_mongo,103.307,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,2,cpu_hazelcast,9.08952,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,2,mem_max_indexing,461.8,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,2,mem_max_ingestion,281,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,2,mem_max_mongo,583,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,2,mem_max_hazelcast,333.2,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput,15.33,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_total,14.952,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,seconds_per_book,0.0652316,s/book
+index_threads,indexing,integration,docker,1,1,8,2000,2,startup,7.318,s
+index_threads,indexing,integration,docker,1,1,8,2000,2,duration,133.761,s
+index_threads,indexing,integration,docker,1,1,8,2000,2,failed,0,books
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_00_010,18.1143,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_10_020,22.1508,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_20_030,18.1225,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_30_040,19.9322,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_40_050,16.6099,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_50_060,13.2617,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_60_070,14.243,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_70_080,12.4611,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_80_090,11.7254,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,throughput_pct_90_100,11.0736,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,2,cpu_indexing,18.4944,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,2,cpu_ingestion,0.719194,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,2,cpu_mongo,100.072,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,2,cpu_hazelcast,9.64823,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,2,mem_max_indexing,480,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,2,mem_max_ingestion,281.2,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,2,mem_max_mongo,585.5,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,2,mem_max_hazelcast,331.6,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput,15.05,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_total,14.85,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,seconds_per_book,0.0664452,s/book
+index_threads,indexing,integration,docker,1,1,1,2000,3,startup,7.304,s
+index_threads,indexing,integration,docker,1,1,1,2000,3,duration,134.676,s
+index_threads,indexing,integration,docker,1,1,1,2000,3,failed,0,books
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_00_010,18.1242,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_10_020,22.1214,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_20_030,16.6237,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_30_040,18.1324,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_40_050,16.621,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_50_060,13.2882,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_60_070,14.2481,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_70_080,12.4673,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_80_090,11.7323,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,throughput_pct_90_100,11.7316,books/s
+index_threads,indexing,integration,docker,1,1,1,2000,3,cpu_indexing,13.5937,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,3,cpu_ingestion,0.22619,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,3,cpu_mongo,100.514,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,3,cpu_hazelcast,7.12603,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,1,2000,3,mem_max_indexing,465.4,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,3,mem_max_ingestion,281.6,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,3,mem_max_mongo,586.4,MiB
+index_threads,indexing,integration,docker,1,1,1,2000,3,mem_max_hazelcast,335,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput,14.899,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_total,14.623,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,seconds_per_book,0.0671186,s/book
+index_threads,indexing,integration,docker,1,1,2,2000,3,startup,6.304,s
+index_threads,indexing,integration,docker,1,1,2,2000,3,duration,136.767,s
+index_threads,indexing,integration,docker,1,1,2,2000,3,failed,0,books
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_00_010,19.9203,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_10_020,19.9382,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_20_030,18.1077,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_30_040,18.1209,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_40_050,16.5796,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_50_060,13.2829,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_60_070,13.2908,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_70_080,12.4595,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_80_090,11.7268,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,throughput_pct_90_100,10.4915,books/s
+index_threads,indexing,integration,docker,1,1,2,2000,3,cpu_indexing,12.5256,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,3,cpu_ingestion,0.112656,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,3,cpu_mongo,103.225,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,3,cpu_hazelcast,8.03578,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,2,2000,3,mem_max_indexing,470.6,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,3,mem_max_ingestion,282.2,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,3,mem_max_mongo,587.5,MiB
+index_threads,indexing,integration,docker,1,1,2,2000,3,mem_max_hazelcast,340.5,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput,15.047,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_total,14.734,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,seconds_per_book,0.0664584,s/book
+index_threads,indexing,integration,docker,1,1,4,2000,3,startup,6.313,s
+index_threads,indexing,integration,docker,1,1,4,2000,3,duration,135.745,s
+index_threads,indexing,integration,docker,1,1,4,2000,3,failed,0,books
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_00_010,18.0815,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_10_020,22.1533,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_20_030,18.1258,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_30_040,19.9342,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_40_050,15.3362,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_50_060,13.2926,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_60_070,14.242,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_70_080,11.7268,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_80_090,11.7275,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,throughput_pct_90_100,11.0748,books/s
+index_threads,indexing,integration,docker,1,1,4,2000,3,cpu_indexing,13.289,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,3,cpu_ingestion,0.113651,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,3,cpu_mongo,103.835,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,3,cpu_hazelcast,10.5694,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,4,2000,3,mem_max_indexing,474.3,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,3,mem_max_ingestion,282,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,3,mem_max_mongo,607.6,MiB
+index_threads,indexing,integration,docker,1,1,4,2000,3,mem_max_hazelcast,345.4,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput,15.325,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_total,14.95,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,seconds_per_book,0.0652529,s/book
+index_threads,indexing,integration,docker,1,1,8,2000,3,startup,6.298,s
+index_threads,indexing,integration,docker,1,1,8,2000,3,duration,133.779,s
+index_threads,indexing,integration,docker,1,1,8,2000,3,failed,0,books
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_00_010,19.9302,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_10_020,22.1214,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_20_030,16.6127,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_30_040,19.8511,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_40_050,16.6044,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_50_060,13.2855,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_60_070,14.242,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_70_080,12.458,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_80_090,12.4587,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,throughput_pct_90_100,10.491,books/s
+index_threads,indexing,integration,docker,1,1,8,2000,3,cpu_indexing,16.8082,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,3,cpu_ingestion,0.68371,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,3,cpu_mongo,102.554,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,3,cpu_hazelcast,10.2682,% of 1 CPU
+index_threads,indexing,integration,docker,1,1,8,2000,3,mem_max_indexing,482,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,3,mem_max_ingestion,282.7,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,3,mem_max_mongo,601.6,MiB
+index_threads,indexing,integration,docker,1,1,8,2000,3,mem_max_hazelcast,334.6,MiB
+index_scale,indexing,integration,docker,1,1,4,200,1,throughput,24.878,books/s
+index_scale,indexing,integration,docker,1,1,4,200,1,throughput_total,17.593,books/s
+index_scale,indexing,integration,docker,1,1,4,200,1,seconds_per_book,0.0401962,s/book
+index_scale,indexing,integration,docker,1,1,4,200,1,startup,7.349,s
+index_scale,indexing,integration,docker,1,1,4,200,1,duration,11.368,s
+index_scale,indexing,integration,docker,1,1,4,200,1,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,200,1,throughput_pct_00_010,14.1583,books/s
+index_scale,indexing,integration,docker,1,1,4,200,1,throughput_pct_50_060,24.8818,books/s
+index_scale,indexing,integration,docker,1,1,4,200,1,cpu_indexing,3.665,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,1,cpu_ingestion,1.545,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,1,cpu_mongo,88.905,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,1,cpu_hazelcast,17.22,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,1,mem_max_indexing,411.4,MiB
+index_scale,indexing,integration,docker,1,1,4,200,1,mem_max_ingestion,281.5,MiB
+index_scale,indexing,integration,docker,1,1,4,200,1,mem_max_mongo,504.4,MiB
+index_scale,indexing,integration,docker,1,1,4,200,1,mem_max_hazelcast,328.4,MiB
+index_scale,indexing,integration,docker,1,1,4,200,1,index_terms,58244,terms
+index_scale,indexing,integration,docker,1,1,4,200,1,index_postings,614216,ids
+index_scale,indexing,integration,docker,1,1,4,200,1,index_mean_postings,10.546,ids/term
+index_scale,indexing,integration,docker,1,1,4,200,1,index_disk,5.84499e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,200,1,index_data,7.94778e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,200,1,books_disk,53248,bytes
+index_scale,indexing,integration,docker,1,1,4,200,1,index_log_disk,61440,bytes
+index_scale,indexing,integration,docker,1,1,4,200,1,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,200,1,posting_longest_length,200,ids
+index_scale,indexing,integration,docker,1,1,4,200,1,posting_longest_bytes,1742,bytes
+index_scale,indexing,integration,docker,1,1,4,200,1,posting_longest_read_median,1.033,ms
+index_scale,indexing,integration,docker,1,1,4,200,1,posting_longest_read_max,1.281,ms
+index_scale,indexing,integration,docker,1,1,4,200,2,throughput,24.912,books/s
+index_scale,indexing,integration,docker,1,1,4,200,2,throughput_total,17.652,books/s
+index_scale,indexing,integration,docker,1,1,4,200,2,seconds_per_book,0.0401413,s/book
+index_scale,indexing,integration,docker,1,1,4,200,2,startup,7.316,s
+index_scale,indexing,integration,docker,1,1,4,200,2,duration,11.33,s
+index_scale,indexing,integration,docker,1,1,4,200,2,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,200,2,throughput_pct_00_010,14.2248,books/s
+index_scale,indexing,integration,docker,1,1,4,200,2,throughput_pct_50_060,24.9128,books/s
+index_scale,indexing,integration,docker,1,1,4,200,2,cpu_indexing,0.12,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,2,cpu_ingestion,0.13,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,2,cpu_mongo,104.09,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,2,cpu_hazelcast,1.65,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,2,mem_max_indexing,391.2,MiB
+index_scale,indexing,integration,docker,1,1,4,200,2,mem_max_ingestion,281.9,MiB
+index_scale,indexing,integration,docker,1,1,4,200,2,mem_max_mongo,439.3,MiB
+index_scale,indexing,integration,docker,1,1,4,200,2,mem_max_hazelcast,329.8,MiB
+index_scale,indexing,integration,docker,1,1,4,200,2,index_terms,58244,terms
+index_scale,indexing,integration,docker,1,1,4,200,2,index_postings,614216,ids
+index_scale,indexing,integration,docker,1,1,4,200,2,index_mean_postings,10.546,ids/term
+index_scale,indexing,integration,docker,1,1,4,200,2,index_disk,5.87366e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,200,2,index_data,7.94778e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,200,2,books_disk,53248,bytes
+index_scale,indexing,integration,docker,1,1,4,200,2,index_log_disk,61440,bytes
+index_scale,indexing,integration,docker,1,1,4,200,2,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,200,2,posting_longest_length,200,ids
+index_scale,indexing,integration,docker,1,1,4,200,2,posting_longest_bytes,1742,bytes
+index_scale,indexing,integration,docker,1,1,4,200,2,posting_longest_read_median,1.007,ms
+index_scale,indexing,integration,docker,1,1,4,200,2,posting_longest_read_max,1.115,ms
+index_scale,indexing,integration,docker,1,1,4,200,3,throughput,24.913,books/s
+index_scale,indexing,integration,docker,1,1,4,200,3,throughput_total,17.608,books/s
+index_scale,indexing,integration,docker,1,1,4,200,3,seconds_per_book,0.0401397,s/book
+index_scale,indexing,integration,docker,1,1,4,200,3,startup,7.344,s
+index_scale,indexing,integration,docker,1,1,4,200,3,duration,11.358,s
+index_scale,indexing,integration,docker,1,1,4,200,3,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,200,3,throughput_pct_00_010,14.2308,books/s
+index_scale,indexing,integration,docker,1,1,4,200,3,throughput_pct_50_060,24.9128,books/s
+index_scale,indexing,integration,docker,1,1,4,200,3,cpu_indexing,0.09,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,3,cpu_ingestion,0.12,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,3,cpu_mongo,105.25,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,3,cpu_hazelcast,2.02,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,200,3,mem_max_indexing,409.9,MiB
+index_scale,indexing,integration,docker,1,1,4,200,3,mem_max_ingestion,281.2,MiB
+index_scale,indexing,integration,docker,1,1,4,200,3,mem_max_mongo,440.6,MiB
+index_scale,indexing,integration,docker,1,1,4,200,3,mem_max_hazelcast,318.4,MiB
+index_scale,indexing,integration,docker,1,1,4,200,3,index_terms,58244,terms
+index_scale,indexing,integration,docker,1,1,4,200,3,index_postings,614216,ids
+index_scale,indexing,integration,docker,1,1,4,200,3,index_mean_postings,10.546,ids/term
+index_scale,indexing,integration,docker,1,1,4,200,3,index_disk,5.7344e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,200,3,index_data,7.94778e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,200,3,books_disk,53248,bytes
+index_scale,indexing,integration,docker,1,1,4,200,3,index_log_disk,61440,bytes
+index_scale,indexing,integration,docker,1,1,4,200,3,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,200,3,posting_longest_length,200,ids
+index_scale,indexing,integration,docker,1,1,4,200,3,posting_longest_bytes,1742,bytes
+index_scale,indexing,integration,docker,1,1,4,200,3,posting_longest_read_median,1.06,ms
+index_scale,indexing,integration,docker,1,1,4,200,3,posting_longest_read_max,1.292,ms
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput,5.55,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_total,5.539,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,seconds_per_book,0.18018,s/book
+index_scale,indexing,integration,docker,1,1,4,10000,1,startup,6.338,s
+index_scale,indexing,integration,docker,1,1,4,10000,1,duration,1805.42,s
+index_scale,indexing,integration,docker,1,1,4,10000,1,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_00_010,18.4532,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_10_020,12.4611,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_20_030,9.06142,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_30_040,7.32918,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_40_050,6.04076,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_50_060,5.13653,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_60_070,4.5486,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_70_080,3.93647,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_80_090,3.56828,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,throughput_pct_90_100,3.23089,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,1,cpu_indexing,4.69438,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,1,cpu_ingestion,0.36219,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,1,cpu_mongo,113.079,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,1,cpu_hazelcast,3.23613,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,1,mem_max_indexing,537.4,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,1,mem_max_ingestion,285.3,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,1,mem_max_mongo,746.5,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,1,mem_max_hazelcast,346.8,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_terms,394502,terms
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_postings,3.12641e+07,ids
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_mean_postings,79.25,ids/term
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_disk,4.6318e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_data,3.13314e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,1,books_disk,1.07725e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_log_disk,434176,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,1,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,1,posting_longest_length,9965,ids
+index_scale,indexing,integration,docker,1,1,4,10000,1,posting_longest_bytes,98592,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,1,posting_longest_read_median,2.143,ms
+index_scale,indexing,integration,docker,1,1,4,10000,1,posting_longest_read_max,4.724,ms
+index_publish_10000,indexing,integration,docker,1,1,4,10000,1,publish_latency,459.051,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,1,publish_latency,78.542,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,2,publish_latency,74.678,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,3,publish_latency,68.742,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,4,publish_latency,71.456,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,5,publish_latency,64.766,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,6,publish_latency,65.148,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,7,publish_latency,67.746,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,8,publish_latency,78.584,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,9,publish_latency,67.409,ms
+index_publish_1,indexing,integration,docker,1,1,4,10000,10,publish_latency,74.901,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,1,publish_latency,84.548,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,2,publish_latency,70.215,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,3,publish_latency,71.64,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,4,publish_latency,71.163,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,5,publish_latency,74.036,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,6,publish_latency,70.526,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,7,publish_latency,70.932,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,8,publish_latency,73.784,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,9,publish_latency,75.199,ms
+index_publish_10,indexing,integration,docker,1,1,4,10000,10,publish_latency,76.856,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,1,publish_latency,78.386,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,2,publish_latency,93.883,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,3,publish_latency,76.586,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,4,publish_latency,71.162,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,5,publish_latency,72.688,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,6,publish_latency,83.032,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,7,publish_latency,74.87,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,8,publish_latency,76.611,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,9,publish_latency,77.8,ms
+index_publish_50,indexing,integration,docker,1,1,4,10000,10,publish_latency,73.223,ms
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput,5.529,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_total,5.512,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,seconds_per_book,0.180865,s/book
+index_scale,indexing,integration,docker,1,1,4,10000,2,startup,7.3,s
+index_scale,indexing,integration,docker,1,1,4,10000,2,duration,1814.28,s
+index_scale,indexing,integration,docker,1,1,4,10000,2,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_00_010,18.4706,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_10_020,12.3165,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_20_030,9.15248,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_30_040,7.44463,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_40_050,6.00889,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_50_060,5.06365,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_60_070,4.49216,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_70_080,3.9414,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_80_090,3.54791,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,throughput_pct_90_100,3.19494,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,2,cpu_indexing,5.14665,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,2,cpu_ingestion,0.12265,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,2,cpu_mongo,112.531,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,2,cpu_hazelcast,3.66428,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,2,mem_max_indexing,497.1,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,2,mem_max_ingestion,285.1,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,2,mem_max_mongo,770.3,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,2,mem_max_hazelcast,344.3,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_terms,394502,terms
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_postings,3.12641e+07,ids
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_mean_postings,79.25,ids/term
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_disk,4.66158e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_data,3.13314e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,2,books_disk,1.08134e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_log_disk,483328,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,2,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,2,posting_longest_length,9965,ids
+index_scale,indexing,integration,docker,1,1,4,10000,2,posting_longest_bytes,98592,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,2,posting_longest_read_median,2.198,ms
+index_scale,indexing,integration,docker,1,1,4,10000,2,posting_longest_read_max,4.357,ms
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput,5.538,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_total,5.52,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,seconds_per_book,0.180571,s/book
+index_scale,indexing,integration,docker,1,1,4,10000,3,startup,7.302,s
+index_scale,indexing,integration,docker,1,1,4,10000,3,duration,1811.59,s
+index_scale,indexing,integration,docker,1,1,4,10000,3,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_00_010,18.4601,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_10_020,12.3072,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_20_030,8.90107,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_30_040,7.32719,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_40_050,6.18942,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_50_060,5.08357,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_60_070,4.50698,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_70_080,3.93568,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_80_090,3.56798,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,throughput_pct_90_100,3.19947,books/s
+index_scale,indexing,integration,docker,1,1,4,10000,3,cpu_indexing,5.56048,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,3,cpu_ingestion,0.233463,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,3,cpu_mongo,112.758,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,3,cpu_hazelcast,3.09592,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,10000,3,mem_max_indexing,519.9,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,3,mem_max_ingestion,288.5,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,3,mem_max_mongo,770,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,3,mem_max_hazelcast,347,MiB
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_terms,394502,terms
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_postings,3.12641e+07,ids
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_mean_postings,79.25,ids/term
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_disk,4.66158e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_data,3.13314e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,3,books_disk,1.07725e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_log_disk,479232,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,3,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,3,posting_longest_length,9965,ids
+index_scale,indexing,integration,docker,1,1,4,10000,3,posting_longest_bytes,98592,bytes
+index_scale,indexing,integration,docker,1,1,4,10000,3,posting_longest_read_median,2.104,ms
+index_scale,indexing,integration,docker,1,1,4,10000,3,posting_longest_read_max,5.13,ms
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput,2,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_total,1.999,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,seconds_per_book,0.5,s/book
+index_scale,indexing,integration,docker,1,1,4,30000,1,startup,6.319,s
+index_scale,indexing,integration,docker,1,1,4,30000,1,duration,15007.2,s
+index_scale,indexing,integration,docker,1,1,4,30000,1,failed,0,books
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_00_010,12.1563,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_10_020,6.01542,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_20_030,3.97752,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_30_040,2.89428,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_40_050,2.22757,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_50_060,1.81583,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_60_070,1.56229,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_70_080,1.33471,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_80_090,1.17841,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,throughput_pct_90_100,1.08775,books/s
+index_scale,indexing,integration,docker,1,1,4,30000,1,cpu_indexing,1.98297,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,30000,1,cpu_ingestion,0.415576,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,30000,1,cpu_mongo,109.453,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,30000,1,cpu_hazelcast,2.79391,% of 1 CPU
+index_scale,indexing,integration,docker,1,1,4,30000,1,mem_max_indexing,513.9,MiB
+index_scale,indexing,integration,docker,1,1,4,30000,1,mem_max_ingestion,284.9,MiB
+index_scale,indexing,integration,docker,1,1,4,30000,1,mem_max_mongo,802,MiB
+index_scale,indexing,integration,docker,1,1,4,30000,1,mem_max_hazelcast,390.4,MiB
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_terms,651565,terms
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_postings,9.47156e+07,ids
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_mean_postings,145.366,ids/term
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_disk,1.11396e+09,bytes
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_data,9.65776e+08,bytes
+index_scale,indexing,integration,docker,1,1,4,30000,1,books_disk,2.87539e+06,bytes
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_log_disk,958464,bytes
+index_scale,indexing,integration,docker,1,1,4,30000,1,index_books_disk,0,bytes
+index_scale,indexing,integration,docker,1,1,4,30000,1,posting_longest_length,29898,ids
+index_scale,indexing,integration,docker,1,1,4,30000,1,posting_longest_bytes,317820,bytes
+index_scale,indexing,integration,docker,1,1,4,30000,1,posting_longest_read_median,2.839,ms
+index_scale,indexing,integration,docker,1,1,4,30000,1,posting_longest_read_max,8.263,ms

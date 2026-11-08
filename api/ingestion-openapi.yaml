@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Ingestion Service API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Internal API of the **Ingestion Service** (assignment §3.2.1), plus its operational status
     endpoint. None of these endpoints is public: nginx only exposes the Search Service, and the
     Ingestion Service is reached inside the Docker network (`http://ingestion:7001`).
 
-    **Status: v0.2.0** (CF-06; v0.2.0 adds the worker state of GET /status, CF-08). The inventory of all endpoints of the system is
+    **Status: v0.3.0** (CF-06; v0.2.0 adds the worker state of GET /status, CF-08; v0.2.1 the states `failed` and `closed` of `coordination`, and `coordination_error`; v0.3.0 the `coordination_cost` of the workers, CF-12). The inventory of all endpoints of the system is
     `api/endpoints.md`; the Search API is `api/openapi.yaml`, the Indexing API
     `api/indexing-openapi.yaml`.
 
@@ -198,7 +198,12 @@ paths:
                 coordination: connected
                 workers: { claimed: 8, downloaded: 8, already_available: 0, requeued: 0, failed: 0, lease_lost: 0,
                            fetch_retries: 0, workers: 4, throttle_pauses: 0, paused_seconds: 0,
-                           invalid_ids_dropped: 0, ids_skipped: 0 }
+                           invalid_ids_dropped: 0, ids_skipped: 0,
+                           coordination_cost: {
+                             queue_wait: { count: 8, mean_ms: 410.2, p50_ms: 395.0, p95_ms: 812.0, p99_ms: 812.0, max_ms: 815.3 },
+                             claim: { count: 8, mean_ms: 1.9, p50_ms: 1.7, p95_ms: 3.1, p99_ms: 3.1, max_ms: 3.2 },
+                             work: { count: 8, mean_ms: 640.5, p50_ms: 590.0, p95_ms: 1180.0, p99_ms: 1180.0, max_ms: 1191.7 },
+                             complete: { count: 8, mean_ms: 2.2, p50_ms: 2.0, p95_ms: 3.4, p99_ms: 3.4, max_ms: 3.5 } } }
 
 components:
   parameters:
@@ -265,11 +270,20 @@ components:
           description: The book source in use (`INGESTION_SOURCE`).
         coordination:
           type: string
-          enum: [disabled, connecting, connected, disconnected]
+          enum: [disabled, connecting, connected, disconnected, failed, closed]
           description: |
             The Hazelcast client of the `ingest-queue` workers (CF-08). `disabled` with
             `INGESTION_WORKERS=0`; `connecting` until the cluster answers (the HTTP API works
-            meanwhile); `disconnected` while it is lost, the client reconnects by itself.
+            meanwhile); `disconnected` while it is lost, the client reconnects by itself;
+            `failed` if the connection could not even be attempted (a configuration error, see
+            `coordination_error`); `closed` while the service stops. The same states as the Control.
+        coordination_error:
+          type: string
+          description: |
+            Present only when something failed: why the connection `failed`, or, with
+            `coordination` still `connected`, why the workers could not start (then `workers` is
+            absent and the replica ingests nothing). The same field as in `GET /control/status`.
+          example: 'java.lang.IllegalStateException: no usable member address'
         workers:
           $ref: '#/components/schemas/WorkerStatus'
 
@@ -289,6 +303,35 @@ components:
         paused_seconds: { type: integer, description: 'Seconds left of the current pause (0 if none).' }
         invalid_ids_dropped: { type: integer, description: 'Ids of `ingest-queue` that were not book ids (not 0 means a bug elsewhere).' }
         ids_skipped: { type: integer, description: 'Ids whose book was not waiting (duplicates), dropped as the contract expects.' }
+        coordination_cost:
+          type: object
+          description: |
+            What coordinating the books through Hazelcast cost this replica since it started
+            (CF-12), one sample per book claimed or completed. `queue_wait`: from entering
+            `ingest-queue` to the claim. `claim`: the transaction that takes the book (it also
+            includes the wait for an id if the queue was empty). `work`: from the claim to the
+            completion, the real work (download, split, save). `complete`: the transaction that
+            marks it `DOWNLOADED` and offers it to `index-queue`.
+          required: [queue_wait, claim, work, complete]
+          properties:
+            queue_wait: { $ref: '#/components/schemas/Latency' }
+            claim: { $ref: '#/components/schemas/Latency' }
+            work: { $ref: '#/components/schemas/Latency' }
+            complete: { $ref: '#/components/schemas/Latency' }
+
+    Latency:
+      type: object
+      description: |
+        Durations in milliseconds. The percentiles come from logarithmic buckets and are within
+        about 3 % of the true value; count, mean and max are exact. All 0 without samples.
+      required: [count, mean_ms, p50_ms, p95_ms, p99_ms, max_ms]
+      properties:
+        count: { type: integer, minimum: 0 }
+        mean_ms: { type: number }
+        p50_ms: { type: number }
+        p95_ms: { type: number }
+        p99_ms: { type: number }
+        max_ms: { type: number }
 
     Error:
       type: object

@@ -1,5 +1,6 @@
 package es.ulpgc.bigdata.indexing;
 
+import es.ulpgc.bigdata.datalake.Datalake;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
 import es.ulpgc.bigdata.datamart.index.InMemoryInvertedIndex;
 import es.ulpgc.bigdata.datamart.index.InvertedIndex;
@@ -7,6 +8,7 @@ import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepositoryException;
 import es.ulpgc.bigdata.model.BookIds;
+import es.ulpgc.bigdata.model.BookLocation;
 import es.ulpgc.bigdata.model.BookMetadata;
 import es.ulpgc.bigdata.model.RawBook;
 import com.mongodb.MongoException;
@@ -21,9 +23,17 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,6 +41,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * IndexingService without MongoDB or Docker: a real datalake in a temporary folder, the
@@ -289,6 +301,171 @@ class IndexingServiceTest {
         assertEquals(threads * booksPerThread, indexLog.count());
     }
 
+    // --- Batches (DR-09) -------------------------------------------------------------
+
+    private static RawBook book(int id, String body) {
+        return new RawBook(id, "Title: Book " + id + "\n\nAuthor: Someone\n\nLanguage: English\n", body);
+    }
+
+    @Test
+    void unLoteIndexaTodosLosLibrosConUnSoloFlush() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        datalake.save(book(11, "Alice and the white rabbit, a fortune of tea."));
+        datalake.save(book(84, "Victor builds a creature with a fortune."));
+
+        BatchResult result = service.indexBatch(List.of(84, 1342, 11));
+
+        assertEquals(List.of(84, 1342, 11), result.indexed().stream().map(UpdateResult::bookId).toList(),
+                "en el orden pedido");
+        assertEquals(tokenizer.uniqueTerms(BODY_1342).size(), result.indexed().get(1).terms());
+        assertEquals(Map.of(), result.rejected());
+        assertEquals(1, index.flushes.get(), "un solo flush para todo el lote");
+        assertEquals(List.of(11, 84, 1342), index.postings("fortune"));
+        assertEquals(3, metadata.count());
+        assertEquals(Set.of(11, 84, 1342), indexLog.ids());
+    }
+
+    @Test
+    void losLibrosQueNoSePuedenPrepararSeQuedanFueraYLosDemasSeIndexan() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        datalake.save(book(11, "The and of."));                      // only stopwords
+
+        BatchResult result = service.indexBatch(List.of(999999, 1342, 11, 0));
+
+        assertEquals(List.of(1342), result.indexed().stream().map(UpdateResult::bookId).toList());
+        assertInstanceOf(BookNotFoundException.class, result.rejected().get(999999));
+        assertInstanceOf(EmptyBookException.class, result.rejected().get(11));
+        assertInstanceOf(IllegalArgumentException.class, result.rejected().get(0));
+        assertEquals(Set.of(1342), indexLog.ids(), "solo el libro bueno queda completo");
+        assertTrue(metadata.findById(11).isEmpty(), "de los rechazados no se escribe nada");
+    }
+
+    @Test
+    void unLibroIlegibleSeRechazaConSuError() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        datalake.save(book(11, "Alice and the rabbit."));
+        // Without read permission: the datalake has it, but it cannot be read (POSIX only).
+        Path body = datalake.locate(11).orElseThrow().bodyPath();
+        assumeTrue(body.getFileSystem().supportedFileAttributeViews().contains("posix"));
+        Files.setPosixFilePermissions(body, Set.of());
+        assumeFalse(Files.isReadable(body), "como root todo es legible");
+
+        BatchResult result = service.indexBatch(List.of(1342, 11));
+
+        assertEquals(1, result.indexed().size());
+        assertInstanceOf(UncheckedIOException.class, result.rejected().get(11));
+    }
+
+    @Test
+    void siSoloHayLibrosRechazadosNoSeEscribeNada() throws Exception {
+        BatchResult result = service.indexBatch(List.of(999998, 999999));
+
+        assertEquals(List.of(), result.indexed());
+        assertEquals(Set.of(999998, 999999), result.rejected().keySet());
+        assertEquals(0, index.flushes.get());
+    }
+
+    @Test
+    void siFallaLaEscrituraNingunLibroDelLoteEntraEnElLogYElReintentoLoCompleta() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        datalake.save(book(11, "Alice and the white rabbit."));
+        index.failNextFlushWith = new MongoException("flush falla (simulado)");
+
+        assertThrows(MongoException.class, () -> service.indexBatch(List.of(1342, 11)));
+        assertEquals(0, indexLog.count(), "sin log, ningún libro está completo");
+
+        BatchResult retry = service.indexBatch(List.of(1342, 11));
+
+        assertEquals(2, retry.indexed().size());
+        assertEquals(Set.of(11, 1342), indexLog.ids());
+    }
+
+    @Test
+    void unIdRepetidoEnElLoteCuentaUnaVez() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+
+        BatchResult result = service.indexBatch(List.of(1342, 1342));
+
+        assertEquals(1, result.indexed().size());
+    }
+
+    @Test
+    void losLibrosDelLoteSePreparanALaVezEnElPool() throws Exception {
+        for (int id = 1; id <= 3; id++) {
+            datalake.save(book(id, "Words of book number" + id + " about whales."));
+        }
+        // Each task waits at the barrier until the three are running: with one thread at a
+        // time it would never open.
+        CyclicBarrier allThree = new CyclicBarrier(3);
+        List<String> threads = new CopyOnWriteArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(3, r -> new Thread(r, "parser-test"));
+        Executor atTheBarrier = task -> pool.execute(() -> {
+            threads.add(Thread.currentThread().getName());
+            try {
+                allThree.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException | BrokenBarrierException | TimeoutException e) {
+                throw new IllegalStateException("los libros no se prepararon a la vez", e);
+            }
+            task.run();
+        });
+        try {
+            IndexingService parallel = new IndexingService(datalake, metadata, index, indexLog, publications,
+                    new MetadataParser(), tokenizer, atTheBarrier);
+
+            BatchResult result = parallel.indexBatch(List.of(1, 2, 3));
+
+            assertEquals(Map.of(), result.rejected());
+            assertEquals(3, result.indexed().size());
+            assertEquals(List.of("parser-test", "parser-test", "parser-test"), threads);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void alInterrumpirLosLibrosQueAunNoEmpezaronYaNoSePreparan() throws Exception {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        AtomicInteger located = new AtomicInteger();
+        Datalake counting = new Datalake() {
+            @Override public String name() { return datalake.name(); }
+            @Override public BookLocation save(RawBook book) { return datalake.save(book); }
+            @Override public List<Integer> listBookIds() { return datalake.listBookIds(); }
+            @Override public Optional<BookLocation> locate(int bookId) {
+                located.incrementAndGet();
+                return datalake.locate(bookId);
+            }
+        };
+        List<Runnable> queued = new CopyOnWriteArrayList<>();
+        IndexingService later = new IndexingService(counting, metadata, index, indexLog, publications,
+                new MetadataParser(), tokenizer, queued::add);             // the pool is busy
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(InterruptedException.class, () -> later.indexBatch(List.of(1342)));
+        } finally {
+            Thread.interrupted();
+        }
+        queued.forEach(Runnable::run);                                  // the pool gets to them
+
+        assertEquals(0, located.get(), "un libro de un lote abandonado no se prepara");
+    }
+
+    @Test
+    void siInterrumpenAlHiloMientrasSePreparaNoSeEscribeNada() {
+        datalake.save(new RawBook(1342, HEADER_1342, BODY_1342));
+        IndexingService neverPrepares = new IndexingService(datalake, metadata, index, indexLog, publications,
+                new MetadataParser(), tokenizer, task -> { });          // the tasks never run
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(InterruptedException.class, () -> neverPrepares.indexBatch(List.of(1342)));
+        } finally {
+            Thread.interrupted();                                       // clear the flag
+        }
+        assertEquals(0, metadata.count());
+        assertEquals(0, index.flushes.get());
+    }
+
     // --- status (GET /index/status) ----------------------------------------------------
 
     @Test
@@ -422,6 +599,8 @@ class IndexingServiceTest {
         final AtomicInteger flushes = new AtomicInteger();
         /** If not null, the next flush throws it (once). */
         volatile RuntimeException failNextFlushWith = null;
+        /** If not null, the next flush throws it (once): an OutOfMemoryError, for instance. */
+        volatile Error errorOnNextFlush = null;
         /** If not null, flush counts down flushEntered and then waits until the test opens the gate. */
         volatile CountDownLatch flushGate = null;
         final CountDownLatch flushEntered = new CountDownLatch(1);
@@ -452,6 +631,11 @@ class IndexingServiceTest {
                 if (failure != null) {
                     failNextFlushWith = null;
                     throw failure;
+                }
+                Error error = errorOnNextFlush;
+                if (error != null) {
+                    errorOnNextFlush = null;
+                    throw error;
                 }
                 CountDownLatch gate = flushGate;
                 if (gate != null) {

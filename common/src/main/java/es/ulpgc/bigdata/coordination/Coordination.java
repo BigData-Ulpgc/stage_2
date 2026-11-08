@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -76,6 +77,8 @@ public final class Coordination implements AutoCloseable {
     /** Ids taken from a queue and dropped by this instance (see claim). */
     private final AtomicLong invalidIdsDropped = new AtomicLong();
     private final AtomicLong idsSkipped = new AtomicLong();
+    /** What coordinating cost this instance (CF-12): recorded by claim and complete. */
+    private final CoordinationMetrics metrics = new CoordinationMetrics();
 
     /** What one poll of a claim did with the id it took, if any. */
     private enum Drop { NONE, INVALID, NOT_WAITING }
@@ -279,6 +282,62 @@ public final class Coordination implements AutoCloseable {
         hz.<String, Long>getMap(CoordinationNames.COORDINATION_META).set(CoordinationNames.INITIALIZED, now());
     }
 
+    // --- Rebuild of the index (DR-10) ----------------------------------------------------
+
+    /**
+     * The marker of a rebuild (contract §5): while it exists, no index writer claims from
+     * index-queue, and POST /index/update and /index/publish answer 409 in every replica. Only
+     * one rebuild at a time: putIfAbsent. It expires after {@code ttl} unless the rebuild renews
+     * it, so a replica that dies in the middle of a rebuild does not stop indexing for ever.
+     *
+     * @param ttl at least 1 s; Hazelcast drops the fraction of a second
+     * @return the token of this rebuild (the epoch ms it started), to renew and end it; empty if
+     *         another rebuild holds the marker
+     */
+    public OptionalLong tryStartRebuild(Duration ttl) {
+        requireWholeSeconds(ttl);
+        long token = now();
+        Long other = meta().putIfAbsent(CoordinationNames.REBUILD, token, ttl.toMillis(), TimeUnit.MILLISECONDS);
+        return other == null ? OptionalLong.of(token) : OptionalLong.empty();
+    }
+
+    /**
+     * Gives the marker of this rebuild another {@code ttl}.
+     *
+     * @return false if it is no longer this rebuild's (it expired, maybe another one started):
+     *         the rebuild must stop, because the writers may be writing again
+     */
+    public boolean renewRebuild(long token, Duration ttl) {
+        requireWholeSeconds(ttl);
+        return isOurs(token) && meta().setTtl(CoordinationNames.REBUILD, ttl.toMillis(), TimeUnit.MILLISECONDS)
+                && isOurs(token);
+    }
+
+    /** Removes the marker if it is still this rebuild's: never the one of a rebuild started after it expired. */
+    public void endRebuild(long token) {
+        meta().remove(CoordinationNames.REBUILD, token);
+    }
+
+    /** Whether a rebuild runs now, in any replica. */
+    public boolean isRebuilding() {
+        return meta().containsKey(CoordinationNames.REBUILD);
+    }
+
+    /** Hazelcast keeps a TTL in whole seconds and drops the rest: under 1 s the entry is born expired. */
+    private static void requireWholeSeconds(Duration ttl) {
+        if (ttl.compareTo(Duration.ofSeconds(1)) < 0) {
+            throw new IllegalArgumentException("El TTL de la marca de reconstrucción debe ser de al menos 1 s: " + ttl);
+        }
+    }
+
+    private boolean isOurs(long token) {
+        return Long.valueOf(token).equals(meta().get(CoordinationNames.REBUILD));
+    }
+
+    private IMap<String, Long> meta() {
+        return hz.getMap(CoordinationNames.COORDINATION_META);
+    }
+
     // --- Workers (Ingestion, Indexing) ---------------------------------------------------
 
     /**
@@ -301,7 +360,13 @@ public final class Coordination implements AutoCloseable {
                 throw new InterruptedException("interrupted while waiting for " + stage.queue());
             }
             long slice = Math.min(Math.max(deadline - System.nanoTime(), 0), MAX_POLL.toNanos());
+            long began = System.nanoTime();
             Polled polled = inTransaction(tx -> pollAndClaim(tx, stage, owner, slice));
+            polled.claim().ifPresent(claimed -> {
+                metrics.claim(stage).record((System.nanoTime() - began) / 1_000);
+                BookTask task = claimed.task();
+                metrics.queueWait(stage).record((task.startedAt() - task.enqueuedAt()) * 1_000);
+            });
             // Counted only here, after the commit: a rolled-back drop did not happen
             if (polled.drop() == Drop.INVALID) {
                 invalidIdsDropped.incrementAndGet();
@@ -359,6 +424,15 @@ public final class Coordination implements AutoCloseable {
     }
 
     /**
+     * Queue wait, claim, work and complete per stage, for the claims and completions of this
+     * instance since it was created (CF-12, see CoordinationMetrics). The services show
+     * {@code metrics().summary()} in GET /status.
+     */
+    public CoordinationMetrics metrics() {
+        return metrics;
+    }
+
+    /**
      * T3, T7: the stage is complete. Call it only when the evidence is persistent (contract
      * principle 2): {@code <id>._READY} exists (INGESTION), or index_log has the book
      * (INDEXING). A completed ingestion offers the id to index-queue in the same transaction.
@@ -368,11 +442,16 @@ public final class Coordination implements AutoCloseable {
      */
     public boolean complete(Claim claim) {
         Stage stage = claim.stage();
-        if (stage == Stage.INGESTION) {
-            return replaceAndOffer(claim.task(), claim.task().completed(stage, now(), true),
-                    Stage.INDEXING.queue());
+        long began = System.nanoTime();
+        long now = now();
+        boolean done = stage == Stage.INGESTION
+                ? replaceAndOffer(claim.task(), claim.task().completed(stage, now, true), Stage.INDEXING.queue())
+                : books.replace(claim.bookId(), claim.task(), claim.task().completed(stage, now, false));
+        if (done) {
+            metrics.work(stage).record((now - claim.task().startedAt()) * 1_000);
+            metrics.complete(stage).record((System.nanoTime() - began) / 1_000);
         }
-        return books.replace(claim.bookId(), claim.task(), claim.task().completed(stage, now(), false));
+        return done;
     }
 
     /**

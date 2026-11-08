@@ -1,0 +1,16 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: books","Param: filter"
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,2.499592,0.040537,"us/op",200,none
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,2.460964,0.062156,"us/op",200,language
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,2.351151,0.228074,"us/op",200,year
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,5.125645,0.096083,"us/op",200,author
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,5.285465,0.429883,"us/op",200,all
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,370.856357,30.642270,"us/op",10000,none
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,398.896316,37.867291,"us/op",10000,language
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,365.798983,27.336210,"us/op",10000,year
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,467.980754,39.747489,"us/op",10000,author
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,457.499283,35.234699,"us/op",10000,all
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,5371.851782,540.885340,"us/op",100000,none
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,5251.104441,597.296658,"us/op",100000,language
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,4569.092002,97.101961,"us/op",100000,year
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,6277.102631,850.376927,"us/op",100000,author
+"es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search","avgt",1,20,6104.095979,843.211915,"us/op",100000,all

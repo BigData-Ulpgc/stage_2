@@ -1,0 +1,111 @@
+\section{Microservice implementation: Search and deployment}
+\label{sec:search}
+
+\subsection{Search Service}
+
+Search is written in Java 17 with Javalin and Gson, and implements \code{api/openapi.yaml}. It never writes and
+mounts no volume: everything it needs is in MongoDB, which makes it easy to move to another machine in Stage 3.
+Its main classes are:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{4.3cm}X@{}}
+\toprule
+\textbf{Class} & \textbf{Responsibility} \\
+\midrule
+\code{SearchApi} & Validates the parameters and writes the HTTP answers \\
+\code{SearchEngine} & Runs one query on one snapshot \\
+\code{IndexSnapshotLoader} & Builds a snapshot of the published version from MongoDB \\
+\code{IndexSnapshot} & Immutable: version, published ids and their metadata \\
+\code{SnapshotHolder} & Keeps the current snapshot in an \code{AtomicReference} \\
+\code{SnapshotRefresher} & Checks \code{CURRENT} periodically and on demand, on one thread \\
+\code{PublicationEvents} & Listens to \code{IndexPublished} in the background \\
+\code{MongoPostingSource} & Reads the posting lists of the terms with one query \\
+\bottomrule
+\end{tabularx}
+\caption{Structure of the Search Service.}
+\end{table}
+
+\textbf{One query.} \code{SearchEngine} reads the posting lists of the terms. It walks the shortest list and
+keeps an id only if every other list has it, using binary search, so the cost depends on the rarest term. Then
+it drops the ids that the snapshot does not publish, applies the filters on the metadata in memory, orders all
+the matches and cuts the requested page.
+
+\textbf{Consistency.} Indexing may already have written books that are not published, so Search must not show
+everything it finds. Each request takes the snapshot once when it starts and works only with that one, so it
+cannot mix versions, and it reports that version as \code{index\_version}. The loader reads \code{CURRENT} first
+and then the books up to that version. A book keeps the version in which it first became visible, so whatever
+moment the loader runs, it sees all of a version and never part of the next one. Replacing the snapshot is one
+atomic write: no request waits for it, and no thread can see one half built.
+
+\textbf{Reloading.} A new version reaches Search in two ways. The \code{IndexPublished} event makes it react at
+once, but it is only a wake-up: its content is not used, and whoever receives it reads \code{CURRENT} from
+MongoDB. The check of \code{CURRENT} every \code{SEARCH\_POLL\_SECONDS} (5 s) is the backup for lost events.
+Both run the reload on the same thread, so a slow reload never blocks the Hazelcast thread and two
+reloads never overlap. If a reload fails, the replica keeps serving the snapshot it has.
+
+A failure found in testing shows why both are needed. The ringbuffer of a new Hazelcast cluster starts again at
+sequence 0, while the subscription keeps waiting at the sequence it had reached. After restarting both members,
+Search received no event until as many versions had been published, and only the periodic check kept it up to
+date. Each reconnection now subscribes again and checks \code{CURRENT} once; a test restarts the cluster
+repeatedly and publishes one event at a time, as Indexing does.
+
+\textbf{Availability.} Search starts even if MongoDB or Hazelcast are down, or nothing has been published.
+\code{/status} answers from the first moment, because connecting to Hazelcast happens in the background after the
+HTTP server starts. Searches answer 503 until a version is loaded. If Hazelcast is down, Search keeps working with
+the periodic check; if MongoDB is down, searches answer 503 \code{STORAGE\_UNAVAILABLE} and recover by themselves.
+
+\textbf{Concurrency.} A request runs on a thread of the Jetty pool, whose maximum is explicit in
+\code{SEARCH\_HTTP\_THREADS}: 250, the default value of Javalin 6.1.3, with a minimum of 8 and a 60~s idle
+timeout. These threads share only immutable data, so they need no lock. One \code{MongoClient} per process has a pool
+of \code{SEARCH\_MONGO\_POOL\_SIZE} connections (50), and a request that waits more than 5~s for one answers
+503 instead of keeping its thread busy for the 2 minutes of the driver's default.
+
+\textbf{Browsers.} \code{CORS\_ORIGINS} lists the origins allowed to call the API from a web page; an invalid value
+stops the start.
+
+\subsection{Deployment}
+\label{sec:deployment}
+
+\code{docker compose up} starts everything on one host from \code{docker-compose.yml} and \code{.env}, which
+holds every default. All Java services use one multi-stage template, \code{docker/service.Dockerfile}, with the
+Maven module as an argument.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{2.5cm}L{1.5cm}L{2.9cm}L{1.9cm}X@{}}
+\toprule
+\textbf{Service} & \textbf{Replicas} & \textbf{Published on the host} & \textbf{Datalake} & \textbf{Limits} \\
+\midrule
+\code{nginx} & 1 & 8080 & none & 0.5 CPU, 128 MiB \\
+\code{search} & 1--4 & none & none & 2 CPU, 1 GiB each \\
+\code{indexing} & 1--2 & none & read-only & 2 CPU, 1 GiB each \\
+\code{ingestion} & 1--4 & none & read-write & 1 CPU, 512 MiB each \\
+\code{control} & 1 & 7000, local only & read-only & 0.5 CPU, 384 MiB \\
+\code{hz-1}, \code{hz-2} & 2 & 5701, 5702, local only & none & 1 CPU, 768 MiB each \\
+\code{mongo} & 1 & 27017, local only & none & 2 CPU, 1 GiB \\
+\bottomrule
+\end{tabularx}
+\caption{Containers of the deployment. One replica of each adds up to about 5.7~GB of memory limits.}
+\end{table}
+
+\begin{itemize}
+  \item \textbf{Replicas.} nginx (\code{scripts/nginx.conf}) does round-robin over the replicas of Search, which it
+        finds with the DNS of Docker and looks up again while running, so three replicas only need
+        \code{docker compose up -d -{}-scale search=3}.
+  \item \textbf{Replicas of Indexing.} Only the replica that holds the Hazelcast lock \code{index-writer} writes; the
+        others wait and take over if it stops or dies. Two replicas therefore give availability, not more indexing.
+  \item \textbf{Failures.} The public API is read-only, so nginx can safely repeat a request on another replica if
+        one dies. It does not do so on a 503: a replica that answers is alive, and the others would answer the same.
+        Killing one of 3 replicas during a test lost none of 2,000 requests.
+  \item \textbf{Permissions.} Only Ingestion can write in the datalake, and Docker enforces it. Hazelcast has no
+        authentication, so only nginx listens on all the interfaces.
+  \item \textbf{Fixed resources.} Every container has limits, and the heap is a fixed share of its memory, so the
+        benchmarks can be repeated and report what they used.
+  \item \textbf{Monitoring.} \code{scripts/monitor.sh} records the CPU and memory of each container and the load of
+        the host as CSV. A sample of the containers takes about 2~s, because of \code{docker stats}.
+\end{itemize}
+
+\textbf{Replicas and threads are different things.} A thread shares its process with the others, including the
+snapshot. A replica is another process with its own memory, its own snapshot and its own connection pool, reached
+through nginx. Both share the CPU, memory and disk of the host, and all the replicas share one MongoDB.

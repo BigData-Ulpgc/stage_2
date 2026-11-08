@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -31,6 +32,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,6 +49,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CoordinationTest {
 
     private static final Duration SHORT = Duration.ofMillis(300);
+    /** Hazelcast TTLs are whole seconds, so the rebuild marker's tests wait in real time. */
+    private static final Duration MARKER_TTL = Duration.ofSeconds(2);
 
     private static HazelcastInstance client;
     private final TestClock clock = new TestClock();
@@ -243,6 +247,56 @@ class CoordinationTest {
         assertEquals(BookTask.MAX_ERROR_LENGTH, coordination.task(5).orElseThrow().lastError().length());
     }
 
+    // --- Metrics (CF-12) ------------------------------------------------------------------
+
+    @Test
+    void theMetricsMeasureTheWaitInTheQueueAndTheWorkOfEachStage() throws Exception {
+        coordination.seed(List.of(7));
+        clock.advance(Duration.ofSeconds(5));                  // waits 5 s in ingest-queue
+        Claim ingesting = claim(Stage.INGESTION);
+        clock.advance(Duration.ofSeconds(2));                  // 2 s downloading
+        assertTrue(coordination.complete(ingesting));
+        clock.advance(Duration.ofSeconds(3));                  // 3 s in index-queue
+        Claim indexing = claim(Stage.INDEXING);
+        clock.advance(Duration.ofMillis(400));
+        assertTrue(coordination.complete(indexing));
+
+        CoordinationMetrics metrics = coordination.metrics();
+        assertMillis(5_000, metrics.queueWait(Stage.INGESTION));
+        assertMillis(2_000, metrics.work(Stage.INGESTION));
+        assertMillis(3_000, metrics.queueWait(Stage.INDEXING));
+        assertMillis(400, metrics.work(Stage.INDEXING));
+        for (Stage stage : Stage.values()) {
+            // Measured with System.nanoTime: real, small, and one of each
+            assertEquals(1, metrics.claim(stage).count());
+            assertEquals(1, metrics.complete(stage).count());
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> work = (Map<String, Object>) ((Map<String, Object>) metrics.summary().get("ingestion")).get("work");
+        assertEquals(1L, work.get("count"));
+        assertEquals(2000.0, work.get("mean_ms"));
+    }
+
+    @Test
+    void onlyTheTransitionsThatHappenedAreMeasured() throws Exception {
+        assertTrue(coordination.claim(Stage.INGESTION, "ingestion-test/w0", SHORT).isEmpty());
+        coordination.seed(List.of(8));
+        Claim lost = claim(Stage.INGESTION);
+        clock.advance(Duration.ofSeconds(61));
+        coordination.requeueExpiredLeases();
+        assertFalse(coordination.complete(lost));
+
+        CoordinationMetrics metrics = coordination.metrics();
+        assertEquals(1, metrics.claim(Stage.INGESTION).count(), "the empty claim is not one");
+        assertEquals(0, metrics.work(Stage.INGESTION).count(), "the lost book was not completed");
+        assertEquals(0, metrics.complete(Stage.INGESTION).count());
+    }
+
+    private static void assertMillis(long expected, LatencyHistogram histogram) {
+        assertEquals(1, histogram.count());
+        assertEquals(expected * 1_000, histogram.percentile(1.0), expected * 1_000 / 32.0);
+    }
+
     // --- Leases --------------------------------------------------------------------------
 
     @Test
@@ -396,6 +450,71 @@ class CoordinationTest {
         assertFalse(coordination.isInitialized());
         coordination.markInitialized();
         assertTrue(coordination.isInitialized());
+    }
+
+    // --- Rebuild marker (DR-10) ---------------------------------------------------------
+
+    @Test
+    void soloUnaReconstruccionALaVez() {
+        OptionalLong first = coordination.tryStartRebuild(Duration.ofSeconds(30));
+        assertTrue(first.isPresent());
+        assertTrue(coordination.isRebuilding());
+        clock.advance(Duration.ofSeconds(1));                       // a second attempt has another token
+        assertTrue(coordination.tryStartRebuild(Duration.ofSeconds(30)).isEmpty(), "ya hay una en marcha");
+        assertTrue(coordination.renewRebuild(first.getAsLong(), Duration.ofSeconds(30)),
+                "el segundo intento no le quita la marca a la primera");
+
+        coordination.endRebuild(first.getAsLong());
+        assertFalse(coordination.isRebuilding());
+        assertTrue(coordination.tryStartRebuild(Duration.ofSeconds(30)).isPresent(), "al terminar, otra puede empezar");
+    }
+
+    @Test
+    void laMarcaCaducaSiNadieLaRenuevaYEntoncesYaNoSePuedeRenovar() throws Exception {
+        long token = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        waitUntil(() -> !coordination.isRebuilding());
+        assertFalse(coordination.renewRebuild(token, Duration.ofSeconds(30)), "una marca caducada no revive");
+        assertFalse(coordination.isRebuilding());
+    }
+
+    @Test
+    void renovarlaLaMantieneMasAllaDeSuTtl() throws Exception {
+        long token = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        long until = System.nanoTime() + MARKER_TTL.multipliedBy(3).toNanos();
+        while (System.nanoTime() < until) {
+            assertTrue(coordination.renewRebuild(token, MARKER_TTL));
+            Thread.sleep(MARKER_TTL.toMillis() / 4);
+        }
+        assertTrue(coordination.isRebuilding());
+    }
+
+    @Test
+    void unaReconstruccionCaducadaNoQuitaNiRenuevaLaMarcaDeLaSiguiente() throws Exception {
+        long old = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        waitUntil(() -> !coordination.isRebuilding());
+        clock.advance(Duration.ofSeconds(1));                       // the next one has another token
+        long next = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        assertTrue(coordination.renewRebuild(next, MARKER_TTL));
+
+        assertFalse(coordination.renewRebuild(old, Duration.ofSeconds(30)));
+        coordination.endRebuild(old);
+        assertTrue(coordination.isRebuilding(), "la marca de la siguiente sigue");
+        waitUntil(() -> !coordination.isRebuilding());              // with its own TTL, not the old one's 30 s
+    }
+
+    @Test
+    void unTtlDeMenosDeUnSegundoSeRechaza() {
+        // Hazelcast keeps TTLs in whole seconds: 300 ms would make a marker that is born expired
+        assertThrows(IllegalArgumentException.class, () -> coordination.tryStartRebuild(Duration.ofMillis(300)));
+        long token = coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+        assertThrows(IllegalArgumentException.class, () -> coordination.renewRebuild(token, Duration.ofMillis(999)));
+        assertTrue(coordination.isRebuilding());
+    }
+
+    @Test
+    void laMarcaDeReconstruccionNoEsLaDeClusterInicializado() {
+        coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+        assertFalse(coordination.isInitialized(), "la recuperación del Control solo mira 'initialized'");
     }
 
     // --- Recovery (contract §7, CF-10) ----------------------------------------------------
@@ -637,6 +756,15 @@ class CoordinationTest {
             return thread.submit(task).get(30, TimeUnit.SECONDS);
         } finally {
             thread.shutdownNow();
+        }
+    }
+
+    /** Waits, in real time, for a Hazelcast TTL: the test clock does not move those. */
+    private static void waitUntil(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!condition.getAsBoolean()) {
+            assertTrue(System.nanoTime() < deadline, "the condition did not hold in 10 s");
+            Thread.sleep(50);
         }
     }
 

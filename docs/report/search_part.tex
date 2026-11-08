@@ -1,0 +1,78 @@
+% The parts of the Stage 2 report owned by Daniel Perdomo (plan DP-13): cover, section 2, section 4,
+% section 5 (Search and deployment) and the Search part of section 7. Section numbers follow the
+% list of assignment section 7.1, where the cover is number 1.
+%
+% Build from docs/report/:  pdflatex search_part.tex && pdflatex search_part.tex
+% To assemble the final report, \input the files of sections/ in the main document.
+% \pending{...} marks what still depends on the measures: it must not reach the final PDF.
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.4cm,headheight=14pt]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{accent}{HTML}{2a78d6}
+\definecolor{ink}{HTML}{0b0b0b}
+\definecolor{muted}{HTML}{52514e}
+\definecolor{codebg}{HTML}{f6f6f4}
+\definecolor{rule}{HTML}{d8d7d2}
+\definecolor{pendingink}{HTML}{b3261e}
+
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,citecolor=accent}
+
+\titleformat{\section}{\Large\bfseries\color{ink}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{ink}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.7em}
+\titlespacing*{\subsection}{0pt}{1.2em}{0.5em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{muted}Stage 2 $\cdot$ Service-oriented architecture}
+\fancyhead[R]{\small\color{muted}Big Data $\cdot$ ULPGC}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+\renewcommand{\arraystretch}{1.25}
+
+\lstset{language={}, basicstyle=\ttfamily\footnotesize, backgroundcolor=\color{codebg}, frame=single,
+  rulecolor=\color{rule}, framesep=4pt, xleftmargin=6pt, xrightmargin=6pt, breaklines=true,
+  columns=fullflexible, keepspaces=true, showstringspaces=false, aboveskip=8pt, belowskip=8pt}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\pending}[1]{\par\medskip{\color{pendingink}\textbf{[PENDING]} #1}\par\medskip}
+
+\begin{document}
+
+\input{sections/cover}
+\tableofcontents
+\clearpage
+
+\setcounter{section}{1}
+\input{sections/02_introduction}
+
+\setcounter{section}{3}
+\input{sections/04_api}
+\input{sections/05_search_deployment}
+
+\setcounter{section}{6}
+\input{sections/07_search_benchmarks}
+
+\end{document}

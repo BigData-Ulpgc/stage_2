@@ -1,0 +1,74 @@
+\section{Conclusions and evolution to Stage 3}
+\label{sec:stage3}
+
+\subsection{Strengths and weaknesses of the coordination}
+
+\textbf{Strengths.} The coordination is explicit and checked: every transition is one method of one library, atomic,
+and tested against real Hazelcast members. A book never changes state before its evidence is persistent, so a crash
+at any point leaves a book that is either redone or recovered; the failure tests check it end to end
+(Table~\ref{tab:failure-tests}). Replicas of
+Ingestion and Search are added with \code{--scale} and nothing else, because nobody addresses a replica: the workers
+pull from shared queues, and nginx spreads the queries. Losing the whole Hazelcast cluster costs a recovery, not data.
+
+\textbf{Weaknesses.} Hazelcast is in memory, so the books without evidence (\code{PENDING}, or \code{INGESTING} without
+\code{\_READY}) must be sent again after the cluster is lost. The lock of the index writer has no fencing token. The
+leases compare the clocks of different processes. The datalake depends on a local file system and its atomic moves. Each
+book costs two transactions, and both queues are single partitions that every claim goes through.
+
+\textbf{What the measures say.} The JMH of Ingestion (Section~\ref{sec:benchmarks-ingestion}) show that coordinating a
+book through Hazelcast costs more than ingesting it from the local source (1.6~ms against 0.47~ms with one worker), and that
+more workers hide that cost well (0.36~ms per book with 8). Even so, Ingestion runs two orders of magnitude faster than
+Indexing, so it does not limit the pipeline on this machine. The behaviour with several replicas and with the real
+download was not measured.
+
+\subsection{What changes on the Stage 3 cluster}
+
+The services keep their code; what they assume about the machine does not hold on a cluster. Table~\ref{tab:stage3}
+lists each local assumption and what replaces it.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.6cm}L{4.3cm}X@{}}
+\toprule
+\textbf{Local assumption} & \textbf{Why it breaks on a cluster} & \textbf{Stage 3} \\
+\midrule
+Two Hazelcast members on one host & They share its failures; a backup on the same machine protects from nothing &
+  One member per machine (or embedded in the services), discovery by the platform instead of a fixed list, and backups
+  placed on another machine (partition groups per host or zone) \\
+\code{IMap.lock} for the single writer & In a network partition each half of the cluster can grant it (split-brain), and
+  it has no fencing token & A CP \code{FencedLock} (Enterprise, three or more CP members), or a lease document in MongoDB
+  taken with a conditional update whose version is the fencing token for every write; a split-brain protection quorum
+  on the coordination structures \\
+Leases on one clock & Clocks of different machines drift; a lease could expire early or late & NTP on every node and a
+  margin above the expected skew, or the time of the member that owns the entry \\
+Datalake on a local file system, \code{\_READY} after atomic moves & An atomic move exists only inside one file system;
+  Indexing on another machine cannot read the folder & Shared storage (an object store such as S3 or MinIO, or HDFS): write
+  the book, then the marker object; readiness is the marker object \\
+Recovery lists the datalake & Listing every range folder grows with the number of books, and gets slower over the network &
+  A persistent log of ready books (a MongoDB collection written with the marker), read like \code{index\_log} \\
+One Control & Its absence stops leases and publications; on a cluster, nodes come and go & Two or more instances with a
+  leader election (the same fenced lease as the writer); the others wait as standbys \\
+Queues of one partition & Every claim of every node goes to one member & Several queues by range of ids, each taken by
+  some workers, or a partitioned log with acknowledgements (Kafka) if the work grows beyond what one member serves \\
+Services without authentication on \code{127.0.0.1} & On a network of machines anyone could reach the Control or
+  Hazelcast & TLS and authentication on the Hazelcast clients and on the internal APIs; only the load balancer exposed \\
+Docker network on one host & Containers on different machines do not share it & An overlay network or an orchestrator
+  (Kubernetes, Docker Swarm) with service discovery; nginx replaced by its load balancer \\
+\bottomrule
+\end{tabularx}
+\caption{The local assumptions of the coordination and their Stage 3 replacement.}
+\label{tab:stage3}
+\end{table}
+
+\textbf{What does not change.} The contract itself: the states, the transitions, the principle that evidence comes
+first, the leases and the recovery are the same on one machine and on many, and the services reach Hazelcast through the
+same library. That was the reason to choose it (Table~\ref{tab:alternatives}): for Stage 3 the work is in the
+configuration and in the storage, not in the services.
+
+\textbf{Distribution of work.} On a cluster the replicas of Ingestion run on several machines and keep pulling from the
+same queues, so the distribution of books needs no change. What needs measuring again is where the first bottleneck moves
+once each replica has a machine of its own: the queues of Hazelcast, the shared storage, or the single index writer.
+On this machine the first limit is already MongoDB, shared by the writer of Indexing and every replica of Search
+(Section~\ref{sec:consolidation}); for Ingestion it is the round trips to Hazelcast. On a cluster both move: MongoDB
+needs replication or sharding, and the coordination pays a real network on every transaction, which makes batching the
+claims worth considering.

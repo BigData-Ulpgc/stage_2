@@ -9,8 +9,9 @@
 #
 # The expected results are those of the 15 books of the sample dataset. The public API is called
 # through nginx and the internal ones inside the Docker network, as the services call each other.
-# Run it right after loading the dataset. It does not change any data, except POST /index/publish
-# once DR-08 exists: with nothing new to publish, it creates no version, which the script checks.
+# Run it right after loading the dataset. It changes no data, with two exceptions: POST /index/publish,
+# which with nothing new to publish creates no version (the script checks it), and POST
+# /control/retry-failed, which sends any FAILED book back to its queue. No check seeds a book.
 #
 # SKIP means an endpoint declared in its contract that answers 501 (not implemented yet). When it
 # is implemented, the check runs without touching this script. Any other answer is a PASS or a
@@ -40,13 +41,16 @@ report() {      # report PASS|FAIL|SKIP name detail
 }
 
 # call METHOD PATH [SERVICE PORT]: leaves the body in body_file and the status in "code".
-# Without SERVICE, through nginx from the host; with it, inside that container.
+# Without SERVICE, through nginx from the host; with it, inside that container. REQUEST_BODY, if
+# set, is sent as the body of the request.
 call() {
     if [[ $# -eq 2 ]]; then
         code=$(curl -s -g -m 20 -o "$body_file" -w '%{http_code}' -X "$1" "$base$2")
     else
         local output
-        output=$($COMPOSE exec -T "$3" curl -s -g -m 20 -w '\n%{http_code}' -X "$1" "http://localhost:$4$2" 2>/dev/null | tr -d '\r')
+        local data=()
+        if [[ -n "${REQUEST_BODY:-}" ]]; then data=(-H 'Content-Type: application/json' -d "$REQUEST_BODY"); fi
+        output=$($COMPOSE exec -T "$3" curl -s -g -m 20 -w '\n%{http_code}' -X "$1" "${data[@]+"${data[@]}"}" "http://localhost:$4$2" 2>/dev/null | tr -d '\r')
         code="${output##*$'\n'}"
         code="${code:-000}"       # the container does not answer
         printf '%s' "${output%$'\n'*}" > "$body_file"
@@ -185,6 +189,17 @@ expect_error "GET where only POST exists"    404 NOT_FOUND null            GET /
 
 echo; echo "== Control Module"
 expect       "status"                        200 '"service":"control-module"' GET /status control 7000
+expect       "the Control reaches Hazelcast" 200 '"coordination":"connected"' GET /status control 7000
+expect       "status of the books and queues" 200 '"ingest-queue":'           GET /control/status control 7000
+expect_error "task: invalid id"              400 INVALID_PARAMETER book_id    GET /control/tasks/0084 control 7000
+expect_error "task: a book never submitted"  404 NOT_FOUND book_id            GET /control/tasks/999999 control 7000
+REQUEST_BODY='{"book_ids":[0]}' \
+expect_error "jobs: an invalid id rejects all" 400 INVALID_PARAMETER book_ids POST /control/jobs control 7000
+REQUEST_BODY='{"book_ids":[]}' \
+expect_error "jobs: an empty list"           400 INVALID_PARAMETER book_ids   POST /control/jobs control 7000
+REQUEST_BODY='not json' \
+expect_error "jobs: a body that is not JSON" 400 INVALID_PARAMETER body       POST /control/jobs control 7000
+expect       "retry-failed"                  200 '"requeued":'                POST /control/retry-failed control 7000
 
 echo; echo "== Interactions that are not HTTP"
 health=$($COMPOSE exec -T search curl -s -m 10 http://hz-1:5701/hazelcast/health 2>/dev/null | tr -d '\r')
