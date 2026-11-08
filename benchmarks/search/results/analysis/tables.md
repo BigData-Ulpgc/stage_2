@@ -124,139 +124,331 @@ Same index and clients; *mixed* = the Control, Ingestion and Indexing process ne
 
 ## Mean CPU (% of one core, all replicas added) and peak memory (MiB)
 
-| experiment | replicas | clients | container | CPU % | memory MiB |
-|---|---|---|---|---|---|
-| clients | 1 | 1 | hz-1 | 1 | 352 |
-| clients | 1 | 1 | hz-2 | 1 | 350 |
-| clients | 1 | 1 | mongo | 35 | 1012 |
-| clients | 1 | 1 | nginx | 13 | 30 |
-| clients | 1 | 1 | search | 44 | 357 |
-| clients | 1 | 8 | hz-1 | 1 | 352 |
-| clients | 1 | 8 | hz-2 | 1 | 350 |
-| clients | 1 | 8 | mongo | 122 | 1012 |
-| clients | 1 | 8 | nginx | 53 | 31 |
-| clients | 1 | 8 | search | 196 | 357 |
-| clients | 1 | 32 | hz-1 | 1 | 352 |
-| clients | 1 | 32 | hz-2 | 1 | 350 |
-| clients | 1 | 32 | mongo | 127 | 995 |
-| clients | 1 | 32 | nginx | 49 | 31 |
-| clients | 1 | 32 | search | 192 | 358 |
-| clients | 1 | 128 | hz-1 | 1 | 352 |
-| clients | 1 | 128 | hz-2 | 1 | 350 |
-| clients | 1 | 128 | mongo | 124 | 1006 |
-| clients | 1 | 128 | nginx | 51 | 33 |
-| clients | 1 | 128 | search | 195 | 359 |
-| clients | 1 | 256 | hz-1 | 1 | 352 |
-| clients | 1 | 256 | hz-2 | 0 | 350 |
-| clients | 1 | 256 | mongo | 127 | 1024 |
-| clients | 1 | 256 | nginx | 51 | 36 |
-| clients | 1 | 256 | search | 195 | 365 |
-| clients | 2 | 1 | hz-1 | 1 | 352 |
-| clients | 2 | 1 | hz-2 | 1 | 350 |
-| clients | 2 | 1 | mongo | 34 | 996 |
-| clients | 2 | 1 | nginx | 12 | 31 |
-| clients | 2 | 1 | search | 47 | 360 |
-| clients | 2 | 8 | hz-1 | 1 | 352 |
-| clients | 2 | 8 | hz-2 | 2 | 354 |
-| clients | 2 | 8 | mongo | 153 | 1002 |
-| clients | 2 | 8 | nginx | 69 | 30 |
-| clients | 2 | 8 | search | 304 | 360 |
-| clients | 2 | 32 | hz-1 | 1 | 352 |
-| clients | 2 | 32 | hz-2 | 1 | 349 |
-| clients | 2 | 32 | mongo | 154 | 1012 |
-| clients | 2 | 32 | nginx | 62 | 31 |
-| clients | 2 | 32 | search | 298 | 360 |
-| clients | 2 | 128 | hz-1 | 1 | 352 |
-| clients | 2 | 128 | hz-2 | 1 | 349 |
-| clients | 2 | 128 | mongo | 154 | 689 |
-| clients | 2 | 128 | nginx | 62 | 34 |
-| clients | 2 | 128 | search | 301 | 367 |
-| clients | 2 | 256 | - | 0 | 0 |
-| clients | 2 | 256 | hz-1 | 1 | 352 |
-| clients | 2 | 256 | hz-2 | 1 | 350 |
-| clients | 2 | 256 | mongo | 153 | 706 |
-| clients | 2 | 256 | nginx | 63 | 37 |
-| clients | 2 | 256 | search | 311 | 360 |
-| clients | 4 | 1 | hz-1 | 0 | 352 |
-| clients | 4 | 1 | hz-2 | 0 | 350 |
-| clients | 4 | 1 | mongo | 34 | 706 |
-| clients | 4 | 1 | nginx | 11 | 31 |
-| clients | 4 | 1 | search | 50 | 359 |
-| clients | 4 | 8 | hz-1 | 1 | 352 |
-| clients | 4 | 8 | hz-2 | 1 | 349 |
-| clients | 4 | 8 | mongo | 159 | 705 |
-| clients | 4 | 8 | nginx | 68 | 31 |
-| clients | 4 | 8 | search | 383 | 359 |
-| clients | 4 | 32 | hz-1 | 1 | 352 |
-| clients | 4 | 32 | hz-2 | 1 | 349 |
-| clients | 4 | 32 | mongo | 169 | 707 |
-| clients | 4 | 32 | nginx | 68 | 32 |
-| clients | 4 | 32 | search | 434 | 359 |
-| clients | 4 | 128 | hz-1 | 1 | 352 |
-| clients | 4 | 128 | hz-2 | 1 | 350 |
-| clients | 4 | 128 | mongo | 167 | 707 |
-| clients | 4 | 128 | nginx | 68 | 35 |
-| clients | 4 | 128 | search | 435 | 372 |
-| clients | 4 | 256 | hz-1 | 1 | 352 |
-| clients | 4 | 256 | hz-2 | 1 | 350 |
-| clients | 4 | 256 | mongo | 171 | 716 |
-| clients | 4 | 256 | nginx | 71 | 38 |
-| clients | 4 | 256 | search | 456 | 360 |
-| nginx0.5 | 1 | 32 | hz-1 | 1 | 332 |
-| nginx0.5 | 1 | 32 | hz-2 | 1 | 326 |
-| nginx0.5 | 1 | 32 | mongo | 115 | 497 |
-| nginx0.5 | 1 | 32 | nginx | 49 | 30 |
-| nginx0.5 | 1 | 32 | search | 114 | 173 |
-| nginx0.5 | 1 | 128 | hz-1 | 1 | 331 |
-| nginx0.5 | 1 | 128 | hz-2 | 1 | 326 |
-| nginx0.5 | 1 | 128 | mongo | 124 | 504 |
-| nginx0.5 | 1 | 128 | nginx | 49 | 32 |
-| nginx0.5 | 1 | 128 | search | 123 | 203 |
-| nginx0.5 | 1 | 256 | hz-1 | 1 | 331 |
-| nginx0.5 | 1 | 256 | hz-2 | 1 | 326 |
-| nginx0.5 | 1 | 256 | mongo | 125 | 503 |
-| nginx0.5 | 1 | 256 | nginx | 49 | 35 |
-| nginx0.5 | 1 | 256 | search | 126 | 235 |
-| pool | 1 | 32 | hz-1 | 1 | 332 |
-| pool | 1 | 32 | hz-2 | 1 | 326 |
-| pool | 1 | 32 | mongo | 188 | 510 |
-| pool | 1 | 32 | nginx | 79 | 32 |
-| pool | 1 | 32 | search | 192 | 188 |
-| pool | 1 | 128 | hz-1 | 1 | 332 |
-| pool | 1 | 128 | hz-2 | 1 | 326 |
-| pool | 1 | 128 | mongo | 178 | 514 |
-| pool | 1 | 128 | nginx | 74 | 33 |
-| pool | 1 | 128 | search | 192 | 218 |
-| pool | 1 | 256 | hz-1 | 1 | 332 |
-| pool | 1 | 256 | hz-2 | 1 | 326 |
-| pool | 1 | 256 | mongo | 177 | 512 |
-| pool | 1 | 256 | nginx | 76 | 36 |
-| pool | 1 | 256 | search | 195 | 259 |
-| threads | 1 | 1 | hz-1 | 1 | 331 |
-| threads | 1 | 1 | hz-2 | 1 | 325 |
-| threads | 1 | 1 | mongo | 42 | 506 |
-| threads | 1 | 1 | nginx | 17 | 30 |
-| threads | 1 | 1 | search | 35 | 175 |
-| threads | 1 | 8 | hz-1 | 1 | 331 |
-| threads | 1 | 8 | hz-2 | 1 | 324 |
-| threads | 1 | 8 | mongo | 183 | 508 |
-| threads | 1 | 8 | nginx | 85 | 31 |
-| threads | 1 | 8 | search | 194 | 177 |
-| threads | 1 | 32 | hz-1 | 1 | 331 |
-| threads | 1 | 32 | hz-2 | 1 | 325 |
-| threads | 1 | 32 | mongo | 193 | 509 |
-| threads | 1 | 32 | nginx | 78 | 31 |
-| threads | 1 | 32 | search | 184 | 178 |
-| threads | 1 | 128 | hz-1 | 1 | 331 |
-| threads | 1 | 128 | hz-2 | 1 | 325 |
-| threads | 1 | 128 | mongo | 194 | 507 |
-| threads | 1 | 128 | nginx | 78 | 33 |
-| threads | 1 | 128 | search | 181 | 204 |
-| threads | 1 | 256 | hz-1 | 1 | 331 |
-| threads | 1 | 256 | hz-2 | 1 | 325 |
-| threads | 1 | 256 | mongo | 195 | 511 |
-| threads | 1 | 256 | nginx | 81 | 36 |
-| threads | 1 | 256 | search | 184 | 225 |
+Limits: Search and MongoDB 2 CPUs each (per replica), nginx 2 CPUs except in nginx<CPUs>.
+
+| books | experiment | replicas | http threads | mongo pool | clients | container | CPU % | memory MiB |
+|---|---|---|---|---|---|---|---|---|
+| 15 | clients | 1 | 250 | 50 | 1 | hz-1 | 1 | 330 |
+| 15 | clients | 1 | 250 | 50 | 1 | hz-2 | 1 | 324 |
+| 15 | clients | 1 | 250 | 50 | 1 | mongo | 43 | 483 |
+| 15 | clients | 1 | 250 | 50 | 1 | nginx | 17 | 30 |
+| 15 | clients | 1 | 250 | 50 | 1 | search | 32 | 248 |
+| 15 | clients | 1 | 250 | 50 | 8 | hz-1 | 2 | 330 |
+| 15 | clients | 1 | 250 | 50 | 8 | hz-2 | 1 | 323 |
+| 15 | clients | 1 | 250 | 50 | 8 | mongo | 175 | 482 |
+| 15 | clients | 1 | 250 | 50 | 8 | nginx | 82 | 31 |
+| 15 | clients | 1 | 250 | 50 | 8 | search | 192 | 248 |
+| 15 | clients | 1 | 250 | 50 | 32 | hz-1 | 1 | 330 |
+| 15 | clients | 1 | 250 | 50 | 32 | hz-2 | 1 | 324 |
+| 15 | clients | 1 | 250 | 50 | 32 | mongo | 186 | 504 |
+| 15 | clients | 1 | 250 | 50 | 32 | nginx | 74 | 31 |
+| 15 | clients | 1 | 250 | 50 | 32 | search | 186 | 248 |
+| 15 | clients | 1 | 250 | 50 | 128 | hz-1 | 1 | 330 |
+| 15 | clients | 1 | 250 | 50 | 128 | hz-2 | 1 | 324 |
+| 15 | clients | 1 | 250 | 50 | 128 | mongo | 188 | 512 |
+| 15 | clients | 1 | 250 | 50 | 128 | nginx | 76 | 33 |
+| 15 | clients | 1 | 250 | 50 | 128 | search | 191 | 250 |
+| 15 | clients | 1 | 250 | 50 | 256 | hz-1 | 1 | 330 |
+| 15 | clients | 1 | 250 | 50 | 256 | hz-2 | 1 | 324 |
+| 15 | clients | 1 | 250 | 50 | 256 | mongo | 190 | 513 |
+| 15 | clients | 1 | 250 | 50 | 256 | nginx | 77 | 36 |
+| 15 | clients | 1 | 250 | 50 | 256 | search | 191 | 273 |
+| 15 | clients | 2 | 250 | 50 | 1 | hz-1 | 1 | 331 |
+| 15 | clients | 2 | 250 | 50 | 1 | hz-2 | 1 | 324 |
+| 15 | clients | 2 | 250 | 50 | 1 | mongo | 42 | 504 |
+| 15 | clients | 2 | 250 | 50 | 1 | nginx | 16 | 31 |
+| 15 | clients | 2 | 250 | 50 | 1 | search | 35 | 274 |
+| 15 | clients | 2 | 250 | 50 | 8 | hz-1 | 2 | 330 |
+| 15 | clients | 2 | 250 | 50 | 8 | hz-2 | 3 | 324 |
+| 15 | clients | 2 | 250 | 50 | 8 | mongo | 200 | 497 |
+| 15 | clients | 2 | 250 | 50 | 8 | nginx | 95 | 30 |
+| 15 | clients | 2 | 250 | 50 | 8 | search | 239 | 276 |
+| 15 | clients | 2 | 250 | 50 | 32 | hz-1 | 1 | 330 |
+| 15 | clients | 2 | 250 | 50 | 32 | hz-2 | 1 | 325 |
+| 15 | clients | 2 | 250 | 50 | 32 | mongo | 197 | 516 |
+| 15 | clients | 2 | 250 | 50 | 32 | nginx | 82 | 31 |
+| 15 | clients | 2 | 250 | 50 | 32 | search | 217 | 278 |
+| 15 | clients | 2 | 250 | 50 | 128 | hz-1 | 1 | 330 |
+| 15 | clients | 2 | 250 | 50 | 128 | hz-2 | 1 | 324 |
+| 15 | clients | 2 | 250 | 50 | 128 | mongo | 197 | 509 |
+| 15 | clients | 2 | 250 | 50 | 128 | nginx | 81 | 34 |
+| 15 | clients | 2 | 250 | 50 | 128 | search | 225 | 278 |
+| 15 | clients | 2 | 250 | 50 | 256 | hz-1 | 1 | 329 |
+| 15 | clients | 2 | 250 | 50 | 256 | hz-2 | 1 | 324 |
+| 15 | clients | 2 | 250 | 50 | 256 | mongo | 194 | 514 |
+| 15 | clients | 2 | 250 | 50 | 256 | nginx | 82 | 37 |
+| 15 | clients | 2 | 250 | 50 | 256 | search | 235 | 280 |
+| 15 | clients | 4 | 250 | 50 | 1 | hz-1 | 1 | 331 |
+| 15 | clients | 4 | 250 | 50 | 1 | hz-2 | 0 | 323 |
+| 15 | clients | 4 | 250 | 50 | 1 | mongo | 40 | 506 |
+| 15 | clients | 4 | 250 | 50 | 1 | nginx | 15 | 31 |
+| 15 | clients | 4 | 250 | 50 | 1 | search | 41 | 278 |
+| 15 | clients | 4 | 250 | 50 | 8 | hz-1 | 2 | 329 |
+| 15 | clients | 4 | 250 | 50 | 8 | hz-2 | 1 | 325 |
+| 15 | clients | 4 | 250 | 50 | 8 | mongo | 193 | 490 |
+| 15 | clients | 4 | 250 | 50 | 8 | nginx | 87 | 31 |
+| 15 | clients | 4 | 250 | 50 | 8 | search | 262 | 279 |
+| 15 | clients | 4 | 250 | 50 | 32 | hz-1 | 1 | 331 |
+| 15 | clients | 4 | 250 | 50 | 32 | hz-2 | 1 | 324 |
+| 15 | clients | 4 | 250 | 50 | 32 | mongo | 192 | 508 |
+| 15 | clients | 4 | 250 | 50 | 32 | nginx | 82 | 32 |
+| 15 | clients | 4 | 250 | 50 | 32 | search | 248 | 279 |
+| 15 | clients | 4 | 250 | 50 | 128 | hz-1 | 1 | 330 |
+| 15 | clients | 4 | 250 | 50 | 128 | hz-2 | 1 | 325 |
+| 15 | clients | 4 | 250 | 50 | 128 | mongo | 192 | 517 |
+| 15 | clients | 4 | 250 | 50 | 128 | nginx | 79 | 35 |
+| 15 | clients | 4 | 250 | 50 | 128 | search | 253 | 279 |
+| 15 | clients | 4 | 250 | 50 | 256 | hz-1 | 1 | 331 |
+| 15 | clients | 4 | 250 | 50 | 256 | hz-2 | 1 | 324 |
+| 15 | clients | 4 | 250 | 50 | 256 | mongo | 198 | 510 |
+| 15 | clients | 4 | 250 | 50 | 256 | nginx | 85 | 38 |
+| 15 | clients | 4 | 250 | 50 | 256 | search | 279 | 280 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 32 | hz-1 | 1 | 332 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 32 | hz-2 | 1 | 326 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 32 | mongo | 115 | 497 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 32 | nginx | 49 | 30 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 32 | search | 114 | 173 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 128 | hz-1 | 1 | 331 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 128 | hz-2 | 1 | 326 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 128 | mongo | 124 | 504 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 128 | nginx | 49 | 32 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 128 | search | 123 | 203 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 256 | hz-1 | 1 | 331 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 256 | hz-2 | 1 | 326 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 256 | mongo | 125 | 503 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 256 | nginx | 49 | 35 |
+| 15 | nginx0.5 | 1 | 250 | 50 | 256 | search | 126 | 235 |
+| 15 | pool | 1 | 250 | 10 | 32 | hz-1 | 1 | 331 |
+| 15 | pool | 1 | 250 | 10 | 32 | hz-2 | 1 | 325 |
+| 15 | pool | 1 | 250 | 10 | 32 | mongo | 186 | 503 |
+| 15 | pool | 1 | 250 | 10 | 32 | nginx | 78 | 32 |
+| 15 | pool | 1 | 250 | 10 | 32 | search | 194 | 188 |
+| 15 | pool | 1 | 250 | 10 | 128 | hz-1 | 1 | 332 |
+| 15 | pool | 1 | 250 | 10 | 128 | hz-2 | 1 | 325 |
+| 15 | pool | 1 | 250 | 10 | 128 | mongo | 166 | 510 |
+| 15 | pool | 1 | 250 | 10 | 128 | nginx | 72 | 33 |
+| 15 | pool | 1 | 250 | 10 | 128 | search | 190 | 218 |
+| 15 | pool | 1 | 250 | 10 | 256 | hz-1 | 1 | 332 |
+| 15 | pool | 1 | 250 | 10 | 256 | hz-2 | 1 | 324 |
+| 15 | pool | 1 | 250 | 10 | 256 | mongo | 167 | 503 |
+| 15 | pool | 1 | 250 | 10 | 256 | nginx | 73 | 35 |
+| 15 | pool | 1 | 250 | 10 | 256 | search | 192 | 258 |
+| 15 | pool | 1 | 250 | 100 | 32 | hz-1 | 1 | 332 |
+| 15 | pool | 1 | 250 | 100 | 32 | hz-2 | 1 | 326 |
+| 15 | pool | 1 | 250 | 100 | 32 | mongo | 190 | 510 |
+| 15 | pool | 1 | 250 | 100 | 32 | nginx | 79 | 31 |
+| 15 | pool | 1 | 250 | 100 | 32 | search | 191 | 178 |
+| 15 | pool | 1 | 250 | 100 | 128 | hz-1 | 1 | 331 |
+| 15 | pool | 1 | 250 | 100 | 128 | hz-2 | 1 | 326 |
+| 15 | pool | 1 | 250 | 100 | 128 | mongo | 191 | 514 |
+| 15 | pool | 1 | 250 | 100 | 128 | nginx | 77 | 33 |
+| 15 | pool | 1 | 250 | 100 | 128 | search | 194 | 205 |
+| 15 | pool | 1 | 250 | 100 | 256 | hz-1 | 1 | 332 |
+| 15 | pool | 1 | 250 | 100 | 256 | hz-2 | 1 | 326 |
+| 15 | pool | 1 | 250 | 100 | 256 | mongo | 189 | 512 |
+| 15 | pool | 1 | 250 | 100 | 256 | nginx | 80 | 36 |
+| 15 | pool | 1 | 250 | 100 | 256 | search | 199 | 259 |
+| 15 | threads | 1 | 16 | 50 | 1 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 16 | 50 | 1 | hz-2 | 1 | 325 |
+| 15 | threads | 1 | 16 | 50 | 1 | mongo | 42 | 506 |
+| 15 | threads | 1 | 16 | 50 | 1 | nginx | 17 | 30 |
+| 15 | threads | 1 | 16 | 50 | 1 | search | 36 | 168 |
+| 15 | threads | 1 | 16 | 50 | 8 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 16 | 50 | 8 | hz-2 | 1 | 324 |
+| 15 | threads | 1 | 16 | 50 | 8 | mongo | 185 | 508 |
+| 15 | threads | 1 | 16 | 50 | 8 | nginx | 86 | 31 |
+| 15 | threads | 1 | 16 | 50 | 8 | search | 194 | 170 |
+| 15 | threads | 1 | 16 | 50 | 32 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 16 | 50 | 32 | hz-2 | 1 | 325 |
+| 15 | threads | 1 | 16 | 50 | 32 | mongo | 198 | 509 |
+| 15 | threads | 1 | 16 | 50 | 32 | nginx | 79 | 31 |
+| 15 | threads | 1 | 16 | 50 | 32 | search | 182 | 172 |
+| 15 | threads | 1 | 16 | 50 | 128 | hz-1 | 1 | 330 |
+| 15 | threads | 1 | 16 | 50 | 128 | hz-2 | 1 | 325 |
+| 15 | threads | 1 | 16 | 50 | 128 | mongo | 195 | 503 |
+| 15 | threads | 1 | 16 | 50 | 128 | nginx | 81 | 33 |
+| 15 | threads | 1 | 16 | 50 | 128 | search | 175 | 191 |
+| 15 | threads | 1 | 16 | 50 | 256 | hz-1 | 1 | 330 |
+| 15 | threads | 1 | 16 | 50 | 256 | hz-2 | 1 | 325 |
+| 15 | threads | 1 | 16 | 50 | 256 | mongo | 197 | 505 |
+| 15 | threads | 1 | 16 | 50 | 256 | nginx | 83 | 36 |
+| 15 | threads | 1 | 16 | 50 | 256 | search | 179 | 217 |
+| 15 | threads | 1 | 64 | 50 | 1 | hz-1 | 0 | 331 |
+| 15 | threads | 1 | 64 | 50 | 1 | hz-2 | 0 | 325 |
+| 15 | threads | 1 | 64 | 50 | 1 | mongo | 42 | 491 |
+| 15 | threads | 1 | 64 | 50 | 1 | nginx | 17 | 30 |
+| 15 | threads | 1 | 64 | 50 | 1 | search | 33 | 175 |
+| 15 | threads | 1 | 64 | 50 | 8 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 64 | 50 | 8 | hz-2 | 1 | 324 |
+| 15 | threads | 1 | 64 | 50 | 8 | mongo | 180 | 500 |
+| 15 | threads | 1 | 64 | 50 | 8 | nginx | 85 | 30 |
+| 15 | threads | 1 | 64 | 50 | 8 | search | 194 | 177 |
+| 15 | threads | 1 | 64 | 50 | 32 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 64 | 50 | 32 | hz-2 | 1 | 324 |
+| 15 | threads | 1 | 64 | 50 | 32 | mongo | 188 | 509 |
+| 15 | threads | 1 | 64 | 50 | 32 | nginx | 76 | 31 |
+| 15 | threads | 1 | 64 | 50 | 32 | search | 186 | 178 |
+| 15 | threads | 1 | 64 | 50 | 128 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 64 | 50 | 128 | hz-2 | 1 | 325 |
+| 15 | threads | 1 | 64 | 50 | 128 | mongo | 192 | 507 |
+| 15 | threads | 1 | 64 | 50 | 128 | nginx | 76 | 33 |
+| 15 | threads | 1 | 64 | 50 | 128 | search | 187 | 204 |
+| 15 | threads | 1 | 64 | 50 | 256 | hz-1 | 1 | 331 |
+| 15 | threads | 1 | 64 | 50 | 256 | hz-2 | 1 | 325 |
+| 15 | threads | 1 | 64 | 50 | 256 | mongo | 193 | 511 |
+| 15 | threads | 1 | 64 | 50 | 256 | nginx | 79 | 36 |
+| 15 | threads | 1 | 64 | 50 | 256 | search | 189 | 225 |
+| 197 | clients | 1 | 250 | 50 | 1 | hz-1 | 1 | 323 |
+| 197 | clients | 1 | 250 | 50 | 1 | hz-2 | 1 | 329 |
+| 197 | clients | 1 | 250 | 50 | 1 | mongo | 39 | 441 |
+| 197 | clients | 1 | 250 | 50 | 1 | nginx | 16 | 29 |
+| 197 | clients | 1 | 250 | 50 | 1 | search | 38 | 265 |
+| 197 | clients | 1 | 250 | 50 | 8 | hz-1 | 1 | 322 |
+| 197 | clients | 1 | 250 | 50 | 8 | hz-2 | 1 | 329 |
+| 197 | clients | 1 | 250 | 50 | 8 | mongo | 148 | 458 |
+| 197 | clients | 1 | 250 | 50 | 8 | nginx | 66 | 30 |
+| 197 | clients | 1 | 250 | 50 | 8 | search | 198 | 265 |
+| 197 | clients | 1 | 250 | 50 | 32 | hz-1 | 1 | 321 |
+| 197 | clients | 1 | 250 | 50 | 32 | hz-2 | 1 | 330 |
+| 197 | clients | 1 | 250 | 50 | 32 | mongo | 149 | 458 |
+| 197 | clients | 1 | 250 | 50 | 32 | nginx | 61 | 30 |
+| 197 | clients | 1 | 250 | 50 | 32 | search | 195 | 265 |
+| 197 | clients | 1 | 250 | 50 | 128 | hz-1 | 0 | 321 |
+| 197 | clients | 1 | 250 | 50 | 128 | hz-2 | 0 | 329 |
+| 197 | clients | 1 | 250 | 50 | 128 | mongo | 142 | 451 |
+| 197 | clients | 1 | 250 | 50 | 128 | nginx | 64 | 32 |
+| 197 | clients | 1 | 250 | 50 | 128 | search | 196 | 266 |
+| 197 | clients | 1 | 250 | 50 | 256 | hz-1 | 0 | 321 |
+| 197 | clients | 1 | 250 | 50 | 256 | hz-2 | 0 | 330 |
+| 197 | clients | 1 | 250 | 50 | 256 | mongo | 147 | 412 |
+| 197 | clients | 1 | 250 | 50 | 256 | nginx | 64 | 35 |
+| 197 | clients | 1 | 250 | 50 | 256 | search | 196 | 268 |
+| 197 | clients | 2 | 250 | 50 | 1 | hz-1 | 1 | 321 |
+| 197 | clients | 2 | 250 | 50 | 1 | hz-2 | 1 | 330 |
+| 197 | clients | 2 | 250 | 50 | 1 | mongo | 39 | 449 |
+| 197 | clients | 2 | 250 | 50 | 1 | nginx | 15 | 29 |
+| 197 | clients | 2 | 250 | 50 | 1 | search | 40 | 266 |
+| 197 | clients | 2 | 250 | 50 | 8 | hz-1 | 1 | 321 |
+| 197 | clients | 2 | 250 | 50 | 8 | hz-2 | 1 | 329 |
+| 197 | clients | 2 | 250 | 50 | 8 | mongo | 184 | 474 |
+| 197 | clients | 2 | 250 | 50 | 8 | nginx | 89 | 29 |
+| 197 | clients | 2 | 250 | 50 | 8 | search | 277 | 267 |
+| 197 | clients | 2 | 250 | 50 | 32 | hz-1 | 0 | 321 |
+| 197 | clients | 2 | 250 | 50 | 32 | hz-2 | 1 | 330 |
+| 197 | clients | 2 | 250 | 50 | 32 | mongo | 195 | 472 |
+| 197 | clients | 2 | 250 | 50 | 32 | nginx | 84 | 30 |
+| 197 | clients | 2 | 250 | 50 | 32 | search | 282 | 267 |
+| 197 | clients | 2 | 250 | 50 | 128 | hz-1 | 1 | 321 |
+| 197 | clients | 2 | 250 | 50 | 128 | hz-2 | 1 | 329 |
+| 197 | clients | 2 | 250 | 50 | 128 | mongo | 193 | 474 |
+| 197 | clients | 2 | 250 | 50 | 128 | nginx | 83 | 33 |
+| 197 | clients | 2 | 250 | 50 | 128 | search | 287 | 267 |
+| 197 | clients | 2 | 250 | 50 | 256 | - | 0 | 0 |
+| 197 | clients | 2 | 250 | 50 | 256 | hz-1 | 1 | 322 |
+| 197 | clients | 2 | 250 | 50 | 256 | hz-2 | 1 | 330 |
+| 197 | clients | 2 | 250 | 50 | 256 | mongo | 195 | 470 |
+| 197 | clients | 2 | 250 | 50 | 256 | nginx | 86 | 36 |
+| 197 | clients | 2 | 250 | 50 | 256 | search | 303 | 267 |
+| 197 | clients | 4 | 250 | 50 | 1 | hz-1 | 0 | 323 |
+| 197 | clients | 4 | 250 | 50 | 1 | hz-2 | 0 | 330 |
+| 197 | clients | 4 | 250 | 50 | 1 | mongo | 37 | 450 |
+| 197 | clients | 4 | 250 | 50 | 1 | nginx | 14 | 30 |
+| 197 | clients | 4 | 250 | 50 | 1 | search | 44 | 266 |
+| 197 | clients | 4 | 250 | 50 | 8 | hz-1 | 1 | 322 |
+| 197 | clients | 4 | 250 | 50 | 8 | hz-2 | 1 | 329 |
+| 197 | clients | 4 | 250 | 50 | 8 | mongo | 178 | 458 |
+| 197 | clients | 4 | 250 | 50 | 8 | nginx | 86 | 31 |
+| 197 | clients | 4 | 250 | 50 | 8 | search | 307 | 266 |
+| 197 | clients | 4 | 250 | 50 | 32 | hz-1 | 1 | 322 |
+| 197 | clients | 4 | 250 | 50 | 32 | hz-2 | 1 | 329 |
+| 197 | clients | 4 | 250 | 50 | 32 | mongo | 190 | 464 |
+| 197 | clients | 4 | 250 | 50 | 32 | nginx | 85 | 31 |
+| 197 | clients | 4 | 250 | 50 | 32 | search | 312 | 266 |
+| 197 | clients | 4 | 250 | 50 | 128 | hz-1 | 1 | 322 |
+| 197 | clients | 4 | 250 | 50 | 128 | hz-2 | 1 | 331 |
+| 197 | clients | 4 | 250 | 50 | 128 | mongo | 192 | 472 |
+| 197 | clients | 4 | 250 | 50 | 128 | nginx | 84 | 33 |
+| 197 | clients | 4 | 250 | 50 | 128 | search | 326 | 267 |
+| 197 | clients | 4 | 250 | 50 | 256 | hz-1 | 1 | 322 |
+| 197 | clients | 4 | 250 | 50 | 256 | hz-2 | 1 | 329 |
+| 197 | clients | 4 | 250 | 50 | 256 | mongo | 196 | 471 |
+| 197 | clients | 4 | 250 | 50 | 256 | nginx | 88 | 36 |
+| 197 | clients | 4 | 250 | 50 | 256 | search | 340 | 267 |
+| 10000 | clients | 1 | 250 | 50 | 1 | hz-1 | 1 | 352 |
+| 10000 | clients | 1 | 250 | 50 | 1 | hz-2 | 0 | 350 |
+| 10000 | clients | 1 | 250 | 50 | 1 | mongo | 24 | 1012 |
+| 10000 | clients | 1 | 250 | 50 | 1 | nginx | 6 | 29 |
+| 10000 | clients | 1 | 250 | 50 | 1 | search | 63 | 357 |
+| 10000 | clients | 1 | 250 | 50 | 8 | hz-1 | 1 | 352 |
+| 10000 | clients | 1 | 250 | 50 | 8 | hz-2 | 0 | 350 |
+| 10000 | clients | 1 | 250 | 50 | 8 | mongo | 44 | 1012 |
+| 10000 | clients | 1 | 250 | 50 | 8 | nginx | 11 | 30 |
+| 10000 | clients | 1 | 250 | 50 | 8 | search | 197 | 357 |
+| 10000 | clients | 1 | 250 | 50 | 32 | hz-1 | 1 | 352 |
+| 10000 | clients | 1 | 250 | 50 | 32 | hz-2 | 0 | 350 |
+| 10000 | clients | 1 | 250 | 50 | 32 | mongo | 44 | 995 |
+| 10000 | clients | 1 | 250 | 50 | 32 | nginx | 10 | 31 |
+| 10000 | clients | 1 | 250 | 50 | 32 | search | 196 | 358 |
+| 10000 | clients | 1 | 250 | 50 | 128 | hz-1 | 1 | 352 |
+| 10000 | clients | 1 | 250 | 50 | 128 | hz-2 | 0 | 350 |
+| 10000 | clients | 1 | 250 | 50 | 128 | mongo | 42 | 1006 |
+| 10000 | clients | 1 | 250 | 50 | 128 | nginx | 12 | 32 |
+| 10000 | clients | 1 | 250 | 50 | 128 | search | 197 | 359 |
+| 10000 | clients | 1 | 250 | 50 | 256 | hz-1 | 1 | 352 |
+| 10000 | clients | 1 | 250 | 50 | 256 | hz-2 | 0 | 350 |
+| 10000 | clients | 1 | 250 | 50 | 256 | mongo | 43 | 1024 |
+| 10000 | clients | 1 | 250 | 50 | 256 | nginx | 11 | 35 |
+| 10000 | clients | 1 | 250 | 50 | 256 | search | 199 | 365 |
+| 10000 | clients | 2 | 250 | 50 | 1 | hz-1 | 0 | 352 |
+| 10000 | clients | 2 | 250 | 50 | 1 | hz-2 | 0 | 350 |
+| 10000 | clients | 2 | 250 | 50 | 1 | mongo | 23 | 996 |
+| 10000 | clients | 2 | 250 | 50 | 1 | nginx | 6 | 30 |
+| 10000 | clients | 2 | 250 | 50 | 1 | search | 64 | 360 |
+| 10000 | clients | 2 | 250 | 50 | 8 | hz-1 | 1 | 352 |
+| 10000 | clients | 2 | 250 | 50 | 8 | hz-2 | 1 | 354 |
+| 10000 | clients | 2 | 250 | 50 | 8 | mongo | 77 | 1002 |
+| 10000 | clients | 2 | 250 | 50 | 8 | nginx | 23 | 30 |
+| 10000 | clients | 2 | 250 | 50 | 8 | search | 393 | 360 |
+| 10000 | clients | 2 | 250 | 50 | 32 | hz-1 | 1 | 352 |
+| 10000 | clients | 2 | 250 | 50 | 32 | hz-2 | 1 | 349 |
+| 10000 | clients | 2 | 250 | 50 | 32 | mongo | 70 | 1012 |
+| 10000 | clients | 2 | 250 | 50 | 32 | nginx | 20 | 31 |
+| 10000 | clients | 2 | 250 | 50 | 32 | search | 393 | 360 |
+| 10000 | clients | 2 | 250 | 50 | 128 | hz-1 | 1 | 352 |
+| 10000 | clients | 2 | 250 | 50 | 128 | hz-2 | 1 | 349 |
+| 10000 | clients | 2 | 250 | 50 | 128 | mongo | 72 | 689 |
+| 10000 | clients | 2 | 250 | 50 | 128 | nginx | 22 | 33 |
+| 10000 | clients | 2 | 250 | 50 | 128 | search | 389 | 367 |
+| 10000 | clients | 2 | 250 | 50 | 256 | hz-1 | 1 | 352 |
+| 10000 | clients | 2 | 250 | 50 | 256 | hz-2 | 1 | 350 |
+| 10000 | clients | 2 | 250 | 50 | 256 | mongo | 70 | 706 |
+| 10000 | clients | 2 | 250 | 50 | 256 | nginx | 22 | 35 |
+| 10000 | clients | 2 | 250 | 50 | 256 | search | 393 | 360 |
+| 10000 | clients | 4 | 250 | 50 | 1 | hz-1 | 0 | 352 |
+| 10000 | clients | 4 | 250 | 50 | 1 | hz-2 | 0 | 350 |
+| 10000 | clients | 4 | 250 | 50 | 1 | mongo | 25 | 706 |
+| 10000 | clients | 4 | 250 | 50 | 1 | nginx | 6 | 30 |
+| 10000 | clients | 4 | 250 | 50 | 1 | search | 66 | 359 |
+| 10000 | clients | 4 | 250 | 50 | 8 | hz-1 | 1 | 352 |
+| 10000 | clients | 4 | 250 | 50 | 8 | hz-2 | 1 | 349 |
+| 10000 | clients | 4 | 250 | 50 | 8 | mongo | 105 | 705 |
+| 10000 | clients | 4 | 250 | 50 | 8 | nginx | 32 | 31 |
+| 10000 | clients | 4 | 250 | 50 | 8 | search | 581 | 359 |
+| 10000 | clients | 4 | 250 | 50 | 32 | hz-1 | 1 | 352 |
+| 10000 | clients | 4 | 250 | 50 | 32 | hz-2 | 1 | 349 |
+| 10000 | clients | 4 | 250 | 50 | 32 | mongo | 121 | 707 |
+| 10000 | clients | 4 | 250 | 50 | 32 | nginx | 37 | 32 |
+| 10000 | clients | 4 | 250 | 50 | 32 | search | 755 | 359 |
+| 10000 | clients | 4 | 250 | 50 | 128 | hz-1 | 1 | 352 |
+| 10000 | clients | 4 | 250 | 50 | 128 | hz-2 | 1 | 350 |
+| 10000 | clients | 4 | 250 | 50 | 128 | mongo | 117 | 707 |
+| 10000 | clients | 4 | 250 | 50 | 128 | nginx | 40 | 35 |
+| 10000 | clients | 4 | 250 | 50 | 128 | search | 737 | 372 |
+| 10000 | clients | 4 | 250 | 50 | 256 | hz-1 | 1 | 352 |
+| 10000 | clients | 4 | 250 | 50 | 256 | hz-2 | 1 | 350 |
+| 10000 | clients | 4 | 250 | 50 | 256 | mongo | 119 | 716 |
+| 10000 | clients | 4 | 250 | 50 | 256 | nginx | 41 | 38 |
+| 10000 | clients | 4 | 250 | 50 | 256 | search | 750 | 360 |
 
 ## JMH: mean time per search (one row per configuration)
 

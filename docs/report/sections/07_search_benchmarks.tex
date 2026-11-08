@@ -17,18 +17,23 @@ Memory and storage & 16 GB, NVMe SSD \\
 Operating system & Ubuntu 24.04, Linux 7.0 \\
 JVM & OpenJDK 21.0.12, heap fixed at 4 GB for JMH \\
 Power & Plugged in, balanced energy profile \\
-Code & commit \code{263fb9f} for JMH \\
+Docker & 28.3.3, with the 12 CPUs and 16 GB of the host \\
+Code & commit \code{5e85611} for the load tests, \code{ba4f120} for JMH and the test with the pipeline \\
 \bottomrule
 \end{tabularx}
 \caption{Reference machine of the benchmarks.}
 \end{table}
 
-\textbf{A deviation in the JMH run.} A loop of \code{docker stats} left over from an earlier test was running during the
-measures. It takes little CPU, and the errors of the results are small, but the machine was not completely idle, as
-\S6.3 of the assignment asks.
-
-\pending{Add the Docker version and the commit of the load tests from their \code{host.txt}. If JMH is measured
-again without that process, replace the numbers of this section and remove the paragraph above.}
+\textbf{Two runs of JMH.} During the first run (7 November) a loop of \code{docker stats} left over from an earlier test
+was running, so the machine was not completely idle, as \S6.3 of the assignment asks. JMH was therefore measured again
+on 8 November without it; this section uses that second run, and the first one is kept in
+\code{results/jmh-previous}. Intersection and filters agree between both runs within 5~\% in most configurations
+(the largest difference is 19~\%). Pagination and threads, the last benchmarks of the run, came out slower than in the
+first run, by up to 58~\%, with errors of up to 15~\%: the same search (\code{common}, 100,000 books, first page of 20) took 4.92~ms in the
+intersection benchmark and 7.02~ms in the pagination benchmark a quarter of an hour later, while the first run gave
+4.84~ms for both. Something slowed the machine down at the end of the second run, and we could not find out what. The
+conclusions below compare configurations measured together, and they are the same in both runs; the absolute times of
+pagination and threads are the least reliable numbers of this section.
 
 \subsection{Microbenchmarks with JMH}
 
@@ -66,10 +71,10 @@ mean time of one search, with its 99.9~\% error in the CSV files.
 \toprule
 \textbf{Query} & \textbf{Matches} & \textbf{200 books} & \textbf{10,000} & \textbf{100,000} \\
 \midrule
-\code{common} & 50 \% & 2.7 µs & 362 µs & 6.06 ms \\
-\code{common frequent} & 15 \% & 1.5 µs & 288 µs & 3.45 ms \\
-\code{common frequent medium} & 1.5 \% & 0.8 µs & 78 µs & 0.85 ms \\
-\code{common rare} & 0.5 \% & 0.3 µs & 4.3 µs & 0.15 ms \\
+\code{common} & 50 \% & 2.6 µs & 373 µs & 4.92 ms \\
+\code{common frequent} & 15 \% & 1.4 µs & 287 µs & 3.11 ms \\
+\code{common frequent medium} & 1.5 \% & 0.8 µs & 79 µs & 0.84 ms \\
+\code{common rare} & 0.5 \% & 0.3 µs & 4.4 µs & 0.16 ms \\
 \bottomrule
 \end{tabularx}
 \caption{JMH: intersection without filters, first page of 20, one thread.}
@@ -84,22 +89,24 @@ mean time of one search, with its 99.9~\% error in the CSV files.
 \textbf{What the intersection shows.}
 \begin{itemize}
   \item \textbf{The cost follows the number of matches, not only the length of the lists.} With 100,000 books the
-        four queries all read the list of \code{common}, 50,000 ids, yet they range from 6.06~ms to 0.15~ms. A rarer
+        four queries all read the list of \code{common}, 50,000 ids, yet they range from 4.92~ms to 0.16~ms. A rarer
         term makes the shortest list shorter, so the intersection walks fewer ids, and fewer matches are then checked
         against the snapshot, filtered and sorted.
   \item \textbf{Ten times more books cost more than ten times as much at the top of the scale.} From 10,000 to
-        100,000 books, \code{common} goes from 362~µs to 6.06~ms, 16.7 times. Sorting every match grows faster than
+        100,000 books, \code{common} goes from 373~µs to 4.92~ms, 13.2 times. Sorting every match grows faster than
         linearly, and the larger lists no longer fit in the CPU caches. These are our explanations; they were not
         measured separately.
 \end{itemize}
 
-\textbf{Filters.} With 100,000 books and the query \code{common}, no filter takes 4.97~ms. The language filter adds
-5~\% and the author filter 12~\%, because it compares strings ignoring case; all of them together, 14~\%. The year
-filter takes 8~\% less, because it leaves fewer books to sort. Filters run in memory on the metadata of the snapshot,
+\textbf{Filters.} With 100,000 books and the query \code{common}, no filter takes 5.37~ms. The author filter adds
+17~\%, because it compares strings ignoring case, and all of them together 14~\%; the language filter stays within the
+error. The year filter takes 15~\% less, because it leaves fewer books to sort. The errors here are 10--14~\%, so
+only the author and year filters differ clearly from no filter. Filters run in memory on the metadata of the snapshot,
 after the intersection, so they never add a query to MongoDB.
 
 \textbf{Pagination.} The position of the page does not change the cost: with 100,000 books, the first page, the middle
-one and one near the end all take about 4.84--4.87~ms, within the error, and so do pages of 100 results. Every search
+one and one near the end take 7.02, 7.63 and 7.59~ms, within their error of about 1~ms, and pages of 100 results take
+the same (7.36--7.45~ms). The first run shows the same with lower times (4.84--4.87~ms). Every search
 does all the work (intersection, filters, ordering of every match) before cutting the page, and the cut itself costs
 almost nothing. The other side is that the first page is not cheaper either: a user who only looks at 20 results
 pays for all of them. Caching the result of a query until the next version is published would avoid it, because a
@@ -113,8 +120,8 @@ snapshot never changes.
 
 \textbf{Threads.} \code{SearchEngine} has no state of its own and the snapshot is immutable, so several threads
 search at once without locks. With 100,000 books and \code{common frequent}, 2 threads complete 1.9 times as many
-searches per second as one, 4 threads 3.6 times and 8 threads 5.7 times. Each search becomes slower as threads are
-added, from 3.31~ms with one to 4.62~ms with eight. The threads do not wait for each other, but they share the CPU
+searches per second as one, 4 threads 2.9 times and 8 threads 5.1 times (1.9, 3.6 and 5.7 in the first run). Each search
+becomes slower as threads are added, from 3.59~ms with one to 5.63~ms with eight. The threads do not wait for each other, but they share the CPU
 caches and the memory bandwidth, and 8 threads exceed the 6 physical cores of the machine.
 
 \begin{figure}[H]
@@ -143,7 +150,8 @@ Clients & 1, 8, 32, 128, 256 clients with 1, 2 and 4 replicas & 250 threads, poo
 Threads & 16 and 64 Jetty threads, with the same clients & 1 replica, pool of 50, nginx with 2 CPUs \\
 Pool & 10 and 100 MongoDB connections, with 32, 128 and 256 clients & 1 replica, 250 threads, nginx with 2 CPUs \\
 nginx & 0.5 CPUs, the limit of the deployment, with 32, 128 and 256 clients & 1 replica, 250 threads, pool of 50 \\
-Index size & 200 real books, and 100,000 synthetic ones if available & Same as the clients experiment \\
+Index size & The clients experiment with 197 real books and with 10,000 synthetic ones & Same as the clients
+experiment \\
 \bottomrule
 \end{tabularx}
 \caption{Load experiments. Client concurrency, threads per process and replicas are kept apart.}
@@ -162,14 +170,185 @@ the 0.5 limit separately.
         longer bound each container, and the replicas compete for the same cores.
 \end{itemize}
 
-\pending{Insert the tables and figures of \code{results/analysis/}: throughput and p95 against clients for each number
-of replicas, the effect of threads and of the pool, and CPU and memory per container.}
+\textbf{The indexes.} The 15 books of the Stage~1 sample; 197 of the 200 real books of \code{shared/book\_ids.txt}
+(3 could not be ingested from Project Gutenberg); and 10,000 synthetic books (DR-16), indexed by the whole pipeline
+(Control, Ingestion and Indexing) in 2~h~49~min before the measures. Search and MongoDB have 2~CPUs each (each Search
+replica has its own 2), nginx has 2 except in the nginx experiment, and the three containers have 1~GB of memory,
+nginx 128~MB.
+
+\subsubsection{Results}
+
+The 192 runs sent 29.6 million requests. \textbf{No answer had a wrong result}, with up to 4 replicas. There were
+\textbf{3 HTTP errors}, all in the most overloaded configuration (10,000 books, one replica, 256 clients: 3 of 27,784
+requests, with a slowest answer of 5.5~s); the generator does not keep their status code. No request timed out or
+failed to connect.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}rrrrrrl@{}}
+\toprule
+\textbf{Books} & \textbf{Replicas} & \textbf{1 client} & \textbf{Peak} & \textbf{p95, 32 cl.} & \textbf{p95, 256 cl.} &
+\textbf{CPU at its limit} \\
+ & & req/s & req/s & ms & ms & \\
+\midrule
+15 & 1 & 2,363 & 7,579 & 7.7 & 91.7 & Search and MongoDB \\
+15 & 2 & 2,182 & 7,652 & 7.1 & 88.8 & MongoDB \\
+15 & 4 & 1,950 & 7,391 & 8.3 & 79.2 & MongoDB \\
+\midrule
+197 & 1 & 2,040 & 5,932 & 30.2 & 96.3 & Search \\
+197 & 2 & 1,914 & 7,347 & 8.5 & 99.1 & MongoDB \\
+197 & 4 & 1,703 & 7,071 & 9.8 & 80.3 & MongoDB \\
+\midrule
+10,000 & 1 & 532 & 1,036 & 87.7 & 984.6 & Search \\
+10,000 & 2 & 513 & 1,729 & 69.9 & 792.3 & Search \\
+10,000 & 4 & 495 & 2,612 & 31.5 & 515.5 & Search, and the host \\
+\bottomrule
+\end{tabular}
+\caption{Clients experiment: throughput with one client and at its peak, p95 with 32 and 256 clients, and the
+container whose CPU reaches its limit (mean of 3 repetitions; standard deviations are in \code{tables.md}, at most 3.2~\%
+of the throughput).}
+\label{tab:load-clients}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/load_throughput.pdf}
+\caption{Throughput against clients for 1, 2 and 4 replicas, for each index.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/load_p95.pdf}
+\caption{p95 latency against clients (logarithmic scale).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/load_cpu.pdf}
+\caption{Mean CPU per container with 128 clients. Search adds its replicas, so its limit is 200~\% per replica.}
+\label{fig:load-cpu}
+\end{figure}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Configuration (15 books, 1 replica)} & \textbf{Clients} & \textbf{req/s} & \textbf{p50 ms} & \textbf{p95 ms} &
+\textbf{p99 ms} \\
+\midrule
+250 Jetty threads, pool of 50 (reference) & 256 & 7,548 & 23.9 & 91.7 & 179.6 \\
+16 Jetty threads & 256 & 7,841 & 27.2 & 66.8 & 74.4 \\
+64 Jetty threads & 256 & 7,802 & 27.1 & 67.2 & 77.0 \\
+\midrule
+Pool of 10 MongoDB connections & 128 & 6,887 & 4.3 & 78.6 & 119.4 \\
+Pool of 10 MongoDB connections & 256 & 6,805 & 3.9 & 166.4 & 280.3 \\
+Pool of 100 MongoDB connections & 256 & 7,634 & 25.7 & 78.6 & 140.4 \\
+\midrule
+nginx with 0.5 CPUs (the deployment) & 32 & 5,331 & 2.3 & 58.5 & 65.3 \\
+nginx with 0.5 CPUs (the deployment) & 256 & 5,607 & 22.5 & 93.8 & 99.7 \\
+\bottomrule
+\end{tabular}
+\caption{Threads, pool and nginx: one factor changed against the reference configuration.}
+\label{tab:load-factors}
+\end{table}
 
 \subsection{Analysis}
 
-\pending{Write it from the measures, without assuming the outcome. It must answer: at how many clients does the
-throughput stop growing, and what happens to p95 and p99? Which container reaches its CPU limit first (Search, MongoDB
-or nginx)? Do replicas and threads help, and if not, why? Is the pool of 50 connections too small or too large, as this
-was an estimate? Does a larger index move the bottleneck to MongoDB? Were there errors or wrong results?}
+\textbf{Where it saturates.} The throughput stops growing between 8 and 32 clients in every configuration. From
+there on, more clients only wait longer: the generator is a closed loop, so the mean latency is the number of clients
+divided by the throughput, as Little's law says (with 15 books, one replica and 256 clients, 256~/~7,596 req/s =
+33.7~ms, and the measured mean is 33.7~ms). p95 and p99 grow in the same proportion: with 15 books and one replica, p95
+goes from 1.4~ms with 8 clients to 91.7~ms with 256, for the same throughput.
 
-\pending{State what was not measured and why: full pipeline under load, 100,000 books if DR-16 did not arrive.}
+\textbf{What limits it depends on the size of the index} (Figure~\ref{fig:load-cpu} and Table~\ref{tab:load-clients}).
+\begin{itemize}
+  \item \textbf{15 books: MongoDB.} A search over a tiny index costs Search almost nothing, but each one still asks
+        MongoDB for the posting list of every term. With one replica, Search (192~\%) and MongoDB (175--190~\%) are
+        both at their 2~CPUs. More replicas give Search spare CPU (it uses 239--279~\% of the 400--800~\% it has),
+        but MongoDB stays at 193--200~\%, and the throughput stays at about 7,500 req/s.
+  \item \textbf{197 books: Search, then MongoDB.} Longer posting lists make the intersection more expensive, and one
+        replica saturates first (198~\%, while MongoDB uses 148~\%): 5,900 req/s. A second replica gives 24~\% more
+        (7,350 req/s), until MongoDB reaches its limit (184--195~\%); a fourth one adds nothing.
+  \item \textbf{10,000 books: Search.} Each search has to intersect, filter and order almost the whole index (see the
+        limitations below), so Search spends far more CPU per request: one replica gives 1,036 req/s at its limit
+        (197--200~\%) while MongoDB uses only 42~\%. Here replicas do help: 2 replicas give 1.7 times as many requests
+        and 4 replicas 2.5 times. Four replicas do not reach 4 times because the host runs out: the containers use 9.3
+        to 9.5 of its 12 logical CPUs (6 physical cores), and the generator shares them.
+\end{itemize}
+So a larger index does \textbf{not} move the bottleneck to MongoDB; it moves it the other way, to the CPU of Search.
+MongoDB returns longer lists, but Search does more work with each of them. This is what the JMH results predicted:
+the cost of a search grows with the number of books that match.
+
+\textbf{Replicas.} They increase the throughput only while Search is the bottleneck, and only up to the next one
+(MongoDB with small indexes, the host with 4 replicas and 10,000 books). They always help the tail: with 256 clients,
+p99 falls from 180 to 98~ms with 15 books, from 250 to 104~ms with 197 and from 1,833 to 1,272~ms with 10,000 when
+going from 1 to 4 replicas, because each JVM has fewer requests waiting behind a slow one or a garbage collection.
+With a single client, more replicas are slightly slower (2,363 to 1,950 req/s with 15 books, about 0.1~ms more per
+request); each request goes to one replica in any case, and nginx spreads consecutive requests over JVMs that are each
+less warm. We did not study it further.
+
+\textbf{Jetty threads.} 250 threads give no more throughput than 16 or 64, and a worse tail
+(Table~\ref{tab:load-factors}): with 256 clients, 16 threads give 4~\% more requests and a p99 of 74~ms instead of
+180~ms. With 2~CPUs, the extra threads only compete for them and are preempted in the middle of a request; with few
+threads, the requests wait in Jetty's queue and are then served without interruption. A value between 16 and 64 would
+be a better default than 250.
+
+\textbf{The MongoDB pool.} The pool of 50 connections, which was an estimate, is enough. A pool of 10 is too small with
+128 clients or more: the throughput falls 9--10~\%, p95 rises 1.5 to 1.8 times, and p50 \emph{falls} to about 4~ms.
+The requests that get a connection are served quickly, while the rest wait for one; MongoDB is then less busy
+(166--167~\%). A pool of 100 gives the same as 50 (within about 1~\%), because MongoDB is already at its CPU limit.
+
+\textbf{nginx in the deployment.} With the 0.5~CPUs of the deployment, nginx is the first bottleneck: it reaches its
+limit (49--50~\%) and caps the system at 5,300--5,600 req/s, 26--29~\% less than with 2~CPUs, while Search
+and MongoDB stay at 114--126~\% of their 200~\%, with a p95 of 58.5~ms
+already at 32 clients (7.7~ms with 2~CPUs). That is why the other experiments give it 2~CPUs. A deployment that must
+serve more than about 5,000 searches per second should raise \code{NGINX\_CPUS}.
+
+\textbf{Memory.} No container was short of memory except MongoDB with 10,000 books, which reached 1,024~MB, its
+1~GB limit (Search used at most 372~MB). It did not limit these tests, where MongoDB used only 42--121~\% of its CPU, but its
+cache would be the next limit with a larger index.
+
+\textbf{Limitations of these results.}
+\begin{itemize}
+  \item The synthetic books spread the words at random, so a common word is in almost every book (\emph{whale} is in
+        293 of 300). With 10,000 books almost every query matches almost the whole index, which is the worst case for
+        Search: real books would give shorter results and higher throughput.
+  \item The generator shares the machine with the system and competes with it for CPU, most of all with 4 replicas.
+  \item \code{containers.csv} takes one sample about every 2~s, so short peaks of CPU do not appear in the means.
+  \item 100,000 books were not tested under load: the pipeline indexes about one book per second on this machine, so
+        building that index would take more than a day. JMH covers 100,000 books without HTTP or MongoDB.
+\end{itemize}
+
+\subsection{Search while the pipeline works}
+
+\code{run-mixed.sh} measures how Search and the pipeline affect each other (\S6.4 of the assignment). It builds an
+index of 2,000 synthetic books with the whole system, one replica of each service, and then measures Search with 32 and
+128 clients twice: \emph{idle}, and \emph{mixed}, while the Control, Ingestion and Indexing process 4,000 more books.
+It also measures the pipeline alone and under the load of Search. Each phase is repeated 3 times, 60~s each.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Phase} & \textbf{Clients} & \textbf{req/s} & \textbf{p50 ms} & \textbf{p95 ms} & \textbf{p99 ms} \\
+\midrule
+Idle & 32 & 2,903 & 4.6 & 63.8 & 68.4 \\
+Mixed & 32 & 2,686 & 5.3 & 61.1 & 67.6 \\
+Idle & 128 & 3,017 & 18.5 & 108.7 & 200.9 \\
+Mixed & 128 & 2,594 & 24.0 & 160.4 & 249.8 \\
+\bottomrule
+\end{tabular}
+\caption{Search idle and while the pipeline works (mean of 3 repetitions; 2,000 books, one replica of each service).
+The pipeline indexes 2.42 $\pm$ 0.23 books/s alone and 0.91 $\pm$ 0.04 books/s under the load of Search.}
+\label{tab:mixed}
+\end{table}
+
+\textbf{They meet in MongoDB.} With the pipeline idle, Search is at its 2~CPUs (201--202~\%) and MongoDB uses 80~\%:
+with 2,000 synthetic books the queries are long, as in the index of 10,000. When the pipeline works, MongoDB rises to
+191--192~\%, its limit, because of the writes of Indexing; Indexing itself uses 3~\% of its CPU, because it waits for
+MongoDB. Search keeps its CPU, but each query waits longer for its posting lists: with 128 clients it serves 14~\%
+fewer requests and its p95 rises by 48~\%; with 32 clients, 7~\% fewer and the same p95. The pipeline suffers more: it
+falls to 38~\% of its rate, because its own bottleneck, MongoDB, is now shared. Both kept working and no answer was
+wrong, so the services interfere only through the capacity of MongoDB. On one host this is the main limit of the
+system; a MongoDB that serves the reads of Search apart from the writes of Indexing (a replica set) would remove most
+of it.
