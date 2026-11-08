@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
@@ -208,14 +209,22 @@ class IndexingExperimentTest {
         assertEquals(2.5, IndexingExperiment.median(new double[] {4, 1, 2, 3}));
     }
 
+    /** Without any cluster: a bad argument fails before connecting, never waits for Hazelcast. */
     @Test
-    void losArgumentosMalosSeRechazan() {
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)  // fails even if it hangs
+    void losArgumentosMalosSeRechazanSinConectar() {
         Env env = Env.of(Map.of());
         PrintStream out = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
         assertThrows(IllegalArgumentException.class, () -> IndexingExperiment.run(new String[0], env, out));
         assertThrows(IllegalArgumentException.class, () -> IndexingExperiment.run(new String[] {"nada"}, env, out));
         assertThrows(IllegalArgumentException.class, () -> IndexingExperiment.run(new String[] {"seed", "1"}, env, out));
         assertThrows(IllegalArgumentException.class, () -> IndexingExperiment.run(new String[] {"seed", "1", "-3"}, env, out));
+        assertThrows(IllegalArgumentException.class,
+                () -> IndexingExperiment.run(new String[] {"wait", "INDEXED", "0", "60"}, env, out));
+        assertThrows(IllegalArgumentException.class,
+                () -> IndexingExperiment.run(new String[] {"wait", "INDEXED", "10", "x"}, env, out));
+        assertThrows(IllegalArgumentException.class,
+                () -> IndexingExperiment.run(new String[] {"measure", "-1", "60", "out.csv", "--", "true"}, env, out));
         assertThrows(IllegalArgumentException.class,
                 () -> IndexingExperiment.run(new String[] {"measure", "10", "60", "out.csv"}, env, out), "sin comando");
         assertThrows(IllegalArgumentException.class,

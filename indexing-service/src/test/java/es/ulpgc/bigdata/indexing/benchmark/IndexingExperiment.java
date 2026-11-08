@@ -95,20 +95,25 @@ public final class IndexingExperiment {
             throw new IllegalArgumentException("no command");
         }
         String[] rest = Arrays.copyOfRange(args, 1, args.length);
+        // Every argument is checked before connecting: the Hazelcast client retries for ever
+        // when no cluster answers, so a bad argument must never wait for one (review of #57).
         switch (args[0]) {
             case "seed" -> {
                 need(rest, 2);
+                int first = positive(rest[0]);
+                int count = positive(rest[1]);
                 try (Connection c = Connection.hazelcast(env)) {
-                    out.println(seed(c.coordination(), positive(rest[0]), positive(rest[1])));
+                    out.println(seed(c.coordination(), first, count));
                 }
                 return 0;
             }
             case "wait" -> {
                 need(rest, 3);
                 List<BookState> states = states(rest[0]);
+                int count = positive(rest[1]);
+                Duration timeout = Duration.ofSeconds(positive(rest[2]));
                 try (Connection c = Connection.hazelcast(env)) {
-                    return waitFor(c.coordination(), states, positive(rest[1]),
-                            Duration.ofSeconds(positive(rest[2])), POLL) ? 0 : 1;
+                    return waitFor(c.coordination(), states, count, timeout, POLL) ? 0 : 1;
                 }
             }
             case "measure" -> {
@@ -117,12 +122,14 @@ public final class IndexingExperiment {
                     throw new IllegalArgumentException("measure COUNT SECONDS OUT -- COMMAND...");
                 }
                 List<String> command = List.of(rest).subList(4, rest.length);
+                int count = positive(rest[0]);
+                Duration timeout = Duration.ofSeconds(positive(rest[1]));
                 try (Connection c = Connection.hazelcast(env);
                      Timeline timeline = new Timeline(Path.of(rest[2]))) {
                     Coordination coordination = c.coordination();
                     Measurement m = measure(() -> coordination.count(BookState.INDEXED),
-                            () -> coordination.count(BookState.FAILED), positive(rest[0]),
-                            Duration.ofSeconds(positive(rest[1])), POLL, () -> start(command), timeline);
+                            () -> coordination.count(BookState.FAILED), count, timeout, POLL,
+                            () -> start(command), timeline);
                     out.println(m.summary());
                     return m.complete() ? 0 : 1;
                 }
