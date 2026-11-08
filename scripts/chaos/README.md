@@ -10,7 +10,7 @@ nothing `FAILED`, every book complete in the datalake and, with Indexing, in the
 | `kill-ingestion` | `docker kill` (SIGKILL) of one of 2 Ingestion replicas while it ingests | Its books are requeued when their lease expires and the other replica finishes them; half-written books (no `_READY`) do not count |
 | `kill-hazelcast-member` | `docker kill hz-1` during the ingestion | Nothing is lost (backup on hz-2), the clients carry on, the Control rebuilds nothing; hz-1 rejoins |
 | `kill-control` | `docker kill` of the Control while Indexing indexes | Ingestion and Indexing keep working, nothing is published until it is back; the new Control rebuilds nothing and publishes the rest |
-| `restart-hazelcast` | `docker kill hz-1 hz-2`, then both started again (empty) | The Control rebuilds `book-state` from `index_books`, `index_log` and `_READY` (CF-10); the books without evidence are sent again; no book with `_READY` is downloaded again; all end `PUBLISHED` |
+| `restart-hazelcast` | A first wave of books gets published; while the second wave is being ingested, `docker kill hz-1 hz-2`, then both started again (empty) | The Control rebuilds `book-state` from `index_books`, `index_log` and `_READY` (CF-10); the books without evidence (there must be some) are sent again; no book with `_READY` is downloaded again; all end `PUBLISHED` |
 
 ## How to run them
 
@@ -29,6 +29,11 @@ python3 scripts/chaos/chaos.py all --books 400      # quicker, the same checks
   (`chaos_test`) of its own and deletes both at the end, so the data of other work is not touched.
 - Settings shorter than in production, so that a lost lease is requeued in seconds:
   `LEASE_SECONDS=15`, `LEASE_CHECK_SECONDS=3`, `PUBLISH_INTERVAL_S=5`. The rest comes from `.env`.
+- With the local source a whole ingestion takes seconds, so a failure could come after the end and every check would
+  pass without testing anything. The scenarios that kill during the ingestion therefore run **one worker per replica**,
+  cause the failure as soon as a twentieth of the books is ingested (polling every 0.2 s), and **check that books were
+  still in flight** right after it: if none were, the scenario is a FAIL, not a PASS. If it happens on a fast machine,
+  run with more books (`--books 6000`).
 - Before killing a container its restart policy is removed (`docker update --restart=no`): otherwise
   `restart: unless-stopped` could bring it back by itself, and the scenario decides when it comes back.
 

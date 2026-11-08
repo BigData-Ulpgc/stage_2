@@ -143,10 +143,10 @@ def wait_for(what, predicate, timeout, every=0.5):
 class Scenario:
     """The run of one scenario: its system, its events and its checks, and the report."""
 
-    def __init__(self, name, title, expected, books, replicas=1, indexing=False):
+    def __init__(self, name, title, expected, books, replicas=1, indexing=False, workers=WORKERS):
         self.name, self.title, self.expected = name, title, expected
         self.folder, self.ids = books
-        self.replicas, self.indexing = replicas, indexing
+        self.replicas, self.indexing, self.workers = replicas, indexing, workers
         self.out = os.path.join(ROOT, "scripts", "chaos", "results", name)
         self.events, self.checks = [], []
         self.began = None
@@ -157,6 +157,7 @@ class Scenario:
         shutil.rmtree(self.out, ignore_errors=True)
         os.makedirs(os.path.join(self.out, "logs"))
         SETTINGS["INGESTION_LOCAL_HOST_DIR"] = "./" + self.folder
+        SETTINGS["INGESTION_WORKERS"] = str(self.workers)
         compose("down")
         wipe_datalake()
         compose("up", "-d", "--wait", "mongo")
@@ -164,7 +165,7 @@ class Scenario:
         services = ["hz-1", "hz-2", "control", "ingestion"] + (["indexing"] if self.indexing else [])
         compose("up", "-d", "--wait", "--scale", f"ingestion={self.replicas}", *services)
         wait_for("the Control and every replica connected, book-state empty", self.ready, 180)
-        self.event(f"system up: {self.replicas} Ingestion replica(s) with {WORKERS} workers"
+        self.event(f"system up: {self.replicas} Ingestion replica(s) with {self.workers} worker(s)"
                    + (", Indexing" if self.indexing else "") + f"; {len(self.ids)} books")
 
     def ready(self):
@@ -185,6 +186,20 @@ class Scenario:
         answer = seed(self.ids)
         self.event(f"POST /control/jobs: {answer['added']} added, {answer['already_known']} already known")
         return answer
+
+    def seed_part(self, ids, what):
+        if self.began is None:
+            self.began = time.monotonic()
+        answer = seed(ids)
+        self.event(f"POST /control/jobs, {what}: {answer['added']} added, {answer['already_known']} already known")
+        return answer
+
+    def check_caught_halfway(self, books, what):
+        """The failure must hit books still in flight: with the local source a run can end in
+        seconds, and a failure after the end would pass every check without testing anything."""
+        pending = len(self.ids) - self.past_ingestion(books)
+        self.check(f"the failure happened with books still to {what}", pending > 0,
+                   f"{pending} books not yet past ingestion right after it ({describe(books)})")
 
     def seed_all_again(self):
         answer = seed(self.ids)
@@ -212,7 +227,7 @@ class Scenario:
             if books.get("FAILED", 0):
                 raise ChaosFailure(f"{books['FAILED']} books FAILED while waiting for {what}")
             return books if count_of(books) >= at_least else None
-        books = wait_for(what, reached, timeout)
+        books = wait_for(what, reached, timeout, every=0.2)
         self.event(f"{what}: {describe(books)}")
         return books
 
@@ -273,7 +288,7 @@ class Scenario:
             report.write(f"# {self.title}: {'PASS' if passed else 'FAIL'}\n\n")
             report.write(f"Run {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, commit "
                          f"{run(['git', 'rev-parse', '--short', 'HEAD']).strip()}, {len(self.ids)} synthetic books "
-                         f"({self.folder}), {self.replicas} Ingestion replica(s) with {WORKERS} workers"
+                         f"({self.folder}), {self.replicas} Ingestion replica(s) with {self.workers} worker(s)"
                          f"{', Indexing' if self.indexing else ''}. LEASE_SECONDS={LEASE_SECONDS}, "
                          f"LEASE_CHECK_SECONDS=3, PUBLISH_INTERVAL_S=5.\n\n")
             report.write(f"## Expected\n\n{self.expected}\n\n## What happened\n\n")
@@ -350,7 +365,8 @@ does not grow) and no lease is checked. When it starts again it finds the `initi
 idempotent. In the end every book is `PUBLISHED`, once (contract §7, "the Control dies")."""
 
 RESTART_HAZELCAST_EXPECTED = """\
-Both members are killed at once and started again: `book-state`, the queues, the lock and the
+A first wave of books is seeded and gets published; then the rest is seeded and, while it is
+being ingested, both members are killed at once and started again: `book-state`, the queues, the lock and the
 `initialized` marker are lost (Hazelcast keeps nothing on disk). Every client reconnects by itself.
 The Control finds no marker and rebuilds `book-state` from the persistent evidence (CF-10, contract
 §7): `index_books` up to CURRENT → `PUBLISHED`, `index_log` → `INDEXED`, `<id>._READY` →
@@ -369,12 +385,13 @@ def kill_ingestion(s):
         s.timeline.writerow(["elapsed_s", *TIMELINE_STATES])
         s.seed_all()
         n = len(s.ids)
-        before = s.wait_until("a fifth of the books ingested", s.past_ingestion, n // 5, 300)
+        before = s.wait_until("a twentieth of the books ingested", s.past_ingestion, n // 20, 300)
         victim = containers("ingestion")[0]
-        s.snapshot("before-kill")
         killed(victim)
+        after_kill = s.snapshot("after-kill")["books"]
         s.event(f"docker kill of replica {victim[:12]}: {before.get('INGESTING', 0)} books INGESTING in "
-                "both replicas at that moment")
+                f"both replicas just before; right after: {describe(after_kill)}")
+        s.check_caught_halfway(after_kill, "ingest")
         books = s.wait_until("every book past ingestion", s.past_ingestion, n, LEASE_SECONDS + 300)
     requeued = control_status()["lease_check"]["requeued_or_failed"]
     s.event(f"the Control requeued {requeued} books with an expired lease")
@@ -393,10 +410,11 @@ def kill_hazelcast_member(s):
         s.timeline.writerow(["elapsed_s", *TIMELINE_STATES])
         s.seed_all()
         n = len(s.ids)
-        s.wait_until("a fifth of the books ingested", s.past_ingestion, n // 5, 300)
-        s.snapshot("before-kill")
+        s.wait_until("a twentieth of the books ingested", s.past_ingestion, n // 20, 300)
         killed("hz-1")
-        s.event("docker kill hz-1")
+        after_kill = wait_for("an answer of the Control with hz-2 alone", lambda: s.snapshot("after-kill")["books"], 60)
+        s.event(f"docker kill hz-1; right after, with hz-2 alone: {describe(after_kill)}")
+        s.check_caught_halfway(after_kill, "ingest")
         s.wait_until("every book past ingestion, with hz-2 alone", s.past_ingestion, n, 600)
         compose("start", "hz-1")
         compose("up", "-d", "--wait", "hz-1")
@@ -423,6 +441,7 @@ def kill_control(s):
         s.snapshot("before-kill")
         killed(containers("control")[0])
         s.timeline = None                               # the Control is down: nothing to poll
+        time.sleep(2)                                   # a publication in flight (about 70 ms) ends first
         published_at_kill = mongo_count("index_books")
         indexed_at_kill = service_status(indexing, 7002)["writer"]["indexed"]
         s.event(f"docker kill of the Control: {published_at_kill} books in index_books, "
@@ -454,14 +473,20 @@ def restart_hazelcast(s):
     with open(os.path.join(s.out, "timeline.csv"), "w", newline="") as file:
         s.timeline = csv.writer(file)
         s.timeline.writerow(["elapsed_s", *TIMELINE_STATES])
-        s.seed_all()
         n = len(s.ids)
-        s.wait_until("a quarter of the books PUBLISHED", lambda b: b.get("PUBLISHED", 0), n // 4, 900)
-        lost_before = s.snapshot("before-restart")["books"]
+        first = s.ids[:n // 5]
+        # The first wave gets published, so every kind of evidence exists; the second wave is still
+        # being ingested when the cluster dies, so some books have no evidence at all.
+        s.seed_part(first, f"first wave of {len(first)} books")
+        s.wait_until("the first publication", lambda b: b.get("PUBLISHED", 0), 1, 900)
+        s.seed_part(s.ids[len(first):], f"second wave of {n - len(first)} books")
+        s.wait_until("the second wave being ingested", s.past_ingestion, len(first) + 10, 300)
         before = s.ingestion_counters("before-restart")
+        lost_before = s.snapshot("before-restart")["books"]
         killed("hz-1")
         killed("hz-2")
-        s.event(f"docker kill hz-1 hz-2, the whole cluster ({describe(lost_before)})")
+        s.event(f"docker kill hz-1 hz-2, the whole cluster ({describe(lost_before)} just before)")
+        s.check_caught_halfway(lost_before, "ingest")
         compose("start", "hz-1", "hz-2")
         compose("up", "-d", "--wait", "hz-1", "hz-2")
         s.event("hz-1 and hz-2 started again and healthy, empty")
@@ -472,8 +497,8 @@ def restart_hazelcast(s):
                 f"{recovery['indexed']} INDEXED, {recovery['downloaded']} DOWNLOADED")
         evidence = recovery["published"] + recovery["indexed"] + recovery["downloaded"]
         answer = s.seed_all_again()
-        s.check("POST /control/jobs added exactly the books without evidence",
-                answer["added"] == n - evidence and answer["already_known"] == evidence,
+        s.check("POST /control/jobs added exactly the books without evidence, and there were some",
+                0 < answer["added"] == n - evidence and answer["already_known"] == evidence,
                 f"{answer['added']} added, {answer['already_known']} already known; evidence for {evidence}")
         s.wait_until("every book PUBLISHED", lambda b: b.get("PUBLISHED", 0), n, 1200)
     after = s.ingestion_counters()
@@ -488,10 +513,10 @@ def restart_hazelcast(s):
 
 
 SCENARIOS = {  # name: (body, title, expected, system)
-    "kill-ingestion": (kill_ingestion, "Kill an Ingestion replica in the middle of its books", KILL_INGESTION_EXPECTED, dict(replicas=2)),
-    "kill-hazelcast-member": (kill_hazelcast_member, "Kill one Hazelcast member", KILL_HAZELCAST_MEMBER_EXPECTED, dict()),
+    "kill-ingestion": (kill_ingestion, "Kill an Ingestion replica in the middle of its books", KILL_INGESTION_EXPECTED, dict(replicas=2, workers=1)),
+    "kill-hazelcast-member": (kill_hazelcast_member, "Kill one Hazelcast member", KILL_HAZELCAST_MEMBER_EXPECTED, dict(workers=1)),
     "kill-control": (kill_control, "Kill the Control Module", KILL_CONTROL_EXPECTED, dict(indexing=True)),
-    "restart-hazelcast": (restart_hazelcast, "Restart the whole Hazelcast cluster", RESTART_HAZELCAST_EXPECTED, dict(indexing=True)),
+    "restart-hazelcast": (restart_hazelcast, "Restart the whole Hazelcast cluster", RESTART_HAZELCAST_EXPECTED, dict(indexing=True, workers=1)),
 }
 
 
