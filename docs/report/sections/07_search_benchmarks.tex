@@ -1,7 +1,7 @@
 \section{Benchmarks and results: Search}
 \label{sec:benchmarks}
 
-This part covers Search; Section~7 of the final report consolidates it with the other services. The scripts and
+This part covers Search; Section~\ref{sec:consolidation} consolidates it with the other services. The scripts and
 the instructions to repeat every measure are in \code{benchmarks/search/}.
 
 \subsection{Reference machine}
@@ -14,7 +14,7 @@ All the valid measures come from one machine, idle during the run. \code{host.tx
 \toprule
 CPU & Intel Core i7-9750H, 2.60 GHz: 6 cores, 12 logical CPUs \\
 Memory and storage & 16 GB, NVMe SSD \\
-Operating system & Ubuntu 24.04, Linux 7.0 \\
+Operating system & Ubuntu 24.04.5, Linux 7.0 \\
 JVM & OpenJDK 21.0.12, heap fixed at 4 GB for JMH \\
 Power & Plugged in, performance energy profile \\
 Docker & 28.3.3, with the 12 CPUs and 16 GB of the host \\
@@ -257,8 +257,8 @@ nginx with 0.5 CPUs (the deployment) & 256 & 5,607 & 22.5 & 93.8 & 99.7 \\
 
 \textbf{Where it saturates.} The throughput stops growing between 8 and 32 clients in every configuration. From
 there on, more clients only wait longer: the generator is a closed loop, so the mean latency is the number of clients
-divided by the throughput, as Little's law says (with 15 books, one replica and 256 clients, 256~/~7,596 req/s =
-33.7~ms, and the measured mean is 33.7~ms). p95 and p99 grow in the same proportion: with 15 books and one replica, p95
+divided by the throughput, as Little's law says (with 15 books, one replica and 256 clients, 256~/~7,548 req/s =
+33.9~ms, and the measured mean is 33.9~ms). p95 and p99 grow in the same proportion: with 15 books and one replica, p95
 goes from 1.4~ms with 8 clients to 91.7~ms with 256, for the same throughput.
 
 \textbf{What limits it depends on the size of the index} (Figure~\ref{fig:load-cpu} and Table~\ref{tab:load-clients}).

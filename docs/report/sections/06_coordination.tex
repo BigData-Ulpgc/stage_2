@@ -76,7 +76,7 @@ cluster that Stage 3 needs: partitions spread over members, one backup of every 
 anything, and clients that move to the other member. On one host they share its failures, so this is evidence of the
 mechanism, not real high availability.
 
-\textbf{Ingestion: replicas and workers.} Ingestion scales by adding processes (\code{--scale ingestion=N}) or threads
+\textbf{Ingestion: replicas and workers.} Ingestion scales by adding processes (\code{-{}-scale ingestion=N}) or threads
 (\code{INGESTION\_WORKERS}). Both pull from the same queue, so the work is shared without any configuration, and
 correctness does not depend on the counts. Downloading is mostly waiting on the network, which favours several workers
 per process (4 by default); the limit is Gutenberg, which throttles a client that downloads too fast. With the local

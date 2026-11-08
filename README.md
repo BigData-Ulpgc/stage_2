@@ -296,7 +296,7 @@ All the valid measures must come from one idle machine, with the limits of `.env
 
 The report is in [`docs/report/`](docs/report/): the submitted PDF is
 [`Stage2_SOA_BigData-Ulpgc.pdf`](docs/report/Stage2_SOA_BigData-Ulpgc.pdf), and `cd docs/report && pdflatex report.tex`,
-run twice so that the contents and the references are complete, builds it again from the sources.
+run three times so that the contents and the references settle, builds it again from the sources.
 
 ## Repository layout
 
