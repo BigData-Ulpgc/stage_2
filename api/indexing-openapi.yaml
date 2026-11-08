@@ -152,7 +152,7 @@ paths:
         **Provider:** Indexing Service. **Consumers:** Control Module (every `PUBLISH_BATCH`
         books or `PUBLISH_INTERVAL_S` seconds).
 
-        Publishes version V+1 (contract §6.5): records the books of `index_log` that are not
+        Publishes version V+1 (`api/contracts/index-publication.md` §7): records the books of `index_log` that are not
         published yet in `index_books` with version V+1 (a book keeps the first version in which
         it became visible), then switches the `CURRENT` document of `index_meta` to V+1 in ONE
         atomic operation, and records the version in `index_publications`. The index itself is

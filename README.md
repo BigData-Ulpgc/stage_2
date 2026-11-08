@@ -45,8 +45,8 @@ Storage chosen for Stage 2 (goal: hundreds of thousands of books):
 | Store | Structure | Where |
 |---|---|---|
 | Datalake | `range`: folders of 1000 ids; a book exists when its `<id>._READY` marker is there, written last (contract §6.2). Datalakes written before DR-06 have no markers: their books are ingested again | `<DATA_DIR>/datalake/range/<START>-<END>/<id>.header.txt`, `<id>.body.txt`, `<id>._READY` |
-| Metadata | MongoDB, one document per book with the book id as `_id` (contract §6.3) | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / collection `books` |
-| Inverted index | MongoDB, one document `{"term", "postings"}` per term | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / `MONGO_COLLECTION` (`inverted_index`) |
+| Metadata | MongoDB, one document per book with the book id as `_id` ([`index-publication.md`](api/contracts/index-publication.md) §3) | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / collection `books` |
+| Inverted index | MongoDB, one document `{"term", "postings"}` per term; a book is visible to Search once it is published ([`index-publication.md`](api/contracts/index-publication.md)) | `MONGO_URI` / `MONGO_DATABASE` (`search_engine`) / `MONGO_COLLECTION` (`inverted_index`) |
 
 Tests: the MongoDB ones run against `MONGO_URI` (default `mongodb://localhost:27017`, database
 `search_engine_test`) and are skipped, not failed, when no MongoDB answers:
