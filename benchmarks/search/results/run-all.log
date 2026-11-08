@@ -450,3 +450,2966 @@ Matplotlib is building the font cache; this may take a moment.
 WARNING: clients r1 c256 rep1: 3 HTTP errors, 0 wrong results, 0 connection errors
 17:46:57 Results committed. Now: git push origin test/DP-12-benchmarks
 17:46:57 Finished with failed steps: Search with the pipeline running (see benchmarks/search/results/run-all.log)
+11:43:30 Checking the machine
+11:43:30 Host: 12 logical CPUs, 15 GB of RAM, Docker 15 GB, 75 GB free on disk, load 0.35
+11:43:30 Sample dataset: /home/daniel/Documentos/Universidad/4Year/Big_Data/Stage_1/sample_dataset/book (15 books)
+11:43:31 The machine is ready. During the run: plugged in, no suspension, nothing else open.
+11:43:31 JMH: measured again (REDO); the committed results are now benchmarks/search/results/jmh-previous
+11:43:31 JMH: starting
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 200, terms = common)
+
+# Run progress: 0.00% complete, ETA 00:06:00
+# Fork: 1 of 2
+# Warmup Iteration   1: 4.231 us/op
+# Warmup Iteration   2: 4.110 us/op
+# Warmup Iteration   3: 4.052 us/op
+# Warmup Iteration   4: 2.497 us/op
+# Warmup Iteration   5: 2.524 us/op
+Iteration   1: 2.502 us/op
+Iteration   2: 2.500 us/op
+Iteration   3: 2.489 us/op
+Iteration   4: 2.521 us/op
+Iteration   5: 2.811 us/op
+Iteration   6: 3.104 us/op
+Iteration   7: 2.494 us/op
+Iteration   8: 2.518 us/op
+Iteration   9: 2.526 us/op
+Iteration  10: 2.481 us/op
+
+# Run progress: 4.17% complete, ETA 00:05:54
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.244 us/op
+# Warmup Iteration   2: 4.276 us/op
+# Warmup Iteration   3: 4.266 us/op
+# Warmup Iteration   4: 2.685 us/op
+# Warmup Iteration   5: 2.619 us/op
+Iteration   1: 2.562 us/op
+Iteration   2: 2.540 us/op
+Iteration   3: 2.547 us/op
+Iteration   4: 2.570 us/op
+Iteration   5: 2.563 us/op
+Iteration   6: 2.559 us/op
+Iteration   7: 2.554 us/op
+Iteration   8: 2.557 us/op
+Iteration   9: 2.558 us/op
+Iteration  10: 2.555 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  2.576 ±(99.9%) 0.123 us/op [Average]
+  (min, avg, max) = (2.481, 2.576, 3.104), stdev = 0.142
+  CI (99.9%): [2.453, 2.699] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 200, terms = common_frequent)
+
+# Run progress: 8.33% complete, ETA 00:05:38
+# Fork: 1 of 2
+# Warmup Iteration   1: 2.041 us/op
+# Warmup Iteration   2: 2.011 us/op
+# Warmup Iteration   3: 1.994 us/op
+# Warmup Iteration   4: 2.073 us/op
+# Warmup Iteration   5: 2.256 us/op
+Iteration   1: 1.435 us/op
+Iteration   2: 1.401 us/op
+Iteration   3: 1.411 us/op
+Iteration   4: 1.407 us/op
+Iteration   5: 1.411 us/op
+Iteration   6: 1.418 us/op
+Iteration   7: 1.413 us/op
+Iteration   8: 1.417 us/op
+Iteration   9: 1.409 us/op
+Iteration  10: 1.427 us/op
+
+# Run progress: 12.50% complete, ETA 00:05:23
+# Fork: 2 of 2
+# Warmup Iteration   1: 1.971 us/op
+# Warmup Iteration   2: 1.982 us/op
+# Warmup Iteration   3: 1.969 us/op
+# Warmup Iteration   4: 1.986 us/op
+# Warmup Iteration   5: 1.435 us/op
+Iteration   1: 1.427 us/op
+Iteration   2: 1.427 us/op
+Iteration   3: 1.421 us/op
+Iteration   4: 1.427 us/op
+Iteration   5: 1.685 us/op
+Iteration   6: 1.712 us/op
+Iteration   7: 1.425 us/op
+Iteration   8: 1.424 us/op
+Iteration   9: 1.427 us/op
+Iteration  10: 1.435 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  1.448 ±(99.9%) 0.075 us/op [Average]
+  (min, avg, max) = (1.401, 1.448, 1.712), stdev = 0.086
+  CI (99.9%): [1.373, 1.523] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 200, terms = common_rare)
+
+# Run progress: 16.67% complete, ETA 00:05:07
+# Fork: 1 of 2
+# Warmup Iteration   1: 0.580 us/op
+# Warmup Iteration   2: 0.578 us/op
+# Warmup Iteration   3: 0.382 us/op
+# Warmup Iteration   4: 0.306 us/op
+# Warmup Iteration   5: 0.305 us/op
+Iteration   1: 0.306 us/op
+Iteration   2: 0.305 us/op
+Iteration   3: 0.306 us/op
+Iteration   4: 0.305 us/op
+Iteration   5: 0.304 us/op
+Iteration   6: 0.305 us/op
+Iteration   7: 0.297 us/op
+Iteration   8: 0.297 us/op
+Iteration   9: 0.301 us/op
+Iteration  10: 0.305 us/op
+
+# Run progress: 20.83% complete, ETA 00:04:52
+# Fork: 2 of 2
+# Warmup Iteration   1: 0.587 us/op
+# Warmup Iteration   2: 0.569 us/op
+# Warmup Iteration   3: 0.374 us/op
+# Warmup Iteration   4: 0.302 us/op
+# Warmup Iteration   5: 0.305 us/op
+Iteration   1: 0.305 us/op
+Iteration   2: 0.305 us/op
+Iteration   3: 0.305 us/op
+Iteration   4: 0.305 us/op
+Iteration   5: 0.305 us/op
+Iteration   6: 0.305 us/op
+Iteration   7: 0.305 us/op
+Iteration   8: 0.305 us/op
+Iteration   9: 0.305 us/op
+Iteration  10: 0.304 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  0.304 ±(99.9%) 0.002 us/op [Average]
+  (min, avg, max) = (0.297, 0.304, 0.306), stdev = 0.003
+  CI (99.9%): [0.302, 0.306] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 200, terms = common_frequent_medium)
+
+# Run progress: 25.00% complete, ETA 00:04:37
+# Fork: 1 of 2
+# Warmup Iteration   1: 1.078 us/op
+# Warmup Iteration   2: 1.176 us/op
+# Warmup Iteration   3: 1.103 us/op
+# Warmup Iteration   4: 0.893 us/op
+# Warmup Iteration   5: 0.758 us/op
+Iteration   1: 0.760 us/op
+Iteration   2: 0.758 us/op
+Iteration   3: 0.761 us/op
+Iteration   4: 0.757 us/op
+Iteration   5: 0.760 us/op
+Iteration   6: 0.758 us/op
+Iteration   7: 0.762 us/op
+Iteration   8: 0.930 us/op
+Iteration   9: 0.890 us/op
+Iteration  10: 0.776 us/op
+
+# Run progress: 29.17% complete, ETA 00:04:21
+# Fork: 2 of 2
+# Warmup Iteration   1: 1.142 us/op
+# Warmup Iteration   2: 1.172 us/op
+# Warmup Iteration   3: 1.188 us/op
+# Warmup Iteration   4: 0.995 us/op
+# Warmup Iteration   5: 0.801 us/op
+Iteration   1: 0.805 us/op
+Iteration   2: 0.800 us/op
+Iteration   3: 0.803 us/op
+Iteration   4: 0.801 us/op
+Iteration   5: 0.801 us/op
+Iteration   6: 0.798 us/op
+Iteration   7: 0.800 us/op
+Iteration   8: 0.803 us/op
+Iteration   9: 0.800 us/op
+Iteration  10: 0.802 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  0.796 ±(99.9%) 0.038 us/op [Average]
+  (min, avg, max) = (0.757, 0.796, 0.930), stdev = 0.044
+  CI (99.9%): [0.758, 0.835] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 10000, terms = common)
+
+# Run progress: 33.33% complete, ETA 00:04:06
+# Fork: 1 of 2
+# Warmup Iteration   1: 474.230 us/op
+# Warmup Iteration   2: 375.999 us/op
+# Warmup Iteration   3: 413.938 us/op
+# Warmup Iteration   4: 415.868 us/op
+# Warmup Iteration   5: 414.747 us/op
+Iteration   1: 415.867 us/op
+Iteration   2: 421.678 us/op
+Iteration   3: 351.793 us/op
+Iteration   4: 350.878 us/op
+Iteration   5: 350.909 us/op
+Iteration   6: 358.373 us/op
+Iteration   7: 351.577 us/op
+Iteration   8: 355.117 us/op
+Iteration   9: 354.475 us/op
+Iteration  10: 354.124 us/op
+
+# Run progress: 37.50% complete, ETA 00:03:50
+# Fork: 2 of 2
+# Warmup Iteration   1: 460.473 us/op
+# Warmup Iteration   2: 387.396 us/op
+# Warmup Iteration   3: 421.470 us/op
+# Warmup Iteration   4: 410.796 us/op
+# Warmup Iteration   5: 409.613 us/op
+Iteration   1: 408.927 us/op
+Iteration   2: 579.290 us/op
+Iteration   3: 387.076 us/op
+Iteration   4: 355.040 us/op
+Iteration   5: 353.452 us/op
+Iteration   6: 353.861 us/op
+Iteration   7: 353.154 us/op
+Iteration   8: 339.514 us/op
+Iteration   9: 335.553 us/op
+Iteration  10: 336.023 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  373.334 ±(99.9%) 47.447 us/op [Average]
+  (min, avg, max) = (335.553, 373.334, 579.290), stdev = 54.640
+  CI (99.9%): [325.887, 420.781] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 10000, terms = common_frequent)
+
+# Run progress: 41.67% complete, ETA 00:03:35
+# Fork: 1 of 2
+# Warmup Iteration   1: 327.841 us/op
+# Warmup Iteration   2: 263.091 us/op
+# Warmup Iteration   3: 247.146 us/op
+# Warmup Iteration   4: 267.497 us/op
+# Warmup Iteration   5: 281.844 us/op
+Iteration   1: 279.697 us/op
+Iteration   2: 279.304 us/op
+Iteration   3: 279.862 us/op
+Iteration   4: 276.495 us/op
+Iteration   5: 278.626 us/op
+Iteration   6: 279.163 us/op
+Iteration   7: 288.245 us/op
+Iteration   8: 279.040 us/op
+Iteration   9: 287.203 us/op
+Iteration  10: 282.250 us/op
+
+# Run progress: 45.83% complete, ETA 00:03:20
+# Fork: 2 of 2
+# Warmup Iteration   1: 363.557 us/op
+# Warmup Iteration   2: 287.291 us/op
+# Warmup Iteration   3: 273.149 us/op
+# Warmup Iteration   4: 282.820 us/op
+# Warmup Iteration   5: 385.822 us/op
+Iteration   1: 315.509 us/op
+Iteration   2: 292.840 us/op
+Iteration   3: 297.577 us/op
+Iteration   4: 289.402 us/op
+Iteration   5: 288.985 us/op
+Iteration   6: 288.714 us/op
+Iteration   7: 288.441 us/op
+Iteration   8: 288.505 us/op
+Iteration   9: 289.524 us/op
+Iteration  10: 291.281 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  287.033 ±(99.9%) 7.698 us/op [Average]
+  (min, avg, max) = (276.495, 287.033, 315.509), stdev = 8.866
+  CI (99.9%): [279.335, 294.732] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 10000, terms = common_rare)
+
+# Run progress: 50.00% complete, ETA 00:03:04
+# Fork: 1 of 2
+# Warmup Iteration   1: 7.337 us/op
+# Warmup Iteration   2: 4.860 us/op
+# Warmup Iteration   3: 5.320 us/op
+# Warmup Iteration   4: 5.301 us/op
+# Warmup Iteration   5: 5.285 us/op
+Iteration   1: 5.354 us/op
+Iteration   2: 4.344 us/op
+Iteration   3: 4.159 us/op
+Iteration   4: 4.208 us/op
+Iteration   5: 4.164 us/op
+Iteration   6: 4.239 us/op
+Iteration   7: 4.228 us/op
+Iteration   8: 4.202 us/op
+Iteration   9: 4.504 us/op
+Iteration  10: 5.660 us/op
+
+# Run progress: 54.17% complete, ETA 00:02:49
+# Fork: 2 of 2
+# Warmup Iteration   1: 7.316 us/op
+# Warmup Iteration   2: 4.663 us/op
+# Warmup Iteration   3: 5.137 us/op
+# Warmup Iteration   4: 5.158 us/op
+# Warmup Iteration   5: 5.153 us/op
+Iteration   1: 5.189 us/op
+Iteration   2: 4.444 us/op
+Iteration   3: 4.092 us/op
+Iteration   4: 4.097 us/op
+Iteration   5: 4.098 us/op
+Iteration   6: 4.108 us/op
+Iteration   7: 4.061 us/op
+Iteration   8: 4.072 us/op
+Iteration   9: 4.090 us/op
+Iteration  10: 4.096 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  4.370 ±(99.9%) 0.405 us/op [Average]
+  (min, avg, max) = (4.061, 4.370, 5.660), stdev = 0.467
+  CI (99.9%): [3.965, 4.776] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 10000, terms = common_frequent_medium)
+
+# Run progress: 58.33% complete, ETA 00:02:34
+# Fork: 1 of 2
+# Warmup Iteration   1: 90.047 us/op
+# Warmup Iteration   2: 74.614 us/op
+# Warmup Iteration   3: 73.036 us/op
+# Warmup Iteration   4: 71.763 us/op
+# Warmup Iteration   5: 71.924 us/op
+Iteration   1: 72.512 us/op
+Iteration   2: 73.052 us/op
+Iteration   3: 77.373 us/op
+Iteration   4: 114.917 us/op
+Iteration   5: 73.586 us/op
+Iteration   6: 74.534 us/op
+Iteration   7: 74.738 us/op
+Iteration   8: 74.849 us/op
+Iteration   9: 75.224 us/op
+Iteration  10: 74.850 us/op
+
+# Run progress: 62.50% complete, ETA 00:02:18
+# Fork: 2 of 2
+# Warmup Iteration   1: 90.193 us/op
+# Warmup Iteration   2: 75.693 us/op
+# Warmup Iteration   3: 74.384 us/op
+# Warmup Iteration   4: 72.941 us/op
+# Warmup Iteration   5: 73.180 us/op
+Iteration   1: 72.376 us/op
+Iteration   2: 72.244 us/op
+Iteration   3: 74.489 us/op
+Iteration   4: 75.888 us/op
+Iteration   5: 75.976 us/op
+Iteration   6: 75.832 us/op
+Iteration   7: 75.777 us/op
+Iteration   8: 76.050 us/op
+Iteration   9: 89.087 us/op
+Iteration  10: 95.689 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  78.452 ±(99.9%) 8.950 us/op [Average]
+  (min, avg, max) = (72.244, 78.452, 114.917), stdev = 10.307
+  CI (99.9%): [69.502, 87.402] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common)
+
+# Run progress: 66.67% complete, ETA 00:02:03
+# Fork: 1 of 2
+# Warmup Iteration   1: 4915.267 us/op
+# Warmup Iteration   2: 4555.327 us/op
+# Warmup Iteration   3: 4742.459 us/op
+# Warmup Iteration   4: 5190.328 us/op
+# Warmup Iteration   5: 5198.734 us/op
+Iteration   1: 5188.108 us/op
+Iteration   2: 5316.511 us/op
+Iteration   3: 5246.091 us/op
+Iteration   4: 5305.905 us/op
+Iteration   5: 4504.676 us/op
+Iteration   6: 4486.785 us/op
+Iteration   7: 4489.383 us/op
+Iteration   8: 4491.092 us/op
+Iteration   9: 4464.356 us/op
+Iteration  10: 4431.061 us/op
+
+# Run progress: 70.83% complete, ETA 00:01:48
+# Fork: 2 of 2
+# Warmup Iteration   1: 5190.757 us/op
+# Warmup Iteration   2: 4781.965 us/op
+# Warmup Iteration   3: 4941.213 us/op
+# Warmup Iteration   4: 5490.349 us/op
+# Warmup Iteration   5: 5484.629 us/op
+Iteration   1: 5493.323 us/op
+Iteration   2: 5477.085 us/op
+Iteration   3: 5466.134 us/op
+Iteration   4: 5503.273 us/op
+Iteration   5: 5047.735 us/op
+Iteration   6: 4709.374 us/op
+Iteration   7: 4700.778 us/op
+Iteration   8: 4704.349 us/op
+Iteration   9: 4680.933 us/op
+Iteration  10: 4605.411 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  4915.618 ±(99.9%) 359.089 us/op [Average]
+  (min, avg, max) = (4431.061, 4915.618, 5503.273), stdev = 413.527
+  CI (99.9%): [4556.529, 5274.707] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_frequent)
+
+# Run progress: 75.00% complete, ETA 00:01:32
+# Fork: 1 of 2
+# Warmup Iteration   1: 3407.982 us/op
+# Warmup Iteration   2: 4317.002 us/op
+# Warmup Iteration   3: 2978.462 us/op
+# Warmup Iteration   4: 2975.734 us/op
+# Warmup Iteration   5: 3081.861 us/op
+Iteration   1: 2990.127 us/op
+Iteration   2: 3215.039 us/op
+Iteration   3: 3238.391 us/op
+Iteration   4: 3232.266 us/op
+Iteration   5: 3214.334 us/op
+Iteration   6: 3214.343 us/op
+Iteration   7: 3231.532 us/op
+Iteration   8: 3213.491 us/op
+Iteration   9: 3200.875 us/op
+Iteration  10: 3209.079 us/op
+
+# Run progress: 79.17% complete, ETA 00:01:17
+# Fork: 2 of 2
+# Warmup Iteration   1: 2949.481 us/op
+# Warmup Iteration   2: 2773.500 us/op
+# Warmup Iteration   3: 2735.921 us/op
+# Warmup Iteration   4: 2788.794 us/op
+# Warmup Iteration   5: 2770.644 us/op
+Iteration   1: 2984.909 us/op
+Iteration   2: 2996.718 us/op
+Iteration   3: 3046.687 us/op
+Iteration   4: 3064.724 us/op
+Iteration   5: 3053.621 us/op
+Iteration   6: 2998.615 us/op
+Iteration   7: 2995.260 us/op
+Iteration   8: 2993.750 us/op
+Iteration   9: 2998.144 us/op
+Iteration  10: 3009.902 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  3105.090 ±(99.9%) 93.656 us/op [Average]
+  (min, avg, max) = (2984.909, 3105.090, 3238.391), stdev = 107.854
+  CI (99.9%): [3011.435, 3198.746] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_rare)
+
+# Run progress: 83.33% complete, ETA 00:01:02
+# Fork: 1 of 2
+# Warmup Iteration   1: 170.728 us/op
+# Warmup Iteration   2: 148.726 us/op
+# Warmup Iteration   3: 150.964 us/op
+# Warmup Iteration   4: 146.481 us/op
+# Warmup Iteration   5: 146.707 us/op
+Iteration   1: 149.033 us/op
+Iteration   2: 146.936 us/op
+Iteration   3: 212.743 us/op
+Iteration   4: 156.989 us/op
+Iteration   5: 154.639 us/op
+Iteration   6: 154.791 us/op
+Iteration   7: 154.982 us/op
+Iteration   8: 155.118 us/op
+Iteration   9: 154.966 us/op
+Iteration  10: 154.692 us/op
+
+# Run progress: 87.50% complete, ETA 00:00:46
+# Fork: 2 of 2
+# Warmup Iteration   1: 173.445 us/op
+# Warmup Iteration   2: 161.792 us/op
+# Warmup Iteration   3: 166.298 us/op
+# Warmup Iteration   4: 155.700 us/op
+# Warmup Iteration   5: 153.907 us/op
+Iteration   1: 154.274 us/op
+Iteration   2: 147.121 us/op
+Iteration   3: 143.614 us/op
+Iteration   4: 149.655 us/op
+Iteration   5: 151.780 us/op
+Iteration   6: 152.340 us/op
+Iteration   7: 152.018 us/op
+Iteration   8: 151.578 us/op
+Iteration   9: 151.292 us/op
+Iteration  10: 151.348 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  154.995 ±(99.9%) 12.159 us/op [Average]
+  (min, avg, max) = (143.614, 154.995, 212.743), stdev = 14.002
+  CI (99.9%): [142.837, 167.154] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_frequent_medium)
+
+# Run progress: 91.67% complete, ETA 00:00:31
+# Fork: 1 of 2
+# Warmup Iteration   1: 864.236 us/op
+# Warmup Iteration   2: 810.732 us/op
+# Warmup Iteration   3: 813.403 us/op
+# Warmup Iteration   4: 829.155 us/op
+# Warmup Iteration   5: 999.326 us/op
+Iteration   1: 957.356 us/op
+Iteration   2: 814.711 us/op
+Iteration   3: 817.966 us/op
+Iteration   4: 814.520 us/op
+Iteration   5: 814.396 us/op
+Iteration   6: 815.934 us/op
+Iteration   7: 825.854 us/op
+Iteration   8: 806.430 us/op
+Iteration   9: 815.097 us/op
+Iteration  10: 811.692 us/op
+
+# Run progress: 95.83% complete, ETA 00:00:15
+# Fork: 2 of 2
+# Warmup Iteration   1: 918.484 us/op
+# Warmup Iteration   2: 836.813 us/op
+# Warmup Iteration   3: 813.251 us/op
+# Warmup Iteration   4: 819.080 us/op
+# Warmup Iteration   5: 806.727 us/op
+Iteration   1: 810.252 us/op
+Iteration   2: 806.342 us/op
+Iteration   3: 807.070 us/op
+Iteration   4: 805.882 us/op
+Iteration   5: 887.077 us/op
+Iteration   6: 1078.476 us/op
+Iteration   7: 813.597 us/op
+Iteration   8: 805.206 us/op
+Iteration   9: 805.094 us/op
+Iteration  10: 805.555 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  835.925 ±(99.9%) 58.714 us/op [Average]
+  (min, avg, max) = (805.094, 835.925, 1078.476), stdev = 67.615
+  CI (99.9%): [777.211, 894.639] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:06:13
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                     (books)                 (terms)  Mode  Cnt     Score     Error  Units
+IntersectionBenchmark.search      200                  common  avgt   20     2.576 ±   0.123  us/op
+IntersectionBenchmark.search      200         common_frequent  avgt   20     1.448 ±   0.075  us/op
+IntersectionBenchmark.search      200             common_rare  avgt   20     0.304 ±   0.002  us/op
+IntersectionBenchmark.search      200  common_frequent_medium  avgt   20     0.796 ±   0.038  us/op
+IntersectionBenchmark.search    10000                  common  avgt   20   373.334 ±  47.447  us/op
+IntersectionBenchmark.search    10000         common_frequent  avgt   20   287.033 ±   7.698  us/op
+IntersectionBenchmark.search    10000             common_rare  avgt   20     4.370 ±   0.405  us/op
+IntersectionBenchmark.search    10000  common_frequent_medium  avgt   20    78.452 ±   8.950  us/op
+IntersectionBenchmark.search   100000                  common  avgt   20  4915.618 ± 359.089  us/op
+IntersectionBenchmark.search   100000         common_frequent  avgt   20  3105.090 ±  93.656  us/op
+IntersectionBenchmark.search   100000             common_rare  avgt   20   154.995 ±  12.159  us/op
+IntersectionBenchmark.search   100000  common_frequent_medium  avgt   20   835.925 ±  58.714  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/IntersectionBenchmark.csv
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 200, filter = none)
+
+# Run progress: 0.00% complete, ETA 00:07:30
+# Fork: 1 of 2
+# Warmup Iteration   1: 3.999 us/op
+# Warmup Iteration   2: 4.094 us/op
+# Warmup Iteration   3: 3.786 us/op
+# Warmup Iteration   4: 2.426 us/op
+# Warmup Iteration   5: 2.437 us/op
+Iteration   1: 2.422 us/op
+Iteration   2: 2.428 us/op
+Iteration   3: 2.430 us/op
+Iteration   4: 2.441 us/op
+Iteration   5: 2.475 us/op
+Iteration   6: 2.511 us/op
+Iteration   7: 2.516 us/op
+Iteration   8: 2.497 us/op
+Iteration   9: 2.524 us/op
+Iteration  10: 2.526 us/op
+
+# Run progress: 3.33% complete, ETA 00:07:27
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.183 us/op
+# Warmup Iteration   2: 4.249 us/op
+# Warmup Iteration   3: 4.260 us/op
+# Warmup Iteration   4: 2.644 us/op
+# Warmup Iteration   5: 3.375 us/op
+Iteration   1: 2.599 us/op
+Iteration   2: 2.567 us/op
+Iteration   3: 2.508 us/op
+Iteration   4: 2.524 us/op
+Iteration   5: 2.496 us/op
+Iteration   6: 2.480 us/op
+Iteration   7: 2.470 us/op
+Iteration   8: 2.551 us/op
+Iteration   9: 2.505 us/op
+Iteration  10: 2.521 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  2.500 ±(99.9%) 0.041 us/op [Average]
+  (min, avg, max) = (2.422, 2.500, 2.599), stdev = 0.047
+  CI (99.9%): [2.459, 2.540] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 200, filter = language)
+
+# Run progress: 6.67% complete, ETA 00:07:11
+# Fork: 1 of 2
+# Warmup Iteration   1: 3.509 us/op
+# Warmup Iteration   2: 3.572 us/op
+# Warmup Iteration   3: 3.546 us/op
+# Warmup Iteration   4: 3.368 us/op
+# Warmup Iteration   5: 2.435 us/op
+Iteration   1: 2.619 us/op
+Iteration   2: 2.447 us/op
+Iteration   3: 2.431 us/op
+Iteration   4: 2.358 us/op
+Iteration   5: 2.354 us/op
+Iteration   6: 2.349 us/op
+Iteration   7: 2.351 us/op
+Iteration   8: 2.379 us/op
+Iteration   9: 2.435 us/op
+Iteration  10: 2.494 us/op
+
+# Run progress: 10.00% complete, ETA 00:06:56
+# Fork: 2 of 2
+# Warmup Iteration   1: 3.687 us/op
+# Warmup Iteration   2: 3.563 us/op
+# Warmup Iteration   3: 3.433 us/op
+# Warmup Iteration   4: 3.247 us/op
+# Warmup Iteration   5: 2.578 us/op
+Iteration   1: 2.504 us/op
+Iteration   2: 2.500 us/op
+Iteration   3: 2.487 us/op
+Iteration   4: 2.508 us/op
+Iteration   5: 2.515 us/op
+Iteration   6: 2.501 us/op
+Iteration   7: 2.498 us/op
+Iteration   8: 2.501 us/op
+Iteration   9: 2.493 us/op
+Iteration  10: 2.496 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  2.461 ±(99.9%) 0.062 us/op [Average]
+  (min, avg, max) = (2.349, 2.461, 2.619), stdev = 0.072
+  CI (99.9%): [2.399, 2.523] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 200, filter = year)
+
+# Run progress: 13.33% complete, ETA 00:06:40
+# Fork: 1 of 2
+# Warmup Iteration   1: 2.632 us/op
+# Warmup Iteration   2: 2.477 us/op
+# Warmup Iteration   3: 2.574 us/op
+# Warmup Iteration   4: 2.879 us/op
+# Warmup Iteration   5: 3.485 us/op
+Iteration   1: 2.946 us/op
+Iteration   2: 2.723 us/op
+Iteration   3: 2.299 us/op
+Iteration   4: 2.337 us/op
+Iteration   5: 2.412 us/op
+Iteration   6: 2.595 us/op
+Iteration   7: 2.504 us/op
+Iteration   8: 2.270 us/op
+Iteration   9: 2.244 us/op
+Iteration  10: 2.189 us/op
+
+# Run progress: 16.67% complete, ETA 00:06:25
+# Fork: 2 of 2
+# Warmup Iteration   1: 2.713 us/op
+# Warmup Iteration   2: 2.544 us/op
+# Warmup Iteration   3: 2.641 us/op
+# Warmup Iteration   4: 2.643 us/op
+# Warmup Iteration   5: 2.611 us/op
+Iteration   1: 2.573 us/op
+Iteration   2: 2.066 us/op
+Iteration   3: 2.054 us/op
+Iteration   4: 2.190 us/op
+Iteration   5: 2.457 us/op
+Iteration   6: 2.059 us/op
+Iteration   7: 2.150 us/op
+Iteration   8: 2.754 us/op
+Iteration   9: 2.186 us/op
+Iteration  10: 2.014 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  2.351 ±(99.9%) 0.228 us/op [Average]
+  (min, avg, max) = (2.014, 2.351, 2.946), stdev = 0.263
+  CI (99.9%): [2.123, 2.579] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 200, filter = author)
+
+# Run progress: 20.00% complete, ETA 00:06:10
+# Fork: 1 of 2
+# Warmup Iteration   1: 7.001 us/op
+# Warmup Iteration   2: 7.298 us/op
+# Warmup Iteration   3: 7.190 us/op
+# Warmup Iteration   4: 7.297 us/op
+# Warmup Iteration   5: 5.064 us/op
+Iteration   1: 5.102 us/op
+Iteration   2: 5.093 us/op
+Iteration   3: 5.219 us/op
+Iteration   4: 5.152 us/op
+Iteration   5: 5.000 us/op
+Iteration   6: 5.031 us/op
+Iteration   7: 5.023 us/op
+Iteration   8: 4.967 us/op
+Iteration   9: 4.996 us/op
+Iteration  10: 5.013 us/op
+
+# Run progress: 23.33% complete, ETA 00:05:54
+# Fork: 2 of 2
+# Warmup Iteration   1: 7.168 us/op
+# Warmup Iteration   2: 7.560 us/op
+# Warmup Iteration   3: 9.089 us/op
+# Warmup Iteration   4: 8.969 us/op
+# Warmup Iteration   5: 6.229 us/op
+Iteration   1: 5.350 us/op
+Iteration   2: 5.379 us/op
+Iteration   3: 5.138 us/op
+Iteration   4: 5.116 us/op
+Iteration   5: 5.253 us/op
+Iteration   6: 5.121 us/op
+Iteration   7: 5.140 us/op
+Iteration   8: 5.135 us/op
+Iteration   9: 5.144 us/op
+Iteration  10: 5.143 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  5.126 ±(99.9%) 0.096 us/op [Average]
+  (min, avg, max) = (4.967, 5.126, 5.379), stdev = 0.111
+  CI (99.9%): [5.030, 5.222] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 200, filter = all)
+
+# Run progress: 26.67% complete, ETA 00:05:39
+# Fork: 1 of 2
+# Warmup Iteration   1: 7.010 us/op
+# Warmup Iteration   2: 7.434 us/op
+# Warmup Iteration   3: 7.564 us/op
+# Warmup Iteration   4: 7.541 us/op
+# Warmup Iteration   5: 5.298 us/op
+Iteration   1: 5.107 us/op
+Iteration   2: 5.225 us/op
+Iteration   3: 5.135 us/op
+Iteration   4: 5.131 us/op
+Iteration   5: 7.376 us/op
+Iteration   6: 5.354 us/op
+Iteration   7: 5.160 us/op
+Iteration   8: 5.166 us/op
+Iteration   9: 5.221 us/op
+Iteration  10: 5.213 us/op
+
+# Run progress: 30.00% complete, ETA 00:05:23
+# Fork: 2 of 2
+# Warmup Iteration   1: 6.972 us/op
+# Warmup Iteration   2: 7.304 us/op
+# Warmup Iteration   3: 7.278 us/op
+# Warmup Iteration   4: 7.310 us/op
+# Warmup Iteration   5: 5.191 us/op
+Iteration   1: 5.137 us/op
+Iteration   2: 5.171 us/op
+Iteration   3: 5.122 us/op
+Iteration   4: 5.126 us/op
+Iteration   5: 5.153 us/op
+Iteration   6: 5.154 us/op
+Iteration   7: 5.171 us/op
+Iteration   8: 5.205 us/op
+Iteration   9: 5.193 us/op
+Iteration  10: 5.188 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  5.285 ±(99.9%) 0.430 us/op [Average]
+  (min, avg, max) = (5.107, 5.285, 7.376), stdev = 0.495
+  CI (99.9%): [4.856, 5.715] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 10000, filter = none)
+
+# Run progress: 33.33% complete, ETA 00:05:08
+# Fork: 1 of 2
+# Warmup Iteration   1: 466.202 us/op
+# Warmup Iteration   2: 395.708 us/op
+# Warmup Iteration   3: 430.767 us/op
+# Warmup Iteration   4: 420.109 us/op
+# Warmup Iteration   5: 417.912 us/op
+Iteration   1: 419.820 us/op
+Iteration   2: 417.970 us/op
+Iteration   3: 361.462 us/op
+Iteration   4: 348.706 us/op
+Iteration   5: 353.312 us/op
+Iteration   6: 352.904 us/op
+Iteration   7: 469.624 us/op
+Iteration   8: 382.843 us/op
+Iteration   9: 345.378 us/op
+Iteration  10: 345.395 us/op
+
+# Run progress: 36.67% complete, ETA 00:04:52
+# Fork: 2 of 2
+# Warmup Iteration   1: 471.102 us/op
+# Warmup Iteration   2: 384.628 us/op
+# Warmup Iteration   3: 413.819 us/op
+# Warmup Iteration   4: 410.010 us/op
+# Warmup Iteration   5: 412.908 us/op
+Iteration   1: 410.824 us/op
+Iteration   2: 409.742 us/op
+Iteration   3: 349.003 us/op
+Iteration   4: 348.077 us/op
+Iteration   5: 348.837 us/op
+Iteration   6: 349.796 us/op
+Iteration   7: 350.940 us/op
+Iteration   8: 351.665 us/op
+Iteration   9: 351.382 us/op
+Iteration  10: 349.449 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  370.856 ±(99.9%) 30.642 us/op [Average]
+  (min, avg, max) = (345.378, 370.856, 469.624), stdev = 35.288
+  CI (99.9%): [340.214, 401.499] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 10000, filter = language)
+
+# Run progress: 40.00% complete, ETA 00:04:37
+# Fork: 1 of 2
+# Warmup Iteration   1: 534.516 us/op
+# Warmup Iteration   2: 500.816 us/op
+# Warmup Iteration   3: 482.642 us/op
+# Warmup Iteration   4: 430.923 us/op
+# Warmup Iteration   5: 437.870 us/op
+Iteration   1: 434.752 us/op
+Iteration   2: 430.608 us/op
+Iteration   3: 433.755 us/op
+Iteration   4: 433.795 us/op
+Iteration   5: 392.373 us/op
+Iteration   6: 369.952 us/op
+Iteration   7: 373.805 us/op
+Iteration   8: 373.589 us/op
+Iteration   9: 374.175 us/op
+Iteration  10: 374.409 us/op
+
+# Run progress: 43.33% complete, ETA 00:04:22
+# Fork: 2 of 2
+# Warmup Iteration   1: 501.595 us/op
+# Warmup Iteration   2: 377.392 us/op
+# Warmup Iteration   3: 416.170 us/op
+# Warmup Iteration   4: 413.674 us/op
+# Warmup Iteration   5: 413.826 us/op
+Iteration   1: 413.888 us/op
+Iteration   2: 411.987 us/op
+Iteration   3: 411.636 us/op
+Iteration   4: 391.685 us/op
+Iteration   5: 363.648 us/op
+Iteration   6: 361.637 us/op
+Iteration   7: 359.722 us/op
+Iteration   8: 360.029 us/op
+Iteration   9: 369.112 us/op
+Iteration  10: 543.370 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  398.896 ±(99.9%) 37.867 us/op [Average]
+  (min, avg, max) = (359.722, 398.896, 543.370), stdev = 43.608
+  CI (99.9%): [361.029, 436.764] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 10000, filter = year)
+
+# Run progress: 46.67% complete, ETA 00:04:06
+# Fork: 1 of 2
+# Warmup Iteration   1: 432.694 us/op
+# Warmup Iteration   2: 337.027 us/op
+# Warmup Iteration   3: 339.612 us/op
+# Warmup Iteration   4: 367.401 us/op
+# Warmup Iteration   5: 367.440 us/op
+Iteration   1: 367.038 us/op
+Iteration   2: 365.453 us/op
+Iteration   3: 364.687 us/op
+Iteration   4: 364.117 us/op
+Iteration   5: 364.651 us/op
+Iteration   6: 365.449 us/op
+Iteration   7: 364.071 us/op
+Iteration   8: 365.566 us/op
+Iteration   9: 341.606 us/op
+Iteration  10: 323.014 us/op
+
+# Run progress: 50.00% complete, ETA 00:03:51
+# Fork: 2 of 2
+# Warmup Iteration   1: 422.169 us/op
+# Warmup Iteration   2: 324.803 us/op
+# Warmup Iteration   3: 329.590 us/op
+# Warmup Iteration   4: 351.212 us/op
+# Warmup Iteration   5: 351.095 us/op
+Iteration   1: 351.193 us/op
+Iteration   2: 351.585 us/op
+Iteration   3: 366.632 us/op
+Iteration   4: 407.087 us/op
+Iteration   5: 478.094 us/op
+Iteration   6: 354.636 us/op
+Iteration   7: 356.513 us/op
+Iteration   8: 377.709 us/op
+Iteration   9: 356.080 us/op
+Iteration  10: 330.796 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  365.799 ±(99.9%) 27.336 us/op [Average]
+  (min, avg, max) = (323.014, 365.799, 478.094), stdev = 31.480
+  CI (99.9%): [338.463, 393.135] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 10000, filter = author)
+
+# Run progress: 53.33% complete, ETA 00:03:36
+# Fork: 1 of 2
+# Warmup Iteration   1: 789.155 us/op
+# Warmup Iteration   2: 509.558 us/op
+# Warmup Iteration   3: 557.975 us/op
+# Warmup Iteration   4: 559.775 us/op
+# Warmup Iteration   5: 554.751 us/op
+Iteration   1: 548.415 us/op
+Iteration   2: 465.184 us/op
+Iteration   3: 514.816 us/op
+Iteration   4: 595.882 us/op
+Iteration   5: 456.156 us/op
+Iteration   6: 463.153 us/op
+Iteration   7: 443.892 us/op
+Iteration   8: 445.601 us/op
+Iteration   9: 445.101 us/op
+Iteration  10: 444.018 us/op
+
+# Run progress: 56.67% complete, ETA 00:03:20
+# Fork: 2 of 2
+# Warmup Iteration   1: 627.420 us/op
+# Warmup Iteration   2: 507.261 us/op
+# Warmup Iteration   3: 526.369 us/op
+# Warmup Iteration   4: 537.254 us/op
+# Warmup Iteration   5: 555.945 us/op
+Iteration   1: 548.521 us/op
+Iteration   2: 442.961 us/op
+Iteration   3: 442.638 us/op
+Iteration   4: 441.559 us/op
+Iteration   5: 455.281 us/op
+Iteration   6: 449.880 us/op
+Iteration   7: 450.037 us/op
+Iteration   8: 437.987 us/op
+Iteration   9: 434.210 us/op
+Iteration  10: 434.324 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  467.981 ±(99.9%) 39.747 us/op [Average]
+  (min, avg, max) = (434.210, 467.981, 595.882), stdev = 45.773
+  CI (99.9%): [428.233, 507.728] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 10000, filter = all)
+
+# Run progress: 60.00% complete, ETA 00:03:05
+# Fork: 1 of 2
+# Warmup Iteration   1: 651.338 us/op
+# Warmup Iteration   2: 528.626 us/op
+# Warmup Iteration   3: 566.213 us/op
+# Warmup Iteration   4: 557.686 us/op
+# Warmup Iteration   5: 555.269 us/op
+Iteration   1: 555.021 us/op
+Iteration   2: 460.757 us/op
+Iteration   3: 450.119 us/op
+Iteration   4: 445.836 us/op
+Iteration   5: 446.840 us/op
+Iteration   6: 445.841 us/op
+Iteration   7: 443.831 us/op
+Iteration   8: 504.666 us/op
+Iteration   9: 557.280 us/op
+Iteration  10: 442.998 us/op
+
+# Run progress: 63.33% complete, ETA 00:02:49
+# Fork: 2 of 2
+# Warmup Iteration   1: 608.254 us/op
+# Warmup Iteration   2: 504.810 us/op
+# Warmup Iteration   3: 534.104 us/op
+# Warmup Iteration   4: 536.012 us/op
+# Warmup Iteration   5: 535.648 us/op
+Iteration   1: 509.687 us/op
+Iteration   2: 426.151 us/op
+Iteration   3: 426.821 us/op
+Iteration   4: 428.189 us/op
+Iteration   5: 432.035 us/op
+Iteration   6: 436.217 us/op
+Iteration   7: 434.864 us/op
+Iteration   8: 433.968 us/op
+Iteration   9: 436.009 us/op
+Iteration  10: 432.856 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  457.499 ±(99.9%) 35.235 us/op [Average]
+  (min, avg, max) = (426.151, 457.499, 557.280), stdev = 40.576
+  CI (99.9%): [422.265, 492.734] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 100000, filter = none)
+
+# Run progress: 66.67% complete, ETA 00:02:34
+# Fork: 1 of 2
+# Warmup Iteration   1: 5395.619 us/op
+# Warmup Iteration   2: 4767.902 us/op
+# Warmup Iteration   3: 4910.302 us/op
+# Warmup Iteration   4: 5476.310 us/op
+# Warmup Iteration   5: 5550.200 us/op
+Iteration   1: 5594.459 us/op
+Iteration   2: 5720.005 us/op
+Iteration   3: 5530.241 us/op
+Iteration   4: 5640.729 us/op
+Iteration   5: 7417.832 us/op
+Iteration   6: 5158.937 us/op
+Iteration   7: 4868.848 us/op
+Iteration   8: 4959.978 us/op
+Iteration   9: 4842.522 us/op
+Iteration  10: 4823.401 us/op
+
+# Run progress: 70.00% complete, ETA 00:02:19
+# Fork: 2 of 2
+# Warmup Iteration   1: 5279.596 us/op
+# Warmup Iteration   2: 4948.487 us/op
+# Warmup Iteration   3: 5051.330 us/op
+# Warmup Iteration   4: 5526.521 us/op
+# Warmup Iteration   5: 5798.206 us/op
+Iteration   1: 5646.072 us/op
+Iteration   2: 5565.433 us/op
+Iteration   3: 5771.041 us/op
+Iteration   4: 5755.495 us/op
+Iteration   5: 5441.804 us/op
+Iteration   6: 5538.284 us/op
+Iteration   7: 5000.782 us/op
+Iteration   8: 4667.818 us/op
+Iteration   9: 4717.374 us/op
+Iteration  10: 4775.982 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  5371.852 ±(99.9%) 540.885 us/op [Average]
+  (min, avg, max) = (4667.818, 5371.852, 7417.832), stdev = 622.884
+  CI (99.9%): [4830.966, 5912.737] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 100000, filter = language)
+
+# Run progress: 73.33% complete, ETA 00:02:03
+# Fork: 1 of 2
+# Warmup Iteration   1: 5613.277 us/op
+# Warmup Iteration   2: 4910.500 us/op
+# Warmup Iteration   3: 4863.516 us/op
+# Warmup Iteration   4: 4828.052 us/op
+# Warmup Iteration   5: 5317.423 us/op
+Iteration   1: 5404.594 us/op
+Iteration   2: 7276.463 us/op
+Iteration   3: 5513.865 us/op
+Iteration   4: 5442.097 us/op
+Iteration   5: 5152.233 us/op
+Iteration   6: 5099.061 us/op
+Iteration   7: 5101.748 us/op
+Iteration   8: 5130.279 us/op
+Iteration   9: 4919.489 us/op
+Iteration  10: 4658.070 us/op
+
+# Run progress: 76.67% complete, ETA 00:01:48
+# Fork: 2 of 2
+# Warmup Iteration   1: 5284.853 us/op
+# Warmup Iteration   2: 4624.121 us/op
+# Warmup Iteration   3: 4681.769 us/op
+# Warmup Iteration   4: 4751.788 us/op
+# Warmup Iteration   5: 5081.653 us/op
+Iteration   1: 5095.966 us/op
+Iteration   2: 5088.230 us/op
+Iteration   3: 4986.556 us/op
+Iteration   4: 5085.420 us/op
+Iteration   5: 5031.995 us/op
+Iteration   6: 4965.790 us/op
+Iteration   7: 6878.069 us/op
+Iteration   8: 5301.772 us/op
+Iteration   9: 4423.634 us/op
+Iteration  10: 4466.757 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  5251.104 ±(99.9%) 597.297 us/op [Average]
+  (min, avg, max) = (4423.634, 5251.104, 7276.463), stdev = 687.848
+  CI (99.9%): [4653.808, 5848.401] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 100000, filter = year)
+
+# Run progress: 80.00% complete, ETA 00:01:33
+# Fork: 1 of 2
+# Warmup Iteration   1: 5108.919 us/op
+# Warmup Iteration   2: 4204.669 us/op
+# Warmup Iteration   3: 4079.421 us/op
+# Warmup Iteration   4: 4278.573 us/op
+# Warmup Iteration   5: 4145.075 us/op
+Iteration   1: 4415.720 us/op
+Iteration   2: 4592.696 us/op
+Iteration   3: 4661.296 us/op
+Iteration   4: 4522.192 us/op
+Iteration   5: 4480.220 us/op
+Iteration   6: 4512.437 us/op
+Iteration   7: 4492.973 us/op
+Iteration   8: 4476.337 us/op
+Iteration   9: 4467.483 us/op
+Iteration  10: 4458.826 us/op
+
+# Run progress: 83.33% complete, ETA 00:01:17
+# Fork: 2 of 2
+# Warmup Iteration   1: 4953.427 us/op
+# Warmup Iteration   2: 4173.477 us/op
+# Warmup Iteration   3: 4171.171 us/op
+# Warmup Iteration   4: 4179.076 us/op
+# Warmup Iteration   5: 4190.704 us/op
+Iteration   1: 4431.208 us/op
+Iteration   2: 4619.160 us/op
+Iteration   3: 4889.947 us/op
+Iteration   4: 4671.550 us/op
+Iteration   5: 4586.782 us/op
+Iteration   6: 4687.357 us/op
+Iteration   7: 4614.920 us/op
+Iteration   8: 4610.457 us/op
+Iteration   9: 4608.929 us/op
+Iteration  10: 4581.352 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  4569.092 ±(99.9%) 97.102 us/op [Average]
+  (min, avg, max) = (4415.720, 4569.092, 4889.947), stdev = 111.823
+  CI (99.9%): [4471.990, 4666.194] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 100000, filter = author)
+
+# Run progress: 86.67% complete, ETA 00:01:02
+# Fork: 1 of 2
+# Warmup Iteration   1: 6340.572 us/op
+# Warmup Iteration   2: 5352.429 us/op
+# Warmup Iteration   3: 6332.569 us/op
+# Warmup Iteration   4: 6550.850 us/op
+# Warmup Iteration   5: 6531.656 us/op
+Iteration   1: 6495.157 us/op
+Iteration   2: 6540.990 us/op
+Iteration   3: 7714.995 us/op
+Iteration   4: 6514.059 us/op
+Iteration   5: 5935.577 us/op
+Iteration   6: 6637.873 us/op
+Iteration   7: 6272.260 us/op
+Iteration   8: 6461.112 us/op
+Iteration   9: 9188.809 us/op
+Iteration  10: 5433.452 us/op
+
+# Run progress: 90.00% complete, ETA 00:00:46
+# Fork: 2 of 2
+# Warmup Iteration   1: 6641.742 us/op
+# Warmup Iteration   2: 5379.519 us/op
+# Warmup Iteration   3: 6482.831 us/op
+# Warmup Iteration   4: 6802.716 us/op
+# Warmup Iteration   5: 6741.215 us/op
+Iteration   1: 6935.510 us/op
+Iteration   2: 6984.540 us/op
+Iteration   3: 6527.139 us/op
+Iteration   4: 5391.042 us/op
+Iteration   5: 5383.608 us/op
+Iteration   6: 5309.597 us/op
+Iteration   7: 5372.430 us/op
+Iteration   8: 5358.022 us/op
+Iteration   9: 5898.554 us/op
+Iteration  10: 5187.327 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  6277.103 ±(99.9%) 850.377 us/op [Average]
+  (min, avg, max) = (5187.327, 6277.103, 9188.809), stdev = 979.295
+  CI (99.9%): [5426.726, 7127.480] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search
+# Parameters: (books = 100000, filter = all)
+
+# Run progress: 93.33% complete, ETA 00:00:31
+# Fork: 1 of 2
+# Warmup Iteration   1: 7001.472 us/op
+# Warmup Iteration   2: 6123.001 us/op
+# Warmup Iteration   3: 9315.188 us/op
+# Warmup Iteration   4: 7846.314 us/op
+# Warmup Iteration   5: 8662.697 us/op
+Iteration   1: 7510.097 us/op
+Iteration   2: 6834.674 us/op
+Iteration   3: 8250.270 us/op
+Iteration   4: 7296.636 us/op
+Iteration   5: 6672.328 us/op
+Iteration   6: 6383.398 us/op
+Iteration   7: 6667.778 us/op
+Iteration   8: 6669.051 us/op
+Iteration   9: 6610.984 us/op
+Iteration  10: 5160.780 us/op
+
+# Run progress: 96.67% complete, ETA 00:00:15
+# Fork: 2 of 2
+# Warmup Iteration   1: 6159.466 us/op
+# Warmup Iteration   2: 5310.301 us/op
+# Warmup Iteration   3: 6192.408 us/op
+# Warmup Iteration   4: 6572.329 us/op
+# Warmup Iteration   5: 6325.591 us/op
+Iteration   1: 6283.984 us/op
+Iteration   2: 6303.812 us/op
+Iteration   3: 5672.498 us/op
+Iteration   4: 5079.555 us/op
+Iteration   5: 5098.924 us/op
+Iteration   6: 5066.849 us/op
+Iteration   7: 5112.532 us/op
+Iteration   8: 5130.398 us/op
+Iteration   9: 5173.631 us/op
+Iteration  10: 5103.741 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.FilterBenchmark.search":
+  6104.096 ±(99.9%) 843.212 us/op [Average]
+  (min, avg, max) = (5066.849, 6104.096, 8250.270), stdev = 971.044
+  CI (99.9%): [5260.884, 6947.308] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:07:48
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark               (books)  (filter)  Mode  Cnt     Score     Error  Units
+FilterBenchmark.search      200      none  avgt   20     2.500 ±   0.041  us/op
+FilterBenchmark.search      200  language  avgt   20     2.461 ±   0.062  us/op
+FilterBenchmark.search      200      year  avgt   20     2.351 ±   0.228  us/op
+FilterBenchmark.search      200    author  avgt   20     5.126 ±   0.096  us/op
+FilterBenchmark.search      200       all  avgt   20     5.285 ±   0.430  us/op
+FilterBenchmark.search    10000      none  avgt   20   370.856 ±  30.642  us/op
+FilterBenchmark.search    10000  language  avgt   20   398.896 ±  37.867  us/op
+FilterBenchmark.search    10000      year  avgt   20   365.799 ±  27.336  us/op
+FilterBenchmark.search    10000    author  avgt   20   467.981 ±  39.747  us/op
+FilterBenchmark.search    10000       all  avgt   20   457.499 ±  35.235  us/op
+FilterBenchmark.search   100000      none  avgt   20  5371.852 ± 540.885  us/op
+FilterBenchmark.search   100000  language  avgt   20  5251.104 ± 597.297  us/op
+FilterBenchmark.search   100000      year  avgt   20  4569.092 ±  97.102  us/op
+FilterBenchmark.search   100000    author  avgt   20  6277.103 ± 850.377  us/op
+FilterBenchmark.search   100000       all  avgt   20  6104.096 ± 843.212  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/FilterBenchmark.csv
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 200, limit = 20, position = 0)
+
+# Run progress: 0.00% complete, ETA 00:09:00
+# Fork: 1 of 2
+# Warmup Iteration   1: 4.064 us/op
+# Warmup Iteration   2: 4.189 us/op
+# Warmup Iteration   3: 3.977 us/op
+# Warmup Iteration   4: 2.500 us/op
+# Warmup Iteration   5: 2.487 us/op
+Iteration   1: 2.473 us/op
+Iteration   2: 2.488 us/op
+Iteration   3: 2.499 us/op
+Iteration   4: 2.601 us/op
+Iteration   5: 2.583 us/op
+Iteration   6: 2.578 us/op
+Iteration   7: 2.554 us/op
+Iteration   8: 2.740 us/op
+Iteration   9: 3.135 us/op
+Iteration  10: 2.701 us/op
+
+# Run progress: 2.78% complete, ETA 00:09:00
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.870 us/op
+# Warmup Iteration   2: 4.775 us/op
+# Warmup Iteration   3: 4.529 us/op
+# Warmup Iteration   4: 3.098 us/op
+# Warmup Iteration   5: 2.652 us/op
+Iteration   1: 2.767 us/op
+Iteration   2: 2.960 us/op
+Iteration   3: 2.614 us/op
+Iteration   4: 2.573 us/op
+Iteration   5: 2.546 us/op
+Iteration   6: 2.574 us/op
+Iteration   7: 2.561 us/op
+Iteration   8: 3.258 us/op
+Iteration   9: 2.716 us/op
+Iteration  10: 2.625 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  2.677 ±(99.9%) 0.184 us/op [Average]
+  (min, avg, max) = (2.473, 2.677, 3.258), stdev = 0.211
+  CI (99.9%): [2.494, 2.861] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 200, limit = 20, position = 50)
+
+# Run progress: 5.56% complete, ETA 00:08:45
+# Fork: 1 of 2
+# Warmup Iteration   1: 4.231 us/op
+# Warmup Iteration   2: 4.275 us/op
+# Warmup Iteration   3: 4.241 us/op
+# Warmup Iteration   4: 2.641 us/op
+# Warmup Iteration   5: 2.585 us/op
+Iteration   1: 2.531 us/op
+Iteration   2: 2.562 us/op
+Iteration   3: 2.605 us/op
+Iteration   4: 2.612 us/op
+Iteration   5: 2.572 us/op
+Iteration   6: 2.563 us/op
+Iteration   7: 2.560 us/op
+Iteration   8: 2.587 us/op
+Iteration   9: 2.553 us/op
+Iteration  10: 2.574 us/op
+
+# Run progress: 8.33% complete, ETA 00:08:29
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.077 us/op
+# Warmup Iteration   2: 4.245 us/op
+# Warmup Iteration   3: 4.922 us/op
+# Warmup Iteration   4: 3.128 us/op
+# Warmup Iteration   5: 2.488 us/op
+Iteration   1: 2.406 us/op
+Iteration   2: 2.425 us/op
+Iteration   3: 2.441 us/op
+Iteration   4: 2.417 us/op
+Iteration   5: 2.422 us/op
+Iteration   6: 2.414 us/op
+Iteration   7: 2.419 us/op
+Iteration   8: 2.427 us/op
+Iteration   9: 2.418 us/op
+Iteration  10: 2.450 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  2.498 ±(99.9%) 0.068 us/op [Average]
+  (min, avg, max) = (2.406, 2.498, 2.612), stdev = 0.078
+  CI (99.9%): [2.430, 2.566] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 200, limit = 20, position = 99)
+
+# Run progress: 11.11% complete, ETA 00:08:13
+# Fork: 1 of 2
+# Warmup Iteration   1: 4.015 us/op
+# Warmup Iteration   2: 3.981 us/op
+# Warmup Iteration   3: 3.883 us/op
+# Warmup Iteration   4: 2.403 us/op
+# Warmup Iteration   5: 2.412 us/op
+Iteration   1: 2.387 us/op
+Iteration   2: 2.433 us/op
+Iteration   3: 2.426 us/op
+Iteration   4: 2.400 us/op
+Iteration   5: 2.416 us/op
+Iteration   6: 2.467 us/op
+Iteration   7: 2.425 us/op
+Iteration   8: 2.425 us/op
+Iteration   9: 2.406 us/op
+Iteration  10: 2.421 us/op
+
+# Run progress: 13.89% complete, ETA 00:07:58
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.180 us/op
+# Warmup Iteration   2: 4.382 us/op
+# Warmup Iteration   3: 5.712 us/op
+# Warmup Iteration   4: 3.698 us/op
+# Warmup Iteration   5: 3.530 us/op
+Iteration   1: 2.865 us/op
+Iteration   2: 2.651 us/op
+Iteration   3: 3.014 us/op
+Iteration   4: 2.875 us/op
+Iteration   5: 2.818 us/op
+Iteration   6: 2.870 us/op
+Iteration   7: 2.588 us/op
+Iteration   8: 2.987 us/op
+Iteration   9: 2.645 us/op
+Iteration  10: 3.225 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  2.637 ±(99.9%) 0.226 us/op [Average]
+  (min, avg, max) = (2.387, 2.637, 3.225), stdev = 0.260
+  CI (99.9%): [2.412, 2.863] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 200, limit = 100, position = 0)
+
+# Run progress: 16.67% complete, ETA 00:07:42
+# Fork: 1 of 2
+# Warmup Iteration   1: 7.463 us/op
+# Warmup Iteration   2: 6.424 us/op
+# Warmup Iteration   3: 6.157 us/op
+# Warmup Iteration   4: 5.404 us/op
+# Warmup Iteration   5: 3.335 us/op
+Iteration   1: 3.104 us/op
+Iteration   2: 3.333 us/op
+Iteration   3: 3.036 us/op
+Iteration   4: 3.057 us/op
+Iteration   5: 4.063 us/op
+Iteration   6: 3.062 us/op
+Iteration   7: 3.167 us/op
+Iteration   8: 2.952 us/op
+Iteration   9: 3.126 us/op
+Iteration  10: 2.979 us/op
+
+# Run progress: 19.44% complete, ETA 00:07:28
+# Fork: 2 of 2
+# Warmup Iteration   1: 5.637 us/op
+# Warmup Iteration   2: 5.498 us/op
+# Warmup Iteration   3: 5.735 us/op
+# Warmup Iteration   4: 4.080 us/op
+# Warmup Iteration   5: 3.417 us/op
+Iteration   1: 3.499 us/op
+Iteration   2: 3.327 us/op
+Iteration   3: 3.338 us/op
+Iteration   4: 3.345 us/op
+Iteration   5: 3.179 us/op
+Iteration   6: 3.147 us/op
+Iteration   7: 3.231 us/op
+Iteration   8: 3.072 us/op
+Iteration   9: 3.365 us/op
+Iteration  10: 3.695 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  3.254 ±(99.9%) 0.230 us/op [Average]
+  (min, avg, max) = (2.952, 3.254, 4.063), stdev = 0.265
+  CI (99.9%): [3.024, 3.484] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 200, limit = 100, position = 50)
+
+# Run progress: 22.22% complete, ETA 00:07:13
+# Fork: 1 of 2
+# Warmup Iteration   1: 5.459 us/op
+# Warmup Iteration   2: 5.039 us/op
+# Warmup Iteration   3: 4.992 us/op
+# Warmup Iteration   4: 4.202 us/op
+# Warmup Iteration   5: 3.138 us/op
+Iteration   1: 2.953 us/op
+Iteration   2: 3.183 us/op
+Iteration   3: 2.781 us/op
+Iteration   4: 3.017 us/op
+Iteration   5: 3.120 us/op
+Iteration   6: 3.162 us/op
+Iteration   7: 3.181 us/op
+Iteration   8: 3.235 us/op
+Iteration   9: 2.961 us/op
+Iteration  10: 3.193 us/op
+
+# Run progress: 25.00% complete, ETA 00:06:57
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.852 us/op
+# Warmup Iteration   2: 5.109 us/op
+# Warmup Iteration   3: 4.672 us/op
+# Warmup Iteration   4: 3.143 us/op
+# Warmup Iteration   5: 3.199 us/op
+Iteration   1: 3.000 us/op
+Iteration   2: 3.075 us/op
+Iteration   3: 3.314 us/op
+Iteration   4: 3.455 us/op
+Iteration   5: 3.095 us/op
+Iteration   6: 2.945 us/op
+Iteration   7: 3.016 us/op
+Iteration   8: 2.927 us/op
+Iteration   9: 2.969 us/op
+Iteration  10: 3.018 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  3.080 ±(99.9%) 0.134 us/op [Average]
+  (min, avg, max) = (2.781, 3.080, 3.455), stdev = 0.155
+  CI (99.9%): [2.946, 3.214] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 200, limit = 100, position = 99)
+
+# Run progress: 27.78% complete, ETA 00:06:42
+# Fork: 1 of 2
+# Warmup Iteration   1: 4.596 us/op
+# Warmup Iteration   2: 5.001 us/op
+# Warmup Iteration   3: 4.644 us/op
+# Warmup Iteration   4: 3.548 us/op
+# Warmup Iteration   5: 2.889 us/op
+Iteration   1: 2.782 us/op
+Iteration   2: 2.806 us/op
+Iteration   3: 2.823 us/op
+Iteration   4: 2.952 us/op
+Iteration   5: 3.278 us/op
+Iteration   6: 3.019 us/op
+Iteration   7: 3.081 us/op
+Iteration   8: 3.214 us/op
+Iteration   9: 3.018 us/op
+Iteration  10: 2.971 us/op
+
+# Run progress: 30.56% complete, ETA 00:06:26
+# Fork: 2 of 2
+# Warmup Iteration   1: 4.623 us/op
+# Warmup Iteration   2: 5.344 us/op
+# Warmup Iteration   3: 5.851 us/op
+# Warmup Iteration   4: 4.133 us/op
+# Warmup Iteration   5: 2.858 us/op
+Iteration   1: 3.052 us/op
+Iteration   2: 2.815 us/op
+Iteration   3: 2.799 us/op
+Iteration   4: 2.639 us/op
+Iteration   5: 2.914 us/op
+Iteration   6: 2.782 us/op
+Iteration   7: 2.829 us/op
+Iteration   8: 2.788 us/op
+Iteration   9: 2.989 us/op
+Iteration  10: 2.843 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  2.920 ±(99.9%) 0.138 us/op [Average]
+  (min, avg, max) = (2.639, 2.920, 3.278), stdev = 0.159
+  CI (99.9%): [2.781, 3.058] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 10000, limit = 20, position = 0)
+
+# Run progress: 33.33% complete, ETA 00:06:11
+# Fork: 1 of 2
+# Warmup Iteration   1: 667.524 us/op
+# Warmup Iteration   2: 435.423 us/op
+# Warmup Iteration   3: 535.954 us/op
+# Warmup Iteration   4: 472.983 us/op
+# Warmup Iteration   5: 470.488 us/op
+Iteration   1: 475.710 us/op
+Iteration   2: 499.649 us/op
+Iteration   3: 479.905 us/op
+Iteration   4: 418.428 us/op
+Iteration   5: 435.802 us/op
+Iteration   6: 422.990 us/op
+Iteration   7: 405.018 us/op
+Iteration   8: 438.012 us/op
+Iteration   9: 396.782 us/op
+Iteration  10: 429.600 us/op
+
+# Run progress: 36.11% complete, ETA 00:05:56
+# Fork: 2 of 2
+# Warmup Iteration   1: 551.969 us/op
+# Warmup Iteration   2: 435.122 us/op
+# Warmup Iteration   3: 540.015 us/op
+# Warmup Iteration   4: 494.968 us/op
+# Warmup Iteration   5: 488.197 us/op
+Iteration   1: 546.353 us/op
+Iteration   2: 489.599 us/op
+Iteration   3: 517.822 us/op
+Iteration   4: 493.704 us/op
+Iteration   5: 494.002 us/op
+Iteration   6: 395.650 us/op
+Iteration   7: 394.637 us/op
+Iteration   8: 448.066 us/op
+Iteration   9: 437.220 us/op
+Iteration  10: 435.637 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  452.729 ±(99.9%) 38.270 us/op [Average]
+  (min, avg, max) = (394.637, 452.729, 546.353), stdev = 44.072
+  CI (99.9%): [414.459, 491.000] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 10000, limit = 20, position = 50)
+
+# Run progress: 38.89% complete, ETA 00:05:40
+# Fork: 1 of 2
+# Warmup Iteration   1: 608.188 us/op
+# Warmup Iteration   2: 461.750 us/op
+# Warmup Iteration   3: 534.440 us/op
+# Warmup Iteration   4: 478.648 us/op
+# Warmup Iteration   5: 515.144 us/op
+Iteration   1: 477.325 us/op
+Iteration   2: 525.292 us/op
+Iteration   3: 482.180 us/op
+Iteration   4: 453.124 us/op
+Iteration   5: 432.461 us/op
+Iteration   6: 416.493 us/op
+Iteration   7: 429.604 us/op
+Iteration   8: 396.847 us/op
+Iteration   9: 401.064 us/op
+Iteration  10: 444.587 us/op
+
+# Run progress: 41.67% complete, ETA 00:05:25
+# Fork: 2 of 2
+# Warmup Iteration   1: 681.622 us/op
+# Warmup Iteration   2: 430.090 us/op
+# Warmup Iteration   3: 532.021 us/op
+# Warmup Iteration   4: 494.218 us/op
+# Warmup Iteration   5: 541.418 us/op
+Iteration   1: 526.346 us/op
+Iteration   2: 488.402 us/op
+Iteration   3: 477.892 us/op
+Iteration   4: 478.373 us/op
+Iteration   5: 390.017 us/op
+Iteration   6: 415.245 us/op
+Iteration   7: 401.223 us/op
+Iteration   8: 428.853 us/op
+Iteration   9: 428.731 us/op
+Iteration  10: 418.614 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  445.634 ±(99.9%) 35.710 us/op [Average]
+  (min, avg, max) = (390.017, 445.634, 526.346), stdev = 41.123
+  CI (99.9%): [409.924, 481.343] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 10000, limit = 20, position = 99)
+
+# Run progress: 44.44% complete, ETA 00:05:10
+# Fork: 1 of 2
+# Warmup Iteration   1: 581.184 us/op
+# Warmup Iteration   2: 464.844 us/op
+# Warmup Iteration   3: 464.075 us/op
+# Warmup Iteration   4: 506.869 us/op
+# Warmup Iteration   5: 454.363 us/op
+Iteration   1: 507.745 us/op
+Iteration   2: 561.240 us/op
+Iteration   3: 572.360 us/op
+Iteration   4: 465.538 us/op
+Iteration   5: 402.643 us/op
+Iteration   6: 425.506 us/op
+Iteration   7: 390.977 us/op
+Iteration   8: 438.452 us/op
+Iteration   9: 440.528 us/op
+Iteration  10: 415.454 us/op
+
+# Run progress: 47.22% complete, ETA 00:04:54
+# Fork: 2 of 2
+# Warmup Iteration   1: 674.435 us/op
+# Warmup Iteration   2: 453.037 us/op
+# Warmup Iteration   3: 506.832 us/op
+# Warmup Iteration   4: 549.779 us/op
+# Warmup Iteration   5: 496.025 us/op
+Iteration   1: 526.307 us/op
+Iteration   2: 480.173 us/op
+Iteration   3: 543.389 us/op
+Iteration   4: 474.510 us/op
+Iteration   5: 418.018 us/op
+Iteration   6: 452.697 us/op
+Iteration   7: 621.853 us/op
+Iteration   8: 416.299 us/op
+Iteration   9: 418.828 us/op
+Iteration  10: 485.088 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  472.880 ±(99.9%) 55.692 us/op [Average]
+  (min, avg, max) = (390.977, 472.880, 621.853), stdev = 64.135
+  CI (99.9%): [417.188, 528.572] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 10000, limit = 100, position = 0)
+
+# Run progress: 50.00% complete, ETA 00:04:39
+# Fork: 1 of 2
+# Warmup Iteration   1: 707.247 us/op
+# Warmup Iteration   2: 475.704 us/op
+# Warmup Iteration   3: 489.207 us/op
+# Warmup Iteration   4: 527.004 us/op
+# Warmup Iteration   5: 483.875 us/op
+Iteration   1: 574.816 us/op
+Iteration   2: 488.269 us/op
+Iteration   3: 541.861 us/op
+Iteration   4: 493.473 us/op
+Iteration   5: 472.915 us/op
+Iteration   6: 455.362 us/op
+Iteration   7: 465.778 us/op
+Iteration   8: 456.097 us/op
+Iteration   9: 443.534 us/op
+Iteration  10: 420.732 us/op
+
+# Run progress: 52.78% complete, ETA 00:04:23
+# Fork: 2 of 2
+# Warmup Iteration   1: 783.285 us/op
+# Warmup Iteration   2: 479.530 us/op
+# Warmup Iteration   3: 501.534 us/op
+# Warmup Iteration   4: 506.577 us/op
+# Warmup Iteration   5: 549.309 us/op
+Iteration   1: 487.588 us/op
+Iteration   2: 494.085 us/op
+Iteration   3: 506.196 us/op
+Iteration   4: 513.494 us/op
+Iteration   5: 448.771 us/op
+Iteration   6: 447.742 us/op
+Iteration   7: 465.923 us/op
+Iteration   8: 447.606 us/op
+Iteration   9: 435.403 us/op
+Iteration  10: 451.380 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  475.551 ±(99.9%) 32.783 us/op [Average]
+  (min, avg, max) = (420.732, 475.551, 574.816), stdev = 37.752
+  CI (99.9%): [442.769, 508.334] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 10000, limit = 100, position = 50)
+
+# Run progress: 55.56% complete, ETA 00:04:08
+# Fork: 1 of 2
+# Warmup Iteration   1: 614.622 us/op
+# Warmup Iteration   2: 458.477 us/op
+# Warmup Iteration   3: 469.372 us/op
+# Warmup Iteration   4: 500.143 us/op
+# Warmup Iteration   5: 528.772 us/op
+Iteration   1: 690.374 us/op
+Iteration   2: 517.349 us/op
+Iteration   3: 478.007 us/op
+Iteration   4: 498.464 us/op
+Iteration   5: 392.880 us/op
+Iteration   6: 465.512 us/op
+Iteration   7: 410.209 us/op
+Iteration   8: 412.050 us/op
+Iteration   9: 452.493 us/op
+Iteration  10: 424.225 us/op
+
+# Run progress: 58.33% complete, ETA 00:03:53
+# Fork: 2 of 2
+# Warmup Iteration   1: 679.275 us/op
+# Warmup Iteration   2: 446.503 us/op
+# Warmup Iteration   3: 601.295 us/op
+# Warmup Iteration   4: 495.779 us/op
+# Warmup Iteration   5: 551.196 us/op
+Iteration   1: 498.019 us/op
+Iteration   2: 565.223 us/op
+Iteration   3: 499.109 us/op
+Iteration   4: 492.564 us/op
+Iteration   5: 462.827 us/op
+Iteration   6: 485.406 us/op
+Iteration   7: 574.879 us/op
+Iteration   8: 426.029 us/op
+Iteration   9: 408.040 us/op
+Iteration  10: 437.388 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  479.552 ±(99.9%) 61.238 us/op [Average]
+  (min, avg, max) = (392.880, 479.552, 690.374), stdev = 70.521
+  CI (99.9%): [418.315, 540.790] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 10000, limit = 100, position = 99)
+
+# Run progress: 61.11% complete, ETA 00:03:37
+# Fork: 1 of 2
+# Warmup Iteration   1: 660.997 us/op
+# Warmup Iteration   2: 483.224 us/op
+# Warmup Iteration   3: 513.556 us/op
+# Warmup Iteration   4: 573.193 us/op
+# Warmup Iteration   5: 540.664 us/op
+Iteration   1: 554.467 us/op
+Iteration   2: 526.779 us/op
+Iteration   3: 569.248 us/op
+Iteration   4: 579.986 us/op
+Iteration   5: 475.937 us/op
+Iteration   6: 468.930 us/op
+Iteration   7: 414.463 us/op
+Iteration   8: 486.627 us/op
+Iteration   9: 434.216 us/op
+Iteration  10: 496.530 us/op
+
+# Run progress: 63.89% complete, ETA 00:03:22
+# Fork: 2 of 2
+# Warmup Iteration   1: 725.309 us/op
+# Warmup Iteration   2: 468.763 us/op
+# Warmup Iteration   3: 529.601 us/op
+# Warmup Iteration   4: 517.416 us/op
+# Warmup Iteration   5: 675.017 us/op
+Iteration   1: 531.340 us/op
+Iteration   2: 532.825 us/op
+Iteration   3: 505.790 us/op
+Iteration   4: 497.606 us/op
+Iteration   5: 421.053 us/op
+Iteration   6: 443.886 us/op
+Iteration   7: 436.643 us/op
+Iteration   8: 412.351 us/op
+Iteration   9: 456.606 us/op
+Iteration  10: 402.597 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  482.394 ±(99.9%) 47.396 us/op [Average]
+  (min, avg, max) = (402.597, 482.394, 579.986), stdev = 54.582
+  CI (99.9%): [434.998, 529.790] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 100000, limit = 20, position = 0)
+
+# Run progress: 66.67% complete, ETA 00:03:06
+# Fork: 1 of 2
+# Warmup Iteration   1: 6872.888 us/op
+# Warmup Iteration   2: 7026.939 us/op
+# Warmup Iteration   3: 9834.863 us/op
+# Warmup Iteration   4: 8167.642 us/op
+# Warmup Iteration   5: 8851.153 us/op
+Iteration   1: 8302.053 us/op
+Iteration   2: 7604.176 us/op
+Iteration   3: 9320.156 us/op
+Iteration   4: 8899.897 us/op
+Iteration   5: 6530.395 us/op
+Iteration   6: 6560.051 us/op
+Iteration   7: 6118.186 us/op
+Iteration   8: 6079.673 us/op
+Iteration   9: 5409.785 us/op
+Iteration  10: 5156.713 us/op
+
+# Run progress: 69.44% complete, ETA 00:02:51
+# Fork: 2 of 2
+# Warmup Iteration   1: 6738.312 us/op
+# Warmup Iteration   2: 8246.769 us/op
+# Warmup Iteration   3: 7251.726 us/op
+# Warmup Iteration   4: 5545.182 us/op
+# Warmup Iteration   5: 7393.152 us/op
+Iteration   1: 8287.910 us/op
+Iteration   2: 8345.449 us/op
+Iteration   3: 6822.819 us/op
+Iteration   4: 5919.331 us/op
+Iteration   5: 6065.063 us/op
+Iteration   6: 5836.136 us/op
+Iteration   7: 7336.406 us/op
+Iteration   8: 7152.360 us/op
+Iteration   9: 8121.896 us/op
+Iteration  10: 6602.380 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  7023.542 ±(99.9%) 1043.876 us/op [Average]
+  (min, avg, max) = (5156.713, 7023.542, 9320.156), stdev = 1202.130
+  CI (99.9%): [5979.665, 8067.418] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 100000, limit = 20, position = 50)
+
+# Run progress: 72.22% complete, ETA 00:02:36
+# Fork: 1 of 2
+# Warmup Iteration   1: 9759.148 us/op
+# Warmup Iteration   2: 8592.762 us/op
+# Warmup Iteration   3: 6350.353 us/op
+# Warmup Iteration   4: 7543.645 us/op
+# Warmup Iteration   5: 8806.247 us/op
+Iteration   1: 7163.296 us/op
+Iteration   2: 7025.661 us/op
+Iteration   3: 8431.922 us/op
+Iteration   4: 8239.987 us/op
+Iteration   5: 8478.871 us/op
+Iteration   6: 7755.640 us/op
+Iteration   7: 10063.609 us/op
+Iteration   8: 9096.193 us/op
+Iteration   9: 9237.201 us/op
+Iteration  10: 7173.096 us/op
+
+# Run progress: 75.00% complete, ETA 00:02:20
+# Fork: 2 of 2
+# Warmup Iteration   1: 6432.331 us/op
+# Warmup Iteration   2: 6459.344 us/op
+# Warmup Iteration   3: 6223.387 us/op
+# Warmup Iteration   4: 6982.020 us/op
+# Warmup Iteration   5: 7162.512 us/op
+Iteration   1: 7702.911 us/op
+Iteration   2: 5805.130 us/op
+Iteration   3: 5882.883 us/op
+Iteration   4: 8052.296 us/op
+Iteration   5: 9280.436 us/op
+Iteration   6: 8930.927 us/op
+Iteration   7: 6851.964 us/op
+Iteration   8: 5821.657 us/op
+Iteration   9: 5577.870 us/op
+Iteration  10: 6065.122 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  7631.834 ±(99.9%) 1173.788 us/op [Average]
+  (min, avg, max) = (5577.870, 7631.834, 10063.609), stdev = 1351.736
+  CI (99.9%): [6458.045, 8805.622] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 100000, limit = 20, position = 99)
+
+# Run progress: 77.78% complete, ETA 00:02:05
+# Fork: 1 of 2
+# Warmup Iteration   1: 6409.178 us/op
+# Warmup Iteration   2: 5827.503 us/op
+# Warmup Iteration   3: 5862.013 us/op
+# Warmup Iteration   4: 5753.824 us/op
+# Warmup Iteration   5: 5897.827 us/op
+Iteration   1: 6425.268 us/op
+Iteration   2: 8274.725 us/op
+Iteration   3: 11529.285 us/op
+Iteration   4: 7517.374 us/op
+Iteration   5: 8433.187 us/op
+Iteration   6: 8264.189 us/op
+Iteration   7: 7113.965 us/op
+Iteration   8: 7089.279 us/op
+Iteration   9: 6922.738 us/op
+Iteration  10: 8858.354 us/op
+
+# Run progress: 80.56% complete, ETA 00:01:49
+# Fork: 2 of 2
+# Warmup Iteration   1: 7925.296 us/op
+# Warmup Iteration   2: 6752.736 us/op
+# Warmup Iteration   3: 6519.677 us/op
+# Warmup Iteration   4: 6958.774 us/op
+# Warmup Iteration   5: 7393.001 us/op
+Iteration   1: 7468.621 us/op
+Iteration   2: 6973.150 us/op
+Iteration   3: 6823.373 us/op
+Iteration   4: 7439.888 us/op
+Iteration   5: 7131.938 us/op
+Iteration   6: 7338.315 us/op
+Iteration   7: 8001.668 us/op
+Iteration   8: 7101.219 us/op
+Iteration   9: 6193.784 us/op
+Iteration  10: 6987.311 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  7594.382 ±(99.9%) 996.964 us/op [Average]
+  (min, avg, max) = (6193.784, 7594.382, 11529.285), stdev = 1148.106
+  CI (99.9%): [6597.417, 8591.346] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 100000, limit = 100, position = 0)
+
+# Run progress: 83.33% complete, ETA 00:01:34
+# Fork: 1 of 2
+# Warmup Iteration   1: 7705.390 us/op
+# Warmup Iteration   2: 5687.575 us/op
+# Warmup Iteration   3: 7463.457 us/op
+# Warmup Iteration   4: 7136.284 us/op
+# Warmup Iteration   5: 7769.600 us/op
+Iteration   1: 7585.829 us/op
+Iteration   2: 7103.453 us/op
+Iteration   3: 8045.168 us/op
+Iteration   4: 7202.706 us/op
+Iteration   5: 7856.229 us/op
+Iteration   6: 6816.330 us/op
+Iteration   7: 7667.925 us/op
+Iteration   8: 6376.202 us/op
+Iteration   9: 6861.405 us/op
+Iteration  10: 6055.772 us/op
+
+# Run progress: 86.11% complete, ETA 00:01:18
+# Fork: 2 of 2
+# Warmup Iteration   1: 7483.438 us/op
+# Warmup Iteration   2: 7654.475 us/op
+# Warmup Iteration   3: 6147.275 us/op
+# Warmup Iteration   4: 7146.267 us/op
+# Warmup Iteration   5: 6647.103 us/op
+Iteration   1: 7224.364 us/op
+Iteration   2: 7226.418 us/op
+Iteration   3: 8222.161 us/op
+Iteration   4: 8838.215 us/op
+Iteration   5: 7377.833 us/op
+Iteration   6: 8431.012 us/op
+Iteration   7: 8782.967 us/op
+Iteration   8: 7508.376 us/op
+Iteration   9: 7510.808 us/op
+Iteration  10: 6335.052 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  7451.411 ±(99.9%) 667.597 us/op [Average]
+  (min, avg, max) = (6055.772, 7451.411, 8838.215), stdev = 768.805
+  CI (99.9%): [6783.814, 8119.008] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 100000, limit = 100, position = 50)
+
+# Run progress: 88.89% complete, ETA 00:01:02
+# Fork: 1 of 2
+# Warmup Iteration   1: 8877.806 us/op
+# Warmup Iteration   2: 7347.487 us/op
+# Warmup Iteration   3: 8129.382 us/op
+# Warmup Iteration   4: 10326.694 us/op
+# Warmup Iteration   5: 8109.154 us/op
+Iteration   1: 7328.402 us/op
+Iteration   2: 7986.765 us/op
+Iteration   3: 6818.542 us/op
+Iteration   4: 9227.994 us/op
+Iteration   5: 7108.585 us/op
+Iteration   6: 6474.410 us/op
+Iteration   7: 8004.414 us/op
+Iteration   8: 7266.542 us/op
+Iteration   9: 7755.928 us/op
+Iteration  10: 7044.710 us/op
+
+# Run progress: 91.67% complete, ETA 00:00:47
+# Fork: 2 of 2
+# Warmup Iteration   1: 6636.994 us/op
+# Warmup Iteration   2: 7440.276 us/op
+# Warmup Iteration   3: 7343.800 us/op
+# Warmup Iteration   4: 6348.279 us/op
+# Warmup Iteration   5: 8032.976 us/op
+Iteration   1: 7204.158 us/op
+Iteration   2: 8339.505 us/op
+Iteration   3: 7672.104 us/op
+Iteration   4: 7552.169 us/op
+Iteration   5: 7225.743 us/op
+Iteration   6: 8148.051 us/op
+Iteration   7: 6721.024 us/op
+Iteration   8: 7955.210 us/op
+Iteration   9: 6742.645 us/op
+Iteration  10: 6047.748 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  7431.233 ±(99.9%) 637.031 us/op [Average]
+  (min, avg, max) = (6047.748, 7431.233, 9227.994), stdev = 733.606
+  CI (99.9%): [6794.201, 8068.264] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search
+# Parameters: (books = 100000, limit = 100, position = 99)
+
+# Run progress: 94.44% complete, ETA 00:00:31
+# Fork: 1 of 2
+# Warmup Iteration   1: 8573.743 us/op
+# Warmup Iteration   2: 7404.505 us/op
+# Warmup Iteration   3: 6650.458 us/op
+# Warmup Iteration   4: 7003.732 us/op
+# Warmup Iteration   5: 6905.634 us/op
+Iteration   1: 7264.722 us/op
+Iteration   2: 7644.616 us/op
+Iteration   3: 6768.445 us/op
+Iteration   4: 7341.760 us/op
+Iteration   5: 7174.554 us/op
+Iteration   6: 8045.433 us/op
+Iteration   7: 7536.232 us/op
+Iteration   8: 7437.204 us/op
+Iteration   9: 7207.432 us/op
+Iteration  10: 5824.099 us/op
+
+# Run progress: 97.22% complete, ETA 00:00:15
+# Fork: 2 of 2
+# Warmup Iteration   1: 7132.602 us/op
+# Warmup Iteration   2: 6326.723 us/op
+# Warmup Iteration   3: 7077.168 us/op
+# Warmup Iteration   4: 7965.295 us/op
+# Warmup Iteration   5: 8451.608 us/op
+Iteration   1: 7127.427 us/op
+Iteration   2: 8191.200 us/op
+Iteration   3: 7145.543 us/op
+Iteration   4: 7789.127 us/op
+Iteration   5: 6814.883 us/op
+Iteration   6: 7636.510 us/op
+Iteration   7: 7605.429 us/op
+Iteration   8: 6528.291 us/op
+Iteration   9: 7319.508 us/op
+Iteration  10: 8779.886 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search":
+  7359.115 ±(99.9%) 544.926 us/op [Average]
+  (min, avg, max) = (5824.099, 7359.115, 8779.886), stdev = 627.537
+  CI (99.9%): [6814.189, 7904.041] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:09:29
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                   (books)  (limit)  (position)  Mode  Cnt     Score      Error  Units
+PaginationBenchmark.search      200       20           0  avgt   20     2.677 ±    0.184  us/op
+PaginationBenchmark.search      200       20          50  avgt   20     2.498 ±    0.068  us/op
+PaginationBenchmark.search      200       20          99  avgt   20     2.637 ±    0.226  us/op
+PaginationBenchmark.search      200      100           0  avgt   20     3.254 ±    0.230  us/op
+PaginationBenchmark.search      200      100          50  avgt   20     3.080 ±    0.134  us/op
+PaginationBenchmark.search      200      100          99  avgt   20     2.920 ±    0.138  us/op
+PaginationBenchmark.search    10000       20           0  avgt   20   452.729 ±   38.270  us/op
+PaginationBenchmark.search    10000       20          50  avgt   20   445.634 ±   35.710  us/op
+PaginationBenchmark.search    10000       20          99  avgt   20   472.880 ±   55.692  us/op
+PaginationBenchmark.search    10000      100           0  avgt   20   475.551 ±   32.783  us/op
+PaginationBenchmark.search    10000      100          50  avgt   20   479.552 ±   61.238  us/op
+PaginationBenchmark.search    10000      100          99  avgt   20   482.394 ±   47.396  us/op
+PaginationBenchmark.search   100000       20           0  avgt   20  7023.542 ± 1043.876  us/op
+PaginationBenchmark.search   100000       20          50  avgt   20  7631.834 ± 1173.788  us/op
+PaginationBenchmark.search   100000       20          99  avgt   20  7594.382 ±  996.964  us/op
+PaginationBenchmark.search   100000      100           0  avgt   20  7451.411 ±  667.597  us/op
+PaginationBenchmark.search   100000      100          50  avgt   20  7431.233 ±  637.031  us/op
+PaginationBenchmark.search   100000      100          99  avgt   20  7359.115 ±  544.926  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/PaginationBenchmark.csv
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_frequent)
+
+# Run progress: 0.00% complete, ETA 00:00:30
+# Fork: 1 of 2
+# Warmup Iteration   1: 4517.784 us/op
+# Warmup Iteration   2: 3345.631 us/op
+# Warmup Iteration   3: 3165.357 us/op
+# Warmup Iteration   4: 3177.827 us/op
+# Warmup Iteration   5: 3562.812 us/op
+Iteration   1: 3625.669 us/op
+Iteration   2: 3663.935 us/op
+Iteration   3: 3521.743 us/op
+Iteration   4: 3498.503 us/op
+Iteration   5: 4260.773 us/op
+Iteration   6: 3313.685 us/op
+Iteration   7: 3274.468 us/op
+Iteration   8: 3301.456 us/op
+Iteration   9: 3555.583 us/op
+Iteration  10: 3813.952 us/op
+
+# Run progress: 50.00% complete, ETA 00:00:16
+# Fork: 2 of 2
+# Warmup Iteration   1: 3913.027 us/op
+# Warmup Iteration   2: 3509.785 us/op
+# Warmup Iteration   3: 3565.532 us/op
+# Warmup Iteration   4: 3386.081 us/op
+# Warmup Iteration   5: 3784.733 us/op
+Iteration   1: 4314.248 us/op
+Iteration   2: 3319.355 us/op
+Iteration   3: 3588.414 us/op
+Iteration   4: 3454.658 us/op
+Iteration   5: 3475.803 us/op
+Iteration   6: 3472.368 us/op
+Iteration   7: 3661.725 us/op
+Iteration   8: 3639.749 us/op
+Iteration   9: 3448.425 us/op
+Iteration  10: 3607.899 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  3590.621 ±(99.9%) 239.983 us/op [Average]
+  (min, avg, max) = (3274.468, 3590.621, 4314.248), stdev = 276.365
+  CI (99.9%): [3350.638, 3830.603] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:00:32
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                     (books)          (terms)  Mode  Cnt     Score     Error  Units
+IntersectionBenchmark.search   100000  common_frequent  avgt   20  3590.621 ± 239.983  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/threads-1.csv
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 2 threads, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_frequent)
+
+# Run progress: 0.00% complete, ETA 00:00:30
+# Fork: 1 of 2
+# Warmup Iteration   1: 3946.241 us/op
+# Warmup Iteration   2: 3671.769 us/op
+# Warmup Iteration   3: 3655.935 us/op
+# Warmup Iteration   4: 3736.046 us/op
+# Warmup Iteration   5: 3909.867 us/op
+Iteration   1: 3872.522 us/op
+Iteration   2: 4002.891 us/op
+Iteration   3: 4063.053 us/op
+Iteration   4: 4079.824 us/op
+Iteration   5: 4767.469 us/op
+Iteration   6: 4358.621 us/op
+Iteration   7: 4053.639 us/op
+Iteration   8: 3618.177 us/op
+Iteration   9: 3536.359 us/op
+Iteration  10: 3525.534 us/op
+
+# Run progress: 50.00% complete, ETA 00:00:16
+# Fork: 2 of 2
+# Warmup Iteration   1: 3797.328 us/op
+# Warmup Iteration   2: 3309.323 us/op
+# Warmup Iteration   3: 3318.123 us/op
+# Warmup Iteration   4: 3447.479 us/op
+# Warmup Iteration   5: 3496.029 us/op
+Iteration   1: 3529.921 us/op
+Iteration   2: 3513.205 us/op
+Iteration   3: 3553.951 us/op
+Iteration   4: 3525.864 us/op
+Iteration   5: 3579.765 us/op
+Iteration   6: 3387.277 us/op
+Iteration   7: 3263.748 us/op
+Iteration   8: 3342.743 us/op
+Iteration   9: 3210.002 us/op
+Iteration  10: 3367.570 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  3707.607 ±(99.9%) 348.195 us/op [Average]
+  (min, avg, max) = (3210.002, 3707.607, 4767.469), stdev = 400.982
+  CI (99.9%): [3359.412, 4055.802] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:00:32
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                     (books)          (terms)  Mode  Cnt     Score     Error  Units
+IntersectionBenchmark.search   100000  common_frequent  avgt   20  3707.607 ± 348.195  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/threads-2.csv
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 4 threads, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_frequent)
+
+# Run progress: 0.00% complete, ETA 00:00:30
+# Fork: 1 of 2
+# Warmup Iteration   1: 4102.867 ±(99.9%) 386.021 us/op
+# Warmup Iteration   2: 3846.620 ±(99.9%) 1.691 us/op
+# Warmup Iteration   3: 4038.345 ±(99.9%) 1.366 us/op
+# Warmup Iteration   4: 5048.526 ±(99.9%) 16.184 us/op
+# Warmup Iteration   5: 3932.189 ±(99.9%) 14.893 us/op
+Iteration   1: 4032.394 ±(99.9%) 1.380 us/op
+Iteration   2: 3822.393 ±(99.9%) 4.857 us/op
+Iteration   3: 3836.908 ±(99.9%) 0.115 us/op
+Iteration   4: 3783.667 ±(99.9%) 46.023 us/op
+Iteration   5: 4050.220 ±(99.9%) 6.899 us/op
+Iteration   6: 6140.781 ±(99.9%) 50.225 us/op
+Iteration   7: 5997.703 ±(99.9%) 12.489 us/op
+Iteration   8: 5626.536 ±(99.9%) 10.794 us/op
+Iteration   9: 6013.961 ±(99.9%) 9.797 us/op
+Iteration  10: 4781.320 ±(99.9%) 26.355 us/op
+
+# Run progress: 50.00% complete, ETA 00:00:16
+# Fork: 2 of 2
+# Warmup Iteration   1: 5704.865 ±(99.9%) 244.082 us/op
+# Warmup Iteration   2: 5030.190 ±(99.9%) 96.502 us/op
+# Warmup Iteration   3: 4654.470 ±(99.9%) 106.099 us/op
+# Warmup Iteration   4: 5257.930 ±(99.9%) 13.942 us/op
+# Warmup Iteration   5: 5305.499 ±(99.9%) 14.375 us/op
+Iteration   1: 5103.921 ±(99.9%) 9.127 us/op
+Iteration   2: 5048.087 ±(99.9%) 23.642 us/op
+Iteration   3: 5300.013 ±(99.9%) 14.605 us/op
+Iteration   4: 5159.487 ±(99.9%) 30.666 us/op
+Iteration   5: 5341.970 ±(99.9%) 11.359 us/op
+Iteration   6: 5213.159 ±(99.9%) 13.834 us/op
+Iteration   7: 4663.043 ±(99.9%) 78.055 us/op
+Iteration   8: 4725.041 ±(99.9%) 12.421 us/op
+Iteration   9: 4981.305 ±(99.9%) 18.441 us/op
+Iteration  10: 4393.112 ±(99.9%) 21.436 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  4900.751 ±(99.9%) 644.740 us/op [Average]
+  (min, avg, max) = (3783.667, 4900.751, 6140.781), stdev = 742.484
+  CI (99.9%): [4256.011, 5545.491] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:00:32
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                     (books)          (terms)  Mode  Cnt     Score     Error  Units
+IntersectionBenchmark.search   100000  common_frequent  avgt   20  4900.751 ± 644.740  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/threads-4.csv
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, OpenJDK 64-Bit Server VM, 21.0.12.1+1-1-24.04.4-Ubuntu
+# VM invoker: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+# VM options: -Duser.language=en -Duser.country=US -Xms4g -Xmx4g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 1 s each
+# Measurement: 10 iterations, 1 s each
+# Timeout: 10 min per iteration
+# Threads: 8 threads, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search
+# Parameters: (books = 100000, terms = common_frequent)
+
+# Run progress: 0.00% complete, ETA 00:00:30
+# Fork: 1 of 2
+# Warmup Iteration   1: 6360.576 ±(99.9%) 303.307 us/op
+# Warmup Iteration   2: 5622.946 ±(99.9%) 638.520 us/op
+# Warmup Iteration   3: 6110.492 ±(99.9%) 498.359 us/op
+# Warmup Iteration   4: 5654.478 ±(99.9%) 788.995 us/op
+# Warmup Iteration   5: 5477.389 ±(99.9%) 881.284 us/op
+Iteration   1: 5046.799 ±(99.9%) 734.628 us/op
+Iteration   2: 5667.539 ±(99.9%) 535.727 us/op
+Iteration   3: 5154.865 ±(99.9%) 740.046 us/op
+Iteration   4: 5463.988 ±(99.9%) 174.170 us/op
+Iteration   5: 5391.013 ±(99.9%) 745.627 us/op
+Iteration   6: 5481.748 ±(99.9%) 770.622 us/op
+Iteration   7: 5567.016 ±(99.9%) 580.681 us/op
+Iteration   8: 6029.160 ±(99.9%) 422.154 us/op
+Iteration   9: 5498.652 ±(99.9%) 486.547 us/op
+Iteration  10: 5692.449 ±(99.9%) 534.520 us/op
+
+# Run progress: 50.00% complete, ETA 00:00:16
+# Fork: 2 of 2
+# Warmup Iteration   1: 6114.307 ±(99.9%) 629.493 us/op
+# Warmup Iteration   2: 6174.763 ±(99.9%) 526.158 us/op
+# Warmup Iteration   3: 5536.839 ±(99.9%) 707.797 us/op
+# Warmup Iteration   4: 6259.423 ±(99.9%) 411.654 us/op
+# Warmup Iteration   5: 6083.539 ±(99.9%) 508.430 us/op
+Iteration   1: 6020.327 ±(99.9%) 417.637 us/op
+Iteration   2: 5572.926 ±(99.9%) 573.561 us/op
+Iteration   3: 5568.918 ±(99.9%) 480.232 us/op
+Iteration   4: 6071.130 ±(99.9%) 420.554 us/op
+Iteration   5: 5227.261 ±(99.9%) 772.727 us/op
+Iteration   6: 6033.056 ±(99.9%) 682.890 us/op
+Iteration   7: 5387.715 ±(99.9%) 896.456 us/op
+Iteration   8: 6169.119 ±(99.9%) 460.117 us/op
+Iteration   9: 5359.037 ±(99.9%) 846.640 us/op
+Iteration  10: 6126.491 ±(99.9%) 503.624 us/op
+
+
+Result "es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search":
+  5626.460 ±(99.9%) 295.886 us/op [Average]
+  (min, avg, max) = (5046.799, 5626.460, 6169.119), stdev = 340.742
+  CI (99.9%): [5330.575, 5922.346] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:00:32
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                     (books)          (terms)  Mode  Cnt     Score     Error  Units
+IntersectionBenchmark.search   100000  common_frequent  avgt   20  5626.460 ± 295.886  us/op
+
+Benchmark result is saved to benchmarks/search/results/jmh/threads-8.csv
+Results in benchmarks/search/results/jmh
+12:09:26 JMH: done in 25 min
+12:09:26 Load, 15 books: already done (benchmarks/search/results/load is finished or committed), skipped
+12:09:26 Load, 200 real books: already done (benchmarks/search/results/load-200 is finished or committed), skipped
+12:09:26 Load, 10,000 synthetic books: already done (benchmarks/search/results/load-10000 is finished or committed), skipped
+12:09:26 Search with the pipeline running: starting
+Building the images
+== Repetition 1: from nothing
+  base index: 2000 books indexed in 786 s
+12:23:59 idle-r1-t250-p50-c32-rep1
+179941,0,0,0,2999.0,10.664,4.219,64.815,69.140,92.387
+12:25:15 idle-r1-t250-p50-c128-rep1
+179507,0,0,0,2991.8,42.774,18.393,109.697,202.596,599.384
+12:26:41 mixed-r1-t250-p50-c32-rep1
+159184,0,0,0,2653.1,12.056,5.324,62.232,67.641,87.099
+12:27:57 mixed-r1-t250-p50-c128-rep1
+153753,0,0,0,2562.6,49.941,23.816,168.577,266.153,635.275
+  during the load: 150 of 4000 books indexed in 163 s
+== Repetition 2: from nothing
+  base index: 2000 books indexed in 777 s
+12:43:37 idle-r1-t250-p50-c32-rep2
+180624,0,0,0,3010.4,10.623,4.361,63.559,68.005,83.634
+12:44:53 idle-r1-t250-p50-c128-rep2
+183291,0,0,0,3054.9,41.889,18.223,108.507,200.453,665.640
+12:46:18 mixed-r1-t250-p50-c32-rep2
+161294,0,0,0,2688.2,11.898,5.262,61.709,67.318,104.004
+12:47:35 mixed-r1-t250-p50-c128-rep2
+156708,0,0,0,2611.8,49.011,25.277,149.113,223.020,631.090
+  during the load: 139 of 4000 books indexed in 161 s
+== Repetition 3: from nothing
+  base index: 2000 books indexed in 929 s
+13:05:31 idle-r1-t250-p50-c32-rep3
+162020,0,0,0,2700.3,11.843,5.121,63.001,68.070,95.680
+13:06:49 idle-r1-t250-p50-c128-rep3
+180248,0,0,0,3004.1,42.604,18.811,108.027,199.523,712.724
+13:08:14 mixed-r1-t250-p50-c32-rep3
+162977,0,0,0,2716.3,11.773,5.278,59.260,67.954,102.788
+13:09:30 mixed-r1-t250-p50-c128-rep3
+156415,0,0,0,2606.9,49.070,22.998,163.515,260.249,829.164
+  during the load: 153 of 4000 books indexed in 162 s
+Results in benchmarks/search/results/mixed
+13:10:52 Search with the pipeline running: done in 61 min
+13:10:52 Analysis
+192 load points and 49 JMH rows in /home/daniel/Documentos/Universidad/4Year/Big_Data/Stage_2/stage_2/benchmarks/search/results/analysis
+WARNING: clients r1 c256 rep1: 3 HTTP errors, 0 wrong results, 0 connection errors

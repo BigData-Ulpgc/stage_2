@@ -1,2 +1,2 @@
 "Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: books","Param: terms"
-"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,3305.429681,102.874760,"us/op",100000,common_frequent
+"es.ulpgc.bigdata.search.benchmark.IntersectionBenchmark.search","avgt",1,20,3590.620533,239.982869,"us/op",100000,common_frequent
