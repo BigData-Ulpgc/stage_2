@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Fake MetadataRepository for the tests: a thread-safe map, so IndexingService can be tested
  * without MongoDB. failing(true) makes EVERY operation fail, as when MongoDB is down.
  */
-class InMemoryMetadataRepository implements MetadataRepository {
+public class InMemoryMetadataRepository implements MetadataRepository {
 
     private final Map<Integer, BookMetadata> books = new ConcurrentHashMap<>();
     private volatile boolean failing = false;
