@@ -1,0 +1,11 @@
+date_utc: 2026-11-08T10:33:50Z
+commit: 000c23a
+os: Linux 7.0.0-42-generic x86_64
+logical_cpus: 12
+cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+memory: 16205352 kB
+work_filesystem: /dev/nvme0n1p6 ext4
+java: openjdk version "21.0.12.1" 2026-08-18
+java: OpenJDK Runtime Environment (build 21.0.12.1+1-1-24.04.4-Ubuntu)
+java: OpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-24.04.4-Ubuntu, mixed mode, sharing)
+books: benchmarks/ingestion/data/books, digest 7fcb0fb42ed8e8738e41298614573f3cde2b418db2ba61262d3834c30296d95c
