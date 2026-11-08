@@ -110,11 +110,11 @@ talks only to the addresses it was given and moves to the next one if its member
     in the threads that parse, inside one process.
 \end{itemize}
 
-\pending{Coordination cost, from the JMH of Ingestion (\code{CoordinationBenchmark}) and from the integration runs
-(\code{coordination\_per\_book}, \code{coordination\_share} and \code{queue\_wait} in the summary of CF-13): compare
-claim + complete with the work of a book, with 1, 2 and 4 replicas, and say whether the queue saturates. Preliminary
-JMH on a laptop (not valid): claim + complete $\approx$1.8~ms per book with one thread, against $\approx$1~ms for the
-whole local ingestion of the book.}
+\textbf{Measured.} With JMH (Section~\ref{sec:benchmarks-ingestion}), claiming and completing a book costs 1.6~ms with
+one worker, 3.4 times the local ingestion of the book, and 0.36~ms per book with 8 workers, because concurrent workers
+overlap their round trips. So with small books the coordination, not the work, sets the rate of a replica; with the
+download from Project Gutenberg it is the other way round. The contention of several replicas on the single partition of
+each queue was not measured: the integration experiments of Ingestion were not run.
 
 \subsection{Failure tests}
 \label{sec:failure-tests}

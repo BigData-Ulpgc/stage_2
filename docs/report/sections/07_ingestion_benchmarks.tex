@@ -1,0 +1,81 @@
+\section{Benchmarks and results: Ingestion}
+\label{sec:benchmarks-ingestion}
+
+Ingestion was measured with JMH on the host: the work of a worker on one book, without the network of Project Gutenberg,
+and apart from it the cost of coordinating that book through Hazelcast. The scripts, the instructions to repeat the
+measure and the raw results are in \code{benchmarks/ingestion/}.
+
+\subsection{Microbenchmarks with JMH}
+
+The benchmarks live in the test code of \code{ingestion-service}, package \code{...ingestion.benchmark}, and run from the
+benchmarks jar on the reference machine (Section~\ref{sec:consolidation}), with the same settings as Indexing and Search:
+2 forks with a 4~GB heap, 5 warm-up and 10 measured iterations of 1~s each (20 samples), average time per operation with
+its 99.9~\% error. The books are the 200 synthetic books of the dataset, the same bytes as the Indexing benchmarks, read
+from the page cache. The benchmarks with threads take a round of 100 books, shared by 1, 2, 4 or 8 threads as the workers
+of a replica share \code{ingest-queue}; every round writes into an empty datalake, and after it, unmeasured, the benchmark
+checks that the 100 books are complete (or \code{DOWNLOADED} and in \code{index-queue}), so a wrong round fails instead of
+giving a number.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}Xrl@{}}
+\toprule
+\textbf{Benchmark} & \textbf{Time ($\mu$s)} & \textbf{Derived} \\
+\midrule
+Split a short book (8.0~KB raw) & 11.5 $\pm$ 1.0 & 695 MB/s \\
+Split the median book (51.7~KB) & 79.3 $\pm$ 5.8 & 651 MB/s \\
+Split a long book (287.8~KB) & 454 $\pm$ 15 & 634 MB/s \\
+Save a book in the range datalake, per book, 1 thread & 235 $\pm$ 5 & 551 MB/s \\
+\quad 2 threads & 142 $\pm$ 4 & $\times$1.66 \\
+\quad 4 threads & 112 $\pm$ 4 & $\times$2.09 \\
+\quad 8 threads & 121 $\pm$ 2 & $\times$1.93 \\
+Ingest a book from the local source, per book, 1 worker & 473 $\pm$ 8 & 2,113 books/s \\
+\quad 2 workers & 270 $\pm$ 4 & $\times$1.75 \\
+\quad 4 workers & 175 $\pm$ 4 & $\times$2.70 \\
+\quad 8 workers & 155 $\pm$ 2 & $\times$3.06 \\
+Claim and complete a book in Hazelcast, per book, 1 worker & 1,631 $\pm$ 108 & 613 books/s \\
+\quad 2 workers & 1,052 $\pm$ 66 & $\times$1.55 \\
+\quad 4 workers & 581 $\pm$ 19 & $\times$2.81 \\
+\quad 8 workers & 364 $\pm$ 15 & $\times$4.48 \\
+\bottomrule
+\end{tabularx}
+\caption{JMH of Ingestion. \emph{Ingest} is \code{IngestionService.ingest}: read the raw file, split it, check that the
+book is not in the datalake and save it (header, body and \code{\_READY}, each through a temporary file and an atomic
+move). \emph{Claim and complete} are T2 and T3 of the contract, two transactions each, on a cluster of two members
+started in the same JVM, the threads sharing one client as the workers of a replica do. The factors are the speed-up over
+1 thread; the books of a round average 129~KB written.}
+\label{tab:jmh-ingestion}
+\end{table}
+
+\textbf{Where the time of a book goes.} With one worker, ingesting a book from the local source takes 473~$\mu$s:
+about 200~$\mu$s to split it (the splitter runs at 630 to 700~MB/s, linear in the size of the book), 235~$\mu$s to write
+its three files, and the remaining 35~$\mu$s to read it from the page cache and check that it is not stored yet. Nothing is
+forced to disk (the datalake does not \code{fsync}, Section~\ref{sec:readiness}), so the write measures the file system up
+to the page cache.
+
+\textbf{Threads.} The ingestion speeds up 2.7 times with 4 workers and 3.1 times with 8, on 6 physical cores. The write
+stops at 4 threads and is slower with 8: the 100 books of a round, with consecutive ids, go to the same range folder, as
+they do in the service, and every atomic move changes that one directory. The probable cause is that the file system
+updates one directory one change at a time; it was not measured apart.
+The splitting, pure CPU, keeps scaling, which is why the whole ingestion still gains a little at 8.
+
+\textbf{Coordination.} Claiming and completing a book costs 1.6~ms with one worker: 3.4 times the ingestion of the book
+itself. Each one is a transaction with a two-phase commit, so the time is round trips rather than CPU, and concurrent
+workers overlap them: with 8 workers the cost per book falls to 0.36~ms ($\times$4.5), better than any other part.
+With the default of 4 workers, coordination takes 581~$\mu$s per book against 175~$\mu$s of work: three quarters of the
+time of a book with the local source. In this benchmark the members are in the same JVM and talk over loopback, so it is a
+lower bound of the network cost and an upper bound of the CPU they compete for; the queue is never empty, so \code{claim}
+contains no wait for an id.
+
+\textbf{What it means for the pipeline.} With the local source, one replica with 4 workers is bounded by Hazelcast at
+about 1,700 books per second in these conditions. That is two orders of magnitude above Indexing, which does 15 books/s on
+2,000 books (Section~\ref{sec:benchmarks-indexing}), so Ingestion is never the bottleneck of the pipeline. With Project
+Gutenberg as the source the download is much longer than both parts and the throttling of the site sets the pace; that is
+why the measures use the local source.
+
+\textbf{Not measured.} The integration experiments of Ingestion with the real services (1, 2 and 4 replicas, the 10,000
+books and the coordination cost inside Docker) were prepared (\code{run-integration.sh}, in the branch
+\code{test/CF-13-integration}) but not run: the group left them as not measured. Without them there is no
+measure of the contention of several replicas on the single partition of each queue
+(Section~\ref{sec:decisions-coordination}), nor of the overhead of Docker on the coordination; the services expose the
+needed metrics in \code{GET /status} (\code{coordination\_cost}, CF-12) for whoever runs them.

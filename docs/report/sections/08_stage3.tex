@@ -15,9 +15,11 @@ pull from shared queues, and nginx spreads the queries. Losing the whole Hazelca
 leases compare the clocks of different processes. The datalake depends on a local file system and its atomic moves. Each
 book costs two transactions, and both queues are single partitions that every claim goes through.
 
-\pending{The measured part: books per second of Ingestion with 1, 2 and 4 replicas and with 1, 2, 4 and 8 workers, the
-share of coordination in the time of a book, and the queue wait (benchmarks/ingestion/results/integration/), with the
-bottleneck each one shows.}
+\textbf{What the measures say.} The JMH of Ingestion (Section~\ref{sec:benchmarks-ingestion}) show that coordinating a
+book through Hazelcast costs more than ingesting it from the local source (1.6~ms against 0.47~ms with one worker), and that
+more workers hide that cost well (0.36~ms per book with 8). Even so, Ingestion runs two orders of magnitude faster than
+Indexing, so it does not limit the pipeline on this machine. The behaviour with several replicas and with the real
+download was not measured.
 
 \subsection{What changes on the Stage 3 cluster}
 
@@ -66,4 +68,7 @@ configuration and in the storage, not in the services.
 \textbf{Distribution of work.} On a cluster the replicas of Ingestion run on several machines and keep pulling from the
 same queues, so the distribution of books needs no change. What needs measuring again is where the first bottleneck moves
 once each replica has a machine of its own: the queues of Hazelcast, the shared storage, or the single index writer.
-\pending{Link with the conclusion of section 7: which of these limits the single-machine measurements already show.}
+On this machine the first limit is already MongoDB, shared by the writer of Indexing and every replica of Search
+(Section~\ref{sec:consolidation}); for Ingestion it is the round trips to Hazelcast. On a cluster both move: MongoDB
+needs replication or sharding, and the coordination pays a real network on every transaction, which makes batching the
+claims worth considering.
