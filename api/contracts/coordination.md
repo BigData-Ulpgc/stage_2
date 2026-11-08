@@ -138,8 +138,9 @@ with the next version anyway (the publication reads `index_log`, `index-publicat
 
 - The claim (T2, T6) writes `leaseUntil = now + LEASE_SECONDS`. Each claimant reads
   `LEASE_SECONDS` from its own environment (default 120 s, much longer than one download or
-  indexing). A worker that needs longer may renew: `replace` of its own entry with a later
-  `leaseUntil`.
+  indexing). Indexing claims up to `INDEX_WRITE_BATCH` books and writes them together: the
+  lease must cover the whole batch, which takes seconds. A worker that needs longer may renew:
+  `replace` of its own entry with a later `leaseUntil`.
 - Every `LEASE_CHECK_SECONDS` (default 10 s) the Control queries
   `state IN ('INGESTING', 'INDEXING') AND leaseUntil < now` and applies T4/T8, or T5/T9 when
   the attempts are used up, with `lastError = LEASE_EXPIRED`.
@@ -199,9 +200,11 @@ because it is not the book's fault: otherwise one outage would send every book i
 | `publishedAt` | `String` | ISO-8601 UTC, e.g. `2026-11-03T10:15:00Z` |
 
 - Indexing publishes it after `CURRENT` has switched (plan §6.5), only when a new version is
-  created (`books_published > 0`): one per version, in order, from the same thread as T10,
-  right after `POST /index/publish` answers. A version created while Indexing has no cluster
-  is announced when it connects or reconnects (only the last one, which is enough for Search).
+  created (`books_published > 0`): one per version, in order while connected, from the same
+  thread as T10, right after `POST /index/publish` answers. A version created while Indexing
+  has no cluster is announced when it connects or reconnects (only the last one, which is
+  enough for Search); that announcement may come after the one of a newer version published
+  at the same moment.
 - The event is only a **wake-up**: on receiving it, a Search replica reads `CURRENT` from
   MongoDB and reloads only if the version is newer than the one it serves. A lost, repeated or
   out-of-order event therefore does no harm, and the periodic check of `CURRENT`

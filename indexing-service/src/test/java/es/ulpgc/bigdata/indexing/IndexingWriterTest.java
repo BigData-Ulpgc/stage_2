@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.indexing;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientConnectionStrategyConfig;
+import com.hazelcast.collection.IQueue;
 import com.hazelcast.core.HazelcastInstance;
 import com.mongodb.MongoException;
 import es.ulpgc.bigdata.coordination.BookState;
@@ -99,10 +100,18 @@ class IndexingWriterTest {
     }
 
     private IndexingWriter start(Coordination on, String owner) {
+        return start(on, owner, 1);
+    }
+
+    private IndexingWriter start(Coordination on, String owner, int batchSize) {
+        return start(on, owner, batchSize, STEP);
+    }
+
+    private IndexingWriter start(Coordination on, String owner, int batchSize, Duration step) {
         IndexingWriter writer = new IndexingWriter(on, service, owner, d -> {
             sleeps.add(d);
             Thread.sleep(10);
-        }, STEP);
+        }, batchSize, step);
         Thread thread = new Thread(writer, "test-writer-" + owner);
         thread.start();
         running.add(new Running(writer, thread));
@@ -149,6 +158,117 @@ class IndexingWriterTest {
         assertEquals(IndexingWriter.Role.ACTIVE, writer.role());
         assertEquals(2L, writer.status().get("indexed"));
         assertNull(task(1).owner(), "T7 libera el lease");
+    }
+
+    // ---- batches (DR-09) ----
+
+    @Test
+    void conLaColaLlenaEscribeEnLotesDeHastaBatchSizeConUnFlushCadaUno() throws Exception {
+        inDatalake(1, 2, 3, 4, 5, 6, 7);
+        downloaded(1, 2, 3, 4, 5, 6, 7);                   // all waiting before the writer starts
+
+        IndexingWriter writer = start(coordination, "w-a", 3);
+
+        await("los 7 INDEXED", () -> writer.status().get("indexed").equals(7L));
+        assertEquals(3, index.flushes.get(), "lotes de 3, 3 y 1");
+        assertEquals(1, writer.status().get("last_batch"));
+        for (int id = 1; id <= 7; id++) {
+            assertEquals(BookState.INDEXED, task(id).bookState());
+        }
+    }
+
+    @Test
+    void conUnSoloLibroEnLaColaNoEsperaALlenarElLote() throws Exception {
+        inDatalake(1);
+        Duration longStep = Duration.ofSeconds(3);          // what waiting for more would cost
+        IndexingWriter writer = start(coordination, "w-a", 100, longStep);
+        await("activo", () -> writer.role() == IndexingWriter.Role.ACTIVE);
+
+        long start = System.nanoTime();
+        downloaded(1);
+        await("1 INDEXED", () -> task(1).bookState() == BookState.INDEXED);
+        long tookMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertEquals(1, writer.status().get("last_batch"));
+        assertTrue(tookMs < longStep.toMillis() / 2, "tardó " + tookMs + " ms: esperó a llenar el lote");
+    }
+
+    @Test
+    void enUnLoteCadaLibroMaloFallaSoloYLosBuenosQuedanIndexed() throws Exception {
+        inDatalake(1, 2);
+        datalake.save(new RawBook(4, IndexingServiceTest.HEADER_1342, "The and of ... !!!"));
+        downloaded(1, 2, 3, 4);                            // 3 is not in the datalake, 4 has no terms
+
+        IndexingWriter writer = start(coordination, "w-a", 10);
+
+        await("4 FAILED y 1, 2 INDEXED", () -> task(4).bookState() == BookState.FAILED
+                && task(1).bookState() == BookState.INDEXED && task(2).bookState() == BookState.INDEXED);
+        assertTrue(task(4).lastError().startsWith("EMPTY_BOOK"), task(4).lastError());
+        await("3 FAILED tras sus intentos", () -> task(3).bookState() == BookState.FAILED);
+        assertTrue(task(3).lastError().startsWith("NOT_READY"), task(3).lastError());
+        assertEquals(1, index.flushes.get(), "los dos buenos, en un solo flush");
+        assertEquals(2L, writer.status().get("indexed"));
+    }
+
+    @Test
+    void conMongoCaidoTodoElLoteVuelveALaColaSinGastarIntentosYLuegoSeIndexa() throws Exception {
+        inDatalake(1, 2, 3);
+        metadata.failing(true);
+        downloaded(1, 2, 3);
+
+        IndexingWriter writer = start(coordination, "w-a", 10);
+        await("una pausa", () -> ((Long) writer.status().get("outage_pauses")) >= 1);
+        for (int id = 1; id <= 3; id++) {
+            assertEquals(0, task(id).attempts(), "una caída de MongoDB no es culpa del libro");
+            assertTrue(task(id).lastError().startsWith("STORAGE_UNAVAILABLE"), task(id).lastError());
+        }
+        metadata.failing(false);
+
+        await("los 3 INDEXED", () -> writer.status().get("indexed").equals(3L));
+        long pauses = (Long) writer.status().get("outage_pauses");
+        assertEquals(3 * pauses, writer.status().get("requeued"), "una pausa por lote de 3, no por libro");
+    }
+
+    @Test
+    void unErrorInesperadoAlEscribirElLoteEsInternalErrorParaTodos() throws Exception {
+        inDatalake(1, 2);
+        index.failNextFlushWith = new IllegalStateException("fallo inesperado (simulado)");
+        downloaded(1, 2);
+
+        IndexingWriter writer = start(coordination, "w-a", 10);
+
+        await("1 y 2 INDEXED en el segundo intento", () -> writer.status().get("indexed").equals(2L));
+        assertEquals(2L, writer.status().get("requeued"));
+        assertTrue(task(1).lastError().startsWith("INTERNAL_ERROR: "), task(1).lastError());
+        assertTrue(task(2).lastError().startsWith("INTERNAL_ERROR: "), task(2).lastError());
+    }
+
+    /** Review of #37 in a batch: lost and back while the first claim waits, the batch is not filled. */
+    @Test
+    void unaReconexionMientrasEsperaElPrimerLibroNoLlenaElLote() throws Exception {
+        inDatalake(50, 51, 52, 53, 54, 55);
+        downloaded(50, 51, 52, 53, 54, 55);
+        IQueue<Integer> queue = client.getQueue(CoordinationNames.INDEX_QUEUE);
+        queue.clear();                                      // DOWNLOADED, but not in the queue yet
+        IndexingWriter writer = start(coordination, "w-a", 100, Duration.ofSeconds(3));
+        await("activo", () -> writer.role() == IndexingWriter.Role.ACTIVE);
+        Thread.sleep(300);                                  // waiting in its first claim (3 s)
+
+        writer.connectionChanged(false);
+        writer.connectionChanged(true);
+        queue.addAll(List.of(50, 51, 52, 53, 54, 55));      // all six at once
+
+        await("los 6 INDEXED", () -> writer.status().get("indexed").equals(6L));
+        // The first claim returns 50, but the batch is not filled under a lost hold: 50 alone,
+        // then the lock is taken again and the other five come as a batch of their own.
+        assertEquals(2, index.flushes.get(), "un lote con el 50 y otro con los 5 restantes");
+        assertEquals(5, writer.status().get("last_batch"));
+    }
+
+    @Test
+    void unLoteDeCeroLibrosNoSePuedeConfigurar() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new IndexingWriter(coordination, service, "w-a", d -> { }, 0));
     }
 
     // ---- errors (contract §4.3) ----
@@ -444,10 +564,11 @@ class IndexingWriterTest {
 
     @Test
     void elEstadoLlevaLosContadoresDelContrato() {
-        IndexingWriter writer = new IndexingWriter(coordination, service, "w-a", d -> { });
+        IndexingWriter writer = new IndexingWriter(coordination, service, "w-a", d -> { }, 100);
 
         assertEquals(List.of("role", "indexed", "requeued", "failed", "lease_lost", "outage_pauses",
-                "invalid_ids_dropped", "ids_skipped"), List.copyOf(writer.status().keySet()));
+                "last_batch", "invalid_ids_dropped", "ids_skipped"), List.copyOf(writer.status().keySet()));
+        assertEquals(0, writer.status().get("last_batch"));
         assertEquals("standby", writer.status().get("role"));
     }
 }

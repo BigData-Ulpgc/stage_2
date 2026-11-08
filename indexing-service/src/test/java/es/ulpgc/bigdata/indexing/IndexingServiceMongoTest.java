@@ -88,6 +88,23 @@ class IndexingServiceMongoTest {
     }
 
     @Test
+    void unLoteAcabaEnLasTresColeccionesConUnUpsertPorTermino() throws Exception {
+        datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
+        datalake.save(new RawBook(11, "Title: Alice\n\nAuthor: Lewis Carroll\n\nLanguage: English\n",
+                "Alice had a fortune of tea."));
+
+        BatchResult result = service.indexBatch(List.of(1342, 11));
+
+        assertEquals(2, result.indexed().size());
+        assertEquals(2, db.getCollection(booksCollection).countDocuments());
+        assertEquals(2, db.getCollection(logCollection).countDocuments());
+        Document fortune = db.getCollection(indexCollection).find(new Document("term", "fortune")).first();
+        assertNotNull(fortune);
+        assertEquals(Set.of(11, 1342), Set.copyOf(fortune.getList("postings", Integer.class)),
+                "un término común: un documento con los dos libros");
+    }
+
+    @Test
     void elLibroAcabaEnBooksYEnInvertedIndex() {
         datalake.save(new RawBook(1342, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342));
 

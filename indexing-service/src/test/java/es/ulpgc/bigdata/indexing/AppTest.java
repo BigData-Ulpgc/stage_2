@@ -23,6 +23,8 @@ import es.ulpgc.bigdata.testsupport.HazelcastTestCluster;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -34,6 +36,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +96,16 @@ class AppTest {
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> App.start(Env.of(env)));
         assertTrue(e.getMessage().contains("INDEXING_PORT"), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"INDEXING_THREADS", "INDEX_WRITE_BATCH"})
+    void sinHilosDeParseoOSinLoteNoArranca(String variable) {
+        Map<String, String> env = baseEnv("mongodb://127.0.0.1:1");
+        env.put(variable, "0");
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> App.start(Env.of(env)));
+        assertTrue(e.getMessage().contains(variable), e.getMessage());
     }
 
     @Test
@@ -229,6 +242,7 @@ class AppTest {
                 .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
                 .build())) {
             assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            HazelcastTestCluster.start();                     // also when this test runs alone
             HazelcastTestCluster.reset();
             HazelcastInstance hz = HazelcastTestCluster.settings().openClient();
             int clientsBefore = connectedClients();
@@ -267,6 +281,10 @@ class AppTest {
 
                 running.close();
                 assertFalse(alive("indexing-service-writer"), "close() volvió con el escritor todavía vivo");
+                for (int i = 0; i < 20 && aliveStartingWith("indexing-service-parser-"); i++) {
+                    Thread.sleep(50);
+                }
+                assertFalse(aliveStartingWith("indexing-service-parser-"), "quedan hilos de parseo tras close()");
                 // The executor ends its thread just after close() returns: a moment of margin.
                 for (int i = 0; i < 20 && alive("indexing-service-notifier"); i++) {
                     Thread.sleep(50);
@@ -282,6 +300,104 @@ class AppTest {
                 admin.getDatabase(database).drop();
             }
         }
+    }
+
+    @Test
+    void conDosIndexingSoloUnoEscribeEnLotesYAlPararloElOtroTomaElRelevo() throws Exception {
+        // Two replicas of the service on the same cluster and the same MongoDB (DR-09, plan §5):
+        // the lock index-writer lets only one of them consume index-queue.
+        String database = "search_engine_test_two_" + System.nanoTime();
+        try (MongoClient admin = MongoClients.create(MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(MONGO_URI))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(1500, TimeUnit.MILLISECONDS))
+                .build())) {
+            assumeTrue(answers(admin), "MongoDB no está disponible en " + MONGO_URI + ": test saltado");
+            HazelcastTestCluster.start();                     // also when this test runs alone
+            HazelcastTestCluster.reset();
+            HazelcastInstance hz = HazelcastTestCluster.settings().openClient();
+            App.RunningService first = null;
+            App.RunningService second = null;
+            try {
+                Coordination coordination = Coordination.on(hz, HazelcastTestCluster.settings(), Clock.systemUTC());
+                RangeBasedDatalake datalake = new RangeBasedDatalake(new DataLayout(dataDir).datalakeDir());
+                for (int id = 1; id <= 15; id++) {
+                    datalake.save(new RawBook(id, IndexingServiceTest.HEADER_1342, IndexingServiceTest.BODY_1342 + " book" + id));
+                }
+                // 12 books waiting in index-queue BEFORE the replicas start: batches of 5, 5 and 2.
+                downloaded(coordination, 1, 12);
+                Map<String, String> env = baseEnv(MONGO_URI);
+                env.put("MONGO_DATABASE", database);
+                env.put("INDEX_WRITE_BATCH", "5");
+                env.put("INDEXING_THREADS", "2");
+                first = App.start(Env.of(env));
+                second = App.start(Env.of(env));
+
+                for (int id = 1; id <= 12; id++) {
+                    awaitState(coordination, id, BookState.INDEXED);
+                }
+                JsonObject writerA = writerOf(first);
+                JsonObject writerB = writerOf(second);
+                JsonObject active = "active".equals(writerA.get("role").getAsString()) ? writerA : writerB;
+                JsonObject standby = active == writerA ? writerB : writerA;
+                assertEquals("active", active.get("role").getAsString());
+                assertEquals("standby", standby.get("role").getAsString(), "solo una réplica tiene el lock");
+                assertEquals(12, active.get("indexed").getAsLong());
+                assertEquals(0, standby.get("indexed").getAsLong(), "la otra no escribió nada");
+                assertEquals(2, active.get("last_batch").getAsInt(), "lotes de 5, 5 y 2");
+
+                // The active replica stops: the standby takes the lock and indexes what comes next.
+                App.RunningService stopped = active == writerA ? first : second;
+                App.RunningService other = stopped == first ? second : first;
+                stopped.close();
+                awaitWriterRole(other, "active");
+                downloaded(coordination, 13, 15);
+                for (int id = 13; id <= 15; id++) {
+                    awaitState(coordination, id, BookState.INDEXED);
+                }
+                assertEquals(3, writerOf(other).get("indexed").getAsLong());
+            } finally {
+                if (first != null) {
+                    first.close();
+                }
+                if (second != null) {
+                    second.close();
+                }
+                hz.shutdown();
+                admin.getDatabase(database).drop();
+            }
+        }
+    }
+
+    /** Seeds the books from..to and takes them to DOWNLOADED, as the Control and Ingestion do. */
+    private static void downloaded(Coordination coordination, int from, int to) throws InterruptedException {
+        List<Integer> ids = new ArrayList<>();
+        for (int id = from; id <= to; id++) {
+            ids.add(id);
+        }
+        coordination.seed(ids);
+        for (int i = 0; i < ids.size(); i++) {
+            assertTrue(coordination.complete(
+                    coordination.claim(Stage.INGESTION, "test/w1", Duration.ofSeconds(5)).orElseThrow()));
+        }
+    }
+
+    private JsonObject writerOf(App.RunningService service) throws Exception {
+        HttpResponse<String> status = http.send(HttpRequest.newBuilder(
+                URI.create("http://localhost:" + service.port() + "/status")).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        return JsonParser.parseString(status.body()).getAsJsonObject().getAsJsonObject("writer");
+    }
+
+    private void awaitWriterRole(App.RunningService service, String role) throws Exception {
+        String now = null;
+        for (int i = 0; i < 200 && !role.equals(now); i++) {
+            JsonObject writer = writerOf(service);
+            now = writer == null ? null : writer.get("role").getAsString();
+            if (!role.equals(now)) {
+                Thread.sleep(50);
+            }
+        }
+        assertEquals(role, now);
     }
 
     @Test
@@ -333,6 +449,11 @@ class AppTest {
         return Hazelcast.getAllHazelcastInstances().stream()
                 .mapToInt(m -> m.getClientService().getConnectedClients().size())
                 .sum();
+    }
+
+    private static boolean aliveStartingWith(String prefix) {
+        return Thread.getAllStackTraces().keySet().stream()
+                .anyMatch(t -> t.getName().startsWith(prefix) && t.isAlive());
     }
 
     private static boolean alive(String threadName) {

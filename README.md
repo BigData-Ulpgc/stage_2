@@ -78,6 +78,8 @@ curl localhost:7012/status    # {"service":"indexing-service","status":"running"
 | `INGESTION_LOCAL_DIR` | `sample_dataset/raw` | Folder of the `local` source; it must exist, or Ingestion does not start |
 | `INGESTION_WORKERS` | 4 | `ingest-queue` worker threads of one Ingestion replica; `0`: HTTP API only, no Hazelcast |
 | `INGESTION_FETCH_RETRIES` | 2 | Retries of a transient source failure inside one attempt (after 1 s, 2 s…); a 429 or 403 is not retried, it pauses the replica |
+| `INDEXING_THREADS` | 4 | Threads of Indexing that read, parse and tokenize the books of one batch; the writing to MongoDB stays in one writer thread |
+| `INDEX_WRITE_BATCH` | 100 | The most `index-queue` books Indexing claims and writes together (one bulk write per collection) |
 | `HZ_MEMBERS`, `HZ_CLUSTER_NAME` | `localhost:5701,localhost:5702`, `search-engine` | Hazelcast cluster of the workers (inside Docker: `hz-1:5701,hz-2:5701`) |
 | `LEASE_SECONDS`, `MAX_ATTEMPTS`, `LEASE_CHECK_SECONDS` | 120, 3, 10 | Leases and attempts of the coordination contract (`api/contracts/coordination.md` §8) |
 | `PUBLISH_BATCH`, `PUBLISH_INTERVAL_S` | 100, 30 | The Control publishes (`POST /index/publish`) when this many books are `INDEXED`, or this long after the last publication if any is |
