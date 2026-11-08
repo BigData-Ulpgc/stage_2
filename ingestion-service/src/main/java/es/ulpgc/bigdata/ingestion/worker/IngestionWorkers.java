@@ -2,6 +2,7 @@ package es.ulpgc.bigdata.ingestion.worker;
 
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.coordination.Coordination;
+import es.ulpgc.bigdata.coordination.Stage;
 import es.ulpgc.bigdata.ingestion.IngestionService;
 
 import java.time.Clock;
@@ -82,6 +83,7 @@ public final class IngestionWorkers implements AutoCloseable {
         status.put("paused_seconds", throttle.remaining().toSeconds());
         status.put("invalid_ids_dropped", coordination.invalidIdsDropped());
         status.put("ids_skipped", coordination.idsSkipped());
+        status.put("coordination_cost", coordination.metrics().summary(Stage.INGESTION));
         return status;
     }
 

@@ -77,6 +77,8 @@ public final class Coordination implements AutoCloseable {
     /** Ids taken from a queue and dropped by this instance (see claim). */
     private final AtomicLong invalidIdsDropped = new AtomicLong();
     private final AtomicLong idsSkipped = new AtomicLong();
+    /** What coordinating cost this instance (CF-12): recorded by claim and complete. */
+    private final CoordinationMetrics metrics = new CoordinationMetrics();
 
     /** What one poll of a claim did with the id it took, if any. */
     private enum Drop { NONE, INVALID, NOT_WAITING }
@@ -358,7 +360,13 @@ public final class Coordination implements AutoCloseable {
                 throw new InterruptedException("interrupted while waiting for " + stage.queue());
             }
             long slice = Math.min(Math.max(deadline - System.nanoTime(), 0), MAX_POLL.toNanos());
+            long began = System.nanoTime();
             Polled polled = inTransaction(tx -> pollAndClaim(tx, stage, owner, slice));
+            polled.claim().ifPresent(claimed -> {
+                metrics.claim(stage).record((System.nanoTime() - began) / 1_000);
+                BookTask task = claimed.task();
+                metrics.queueWait(stage).record((task.startedAt() - task.enqueuedAt()) * 1_000);
+            });
             // Counted only here, after the commit: a rolled-back drop did not happen
             if (polled.drop() == Drop.INVALID) {
                 invalidIdsDropped.incrementAndGet();
@@ -416,6 +424,15 @@ public final class Coordination implements AutoCloseable {
     }
 
     /**
+     * Queue wait, claim, work and complete per stage, for the claims and completions of this
+     * instance since it was created (CF-12, see CoordinationMetrics). The services show
+     * {@code metrics().summary()} in GET /status.
+     */
+    public CoordinationMetrics metrics() {
+        return metrics;
+    }
+
+    /**
      * T3, T7: the stage is complete. Call it only when the evidence is persistent (contract
      * principle 2): {@code <id>._READY} exists (INGESTION), or index_log has the book
      * (INDEXING). A completed ingestion offers the id to index-queue in the same transaction.
@@ -425,11 +442,16 @@ public final class Coordination implements AutoCloseable {
      */
     public boolean complete(Claim claim) {
         Stage stage = claim.stage();
-        if (stage == Stage.INGESTION) {
-            return replaceAndOffer(claim.task(), claim.task().completed(stage, now(), true),
-                    Stage.INDEXING.queue());
+        long began = System.nanoTime();
+        long now = now();
+        boolean done = stage == Stage.INGESTION
+                ? replaceAndOffer(claim.task(), claim.task().completed(stage, now, true), Stage.INDEXING.queue())
+                : books.replace(claim.bookId(), claim.task(), claim.task().completed(stage, now, false));
+        if (done) {
+            metrics.work(stage).record((now - claim.task().startedAt()) * 1_000);
+            metrics.complete(stage).record((System.nanoTime() - began) / 1_000);
         }
-        return books.replace(claim.bookId(), claim.task(), claim.task().completed(stage, now(), false));
+        return done;
     }
 
     /**
