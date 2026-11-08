@@ -25,7 +25,8 @@ python3 scripts/chaos/chaos.py all --books 400      # quicker, the same checks
 - `COMPOSE=docker-compose` for the old command; `--no-build` uses the images already built.
 - The first run generates the synthetic books (DR-16) into `data/chaos/books-<n>` (ignored by git).
 - **It stops and replaces whatever runs in the compose project** (`docker compose down` at the start of
-  every scenario and at the end). It uses a datalake (`data/chaos/datalake`) and a database
+  every scenario and at the end). `COMPOSE="docker compose -p <name>"` gives it a project of its own, with its
+  own MongoDB volume. It uses a datalake (`data/chaos/datalake`) and a database
   (`chaos_test`) of its own and deletes both at the end, so the data of other work is not touched.
 - Settings shorter than in production, so that a lost lease is requeued in seconds:
   `LEASE_SECONDS=15`, `LEASE_CHECK_SECONDS=3`, `PUBLISH_INTERVAL_S=5`. The rest comes from `.env`.
@@ -34,6 +35,11 @@ python3 scripts/chaos/chaos.py all --books 400      # quicker, the same checks
   cause the failure as soon as a twentieth of the books is ingested (polling every 0.2 s), and **check that books were
   still in flight** right after it: if none were, the scenario is a FAIL, not a PASS. If it happens on a fast machine,
   run with more books (`--books 6000`).
+- In `kill-ingestion` the victim must die **while it holds a claimed book**, or there is no lease to expire. A book
+  takes milliseconds, so a plain `docker kill` usually finds the worker between two books. The replica is therefore
+  frozen first (`docker pause`, so its worker stops wherever it is), the Control is asked eight times in 0.8 s for the
+  books `INGESTING`, and only if every answer shows one (the other replica keeps a book there for a few milliseconds
+  only) is the frozen replica killed. Otherwise it is thawed and tried again; the report says how many tries it took.
 - Before killing a container its restart policy is removed (`docker update --restart=no`): otherwise
   `restart: unless-stopped` could bring it back by itself, and the scenario decides when it comes back.
 

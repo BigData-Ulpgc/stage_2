@@ -172,6 +172,10 @@ class Scenario:
         control = control_status()
         if control["coordination"] != "connected" or control["books"]["total"] != 0:
             return False
+        # A new cluster has no 'initialized' marker, so the Control rebuilds book-state once just after
+        # connecting; until it has, a scenario that compares recovery.runs would count that first run
+        if control["recovery"]["runs"] < 1:
+            return False
         replicas = [service_status(c, 7001) for c in containers("ingestion")]
         if len(replicas) != self.replicas or any(r.get("coordination") != "connected" for r in replicas):
             return False
@@ -340,6 +344,29 @@ def killed(container):
     run(["docker", "kill", container])
 
 
+def killed_holding_a_book(victim, tries=40, samples=8):
+    """SIGKILL of an Ingestion replica while it holds a claimed book. With the local source a book
+    takes milliseconds, so a plain kill usually finds the worker between two books, with no lease
+    to expire. So the replica is frozen first (docker pause: its worker stops wherever it is), and
+    the Control is asked several times for the books INGESTING: the other replica only keeps one
+    there for a few milliseconds, so if every sample shows one, it is the frozen replica's, and it
+    is killed frozen. Otherwise it is thawed and tried again a moment later.
+    Returns the number of tries."""
+    run(["docker", "update", "--restart=no", victim])
+    for attempt in range(1, tries + 1):
+        run(["docker", "pause", victim])
+        ingesting = []
+        for _ in range(samples):
+            time.sleep(0.1)
+            ingesting.append(control_status()["books"].get("INGESTING", 0))
+        if min(ingesting) >= 1:
+            run(["docker", "kill", victim])
+            return attempt
+        run(["docker", "unpause", victim])
+        time.sleep(0.2)
+    raise ChaosFailure(f"the replica held no book in {tries} tries")
+
+
 KILL_INGESTION_EXPECTED = """\
 Two Ingestion replicas share `ingest-queue`. One is killed with SIGKILL (`docker kill`) while it is
 working: its process dies without releasing anything. The books it had claimed stay `INGESTING`
@@ -385,12 +412,12 @@ def kill_ingestion(s):
         s.timeline.writerow(["elapsed_s", *TIMELINE_STATES])
         s.seed_all()
         n = len(s.ids)
-        before = s.wait_until("a twentieth of the books ingested", s.past_ingestion, n // 20, 300)
+        s.wait_until("a twentieth of the books ingested", s.past_ingestion, n // 20, 300)
         victim = containers("ingestion")[0]
-        killed(victim)
+        tries = killed_holding_a_book(victim)
         after_kill = s.snapshot("after-kill")["books"]
-        s.event(f"docker kill of replica {victim[:12]}: {before.get('INGESTING', 0)} books INGESTING in "
-                f"both replicas just before; right after: {describe(after_kill)}")
+        s.event(f"docker kill of replica {victim[:12]}, frozen first with docker pause while it held a "
+                f"claimed book (try {tries}); right after: {describe(after_kill)}")
         s.check_caught_halfway(after_kill, "ingest")
         books = s.wait_until("every book past ingestion", s.past_ingestion, n, LEASE_SECONDS + 300)
     requeued = control_status()["lease_check"]["requeued_or_failed"]
@@ -481,7 +508,7 @@ def restart_hazelcast(s):
         s.wait_until("the first publication", lambda b: b.get("PUBLISHED", 0), 1, 900)
         s.seed_part(s.ids[len(first):], f"second wave of {n - len(first)} books")
         s.wait_until("the second wave being ingested", s.past_ingestion, len(first) + 10, 300)
-        before = s.ingestion_counters("before-restart")
+        s.ingestion_counters("before-restart")
         lost_before = s.snapshot("before-restart")["books"]
         killed("hz-1")
         killed("hz-2")
@@ -501,13 +528,14 @@ def restart_hazelcast(s):
                 0 < answer["added"] == n - evidence and answer["already_known"] == evidence,
                 f"{answer['added']} added, {answer['already_known']} already known; evidence for {evidence}")
         s.wait_until("every book PUBLISHED", lambda b: b.get("PUBLISHED", 0), n, 1200)
+    # Over the whole run, not from a moment before the kill: the workers keep writing books until
+    # they notice the cluster is gone, and those books were ingested before the restart. A book with
+    # _READY that was ingested again would count as already_available: the worker checks first.
     after = s.ingestion_counters()
-    downloaded = after.get("downloaded", 0) - before.get("downloaded", 0)
-    available = after.get("already_available", 0) - before.get("already_available", 0)
-    s.check("after the restart only the books without evidence were ingested",
-            downloaded + available == answer["added"],
-            f"{downloaded} downloaded and {available} already in the datalake after the restart, "
-            f"for {answer['added']} books sent again; the recovered DOWNLOADED went to index-queue")
+    downloaded, available = after.get("downloaded", 0), after.get("already_available", 0)
+    s.check("no book with _READY was ingested again", available == 0 and downloaded <= n,
+            f"in the whole run {downloaded} books downloaded and {available} found already in the datalake, "
+            f"for {n} books; the recovered DOWNLOADED went to index-queue, not ingest-queue")
     s.check_end_state("PUBLISHED")
     return s
 
