@@ -1,0 +1,42 @@
+{
+  "coordination": "connected",
+  "books": {
+    "PENDING": 842,
+    "INGESTING": 4,
+    "DOWNLOADED": 973,
+    "INDEXING": 86,
+    "INDEXED": 71,
+    "PUBLISHED": 31,
+    "FAILED": 0,
+    "total": 2007
+  },
+  "queues": {
+    "ingest-queue": 834,
+    "index-queue": 974
+  },
+  "publication": {
+    "batch": 100,
+    "interval_seconds": 5,
+    "publications": 1,
+    "version": 1,
+    "last_books_published": 100,
+    "total_books": 100,
+    "published_at": "2026-11-08T18:14:16Z",
+    "consecutive_failures": 0,
+    "last_error": null
+  },
+  "lease_check": {
+    "requeued_or_failed": 0,
+    "last_check": "2026-11-08T18:14:14.298Z"
+  },
+  "recovery": {
+    "runs": 1,
+    "last_run": "2026-11-08T18:14:01.988Z",
+    "published": 0,
+    "indexed": 0,
+    "downloaded": 0,
+    "seeded": 0,
+    "millis": 198,
+    "last_error": null
+  }
+}

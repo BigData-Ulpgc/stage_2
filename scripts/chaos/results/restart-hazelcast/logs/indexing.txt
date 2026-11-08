@@ -1,0 +1,280 @@
+indexing-1  | 2026-11-08T18:17:16.151969863Z [main] INFO org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync", "version": "5.13.0"}, "os": {"type": "Linux", "name": "Linux", "architecture": "amd64", "version": "7.0.0-42-generic"}, "platform": "Java/Eclipse Adoptium/17.0.21+9", "env": {"container": {"runtime": "docker"}}} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, maxAdaptiveRetries=null, enableOverloadRetargeting=false, readConcern=ReadConcern{level=null}, credential=null, transportSettings=null, commandListeners=[], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@525f1e4e, com.mongodb.Jep395RecordCodecProvider@75f9eccc, com.mongodb.KotlinCodecProvider@52aa2946, EnumCodecProvider{}]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[mongo:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='3000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=<hidden>, password=<hidden>}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=<hidden>, password=<hidden>}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=UNSPECIFIED, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+indexing-1  | 2026-11-08T18:17:16.197382839Z [cluster-6af0bcac7d4c667ec5e497f8-mongo:27017] INFO org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=mongo:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=27, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=36114199, minRoundTripTimeNanos=0}
+indexing-1  | 2026-11-08T18:17:16.468908609Z [main] INFO io.javalin.Javalin - Starting Javalin ...
+indexing-1  | 2026-11-08T18:17:16.470989391Z [main] INFO org.eclipse.jetty.server.Server - jetty-11.0.20; built: 2024-01-29T21:04:22.394Z; git: 922f8dc188f7011e60d0361de585fd4ac4d63064; jvm 17.0.21+9
+indexing-1  | 2026-11-08T18:17:16.528534548Z [main] INFO org.eclipse.jetty.server.session.DefaultSessionIdManager - Session workerName=node0
+indexing-1  | 2026-11-08T18:17:16.537078937Z [main] INFO org.eclipse.jetty.server.handler.ContextHandler - Started o.e.j.s.ServletContextHandler@6c2c1385{/,null,AVAILABLE}
+indexing-1  | 2026-11-08T18:17:16.541882102Z [main] INFO org.eclipse.jetty.server.AbstractConnector - Started ServerConnector@456d6c1e{HTTP/1.1, (http/1.1)}{0.0.0.0:7002}
+indexing-1  | 2026-11-08T18:17:16.548313292Z [main] INFO org.eclipse.jetty.server.Server - Started Server@4fa1c212{STARTING}[11.0.20,sto=0] @789ms
+indexing-1  | 2026-11-08T18:17:16.549913691Z [main] INFO io.javalin.Javalin - Javalin started in 189ms \o/
+indexing-1  | 2026-11-08T18:17:16.556482656Z [main] INFO io.javalin.Javalin - Listening on http://localhost:7002/
+indexing-1  | 2026-11-08T18:17:16.577761645Z [main] INFO io.javalin.Javalin - You are running Javalin 6.1.3 (released March 2, 2024. Your Javalin version is 981 days old. Consider checking for a newer version.).
+indexing-1  | 2026-11-08T18:17:16.578053204Z [main] INFO es.ulpgc.bigdata.indexing.App - indexing-service on port 7002 · datalake /data/datalake/range · MongoDB [mongo:27017] db=chaos_test index=inverted_index
+indexing-1  | 2026-11-08T18:17:17.035682362Z Nov 08, 2026 6:17:17 PM com.hazelcast.client.impl.spi.ClientInvocationService
+indexing-1  | 2026-11-08T18:17:17.035702447Z INFO: hz.client_1 [search-engine] [5.7.0] Running with 2 response threads, dynamic=true
+indexing-1  | 2026-11-08T18:17:17.089433540Z Nov 08, 2026 6:17:17 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:17.089464347Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTING
+indexing-1  | 2026-11-08T18:17:17.090696302Z Nov 08, 2026 6:17:17 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:17.090720847Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTED
+indexing-1  | 2026-11-08T18:17:17.130184470Z Nov 08, 2026 6:17:17 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:17.130203607Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to cluster: search-engine
+indexing-1  | 2026-11-08T18:17:17.133459597Z Nov 08, 2026 6:17:17 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:17.133479563Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+indexing-1  | 2026-11-08T18:17:17.187520084Z Nov 08, 2026 6:17:17 PM com.hazelcast.client.impl.spi.ClientClusterService
+indexing-1  | 2026-11-08T18:17:17.187549786Z INFO: hz.client_1 [search-engine] [5.7.0] Members [2] {
+indexing-1  | 2026-11-08T18:17:17.187556884Z 	Member [hz-1]:5701 - 4ca4f412-ed55-4bc1-b6fd-af714d9733e8
+indexing-1  | 2026-11-08T18:17:17.187561660Z 	Member [hz-2]:5701 - 349f0416-db42-4fb3-a237-a4349efda507
+indexing-1  | 2026-11-08T18:17:17.187566410Z }
+indexing-1  | 2026-11-08T18:17:17.187571026Z 
+indexing-1  | 2026-11-08T18:17:17.190365395Z Nov 08, 2026 6:17:17 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:17.190397839Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_CONNECTED
+indexing-1  | 2026-11-08T18:17:17.191030079Z Nov 08, 2026 6:17:17 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:17.191044060Z INFO: hz.client_1 [search-engine] [5.7.0] Authenticated with server [hz-1]:5701:4ca4f412-ed55-4bc1-b6fd-af714d9733e8, server version: 5.7.0, local address: /172.18.0.5:54021
+indexing-1  | 2026-11-08T18:17:17.192118251Z Nov 08, 2026 6:17:17 PM com.hazelcast.internal.diagnostics.Diagnostics
+indexing-1  | 2026-11-08T18:17:17.192137439Z INFO: hz.client_1 [search-engine] [5.7.0] Diagnostics service is disabled. You can enable it over Management Center or Operator dynamically.
+indexing-1  | 2026-11-08T18:17:17.292808858Z Nov 08, 2026 6:17:17 PM com.hazelcast.client.impl.statistics.ClientStatisticsService
+indexing-1  | 2026-11-08T18:17:17.292831338Z INFO: Client statistics is enabled with period 5 seconds.
+indexing-1  | 2026-11-08T18:17:17.607981745Z [hazelcast-connect] INFO es.ulpgc.bigdata.indexing.App - connected to Hazelcast [hz-1:5701, hz-2:5701]
+indexing-1  | 2026-11-08T18:17:17.816487529Z [indexing-service-writer] INFO es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: holds index-writer, consuming index-queue
+indexing-1  | 2026-11-08T18:17:27.193925149Z Nov 08, 2026 6:17:27 PM com.hazelcast.client.util.ClientConnectivityLogger
+indexing-1  | 2026-11-08T18:17:27.193951613Z INFO: hz.client_1 [search-engine] [5.7.0] 
+indexing-1  | 2026-11-08T18:17:27.193955505Z 
+indexing-1  | 2026-11-08T18:17:27.193958296Z Client Connectivity [2] {
+indexing-1  | 2026-11-08T18:17:27.193961135Z 	Member [hz-1]:5701 - 4ca4f412-ed55-4bc1-b6fd-af714d9733e8 - connected
+indexing-1  | 2026-11-08T18:17:27.193964197Z 	Member [hz-2]:5701 - 349f0416-db42-4fb3-a237-a4349efda507 - disconnected
+indexing-1  | 2026-11-08T18:17:27.193967046Z }
+indexing-1  | 2026-11-08T18:17:27.193969688Z 
+indexing-1  | 2026-11-08T18:17:28.006118245Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 1: 3 new books, 3 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:17:28.317425043Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 3 books PUBLISHED in book-state (version 1)
+indexing-1  | 2026-11-08T18:17:32.758355221Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.tcp.TcpClientConnection
+indexing-1  | 2026-11-08T18:17:32.758396762Z INFO: hz.client_1 [search-engine] [5.7.0] ClientConnection{alive=false, connectionId=1, channel=NioChannel{/172.18.0.5:54021->hz-1/172.18.0.4:5701}, remoteAddress=[hz-1]:5701, remoteUuid=4ca4f412-ed55-4bc1-b6fd-af714d9733e8, clusterUuid=e15606f8-973f-40f2-9080-a127fa13c752, lastReadTime=2026-11-08 18:17:32.654, lastWriteTime=2026-11-08 18:17:32.654, closedTime=2026-11-08 18:17:32.732} closed. Reason: Connection closed by the other side
+indexing-1  | 2026-11-08T18:17:32.761618130Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:32.761647440Z INFO: hz.client_1 [search-engine] [5.7.0] Removed connection to endpoint: [hz-1]:5701:4ca4f412-ed55-4bc1-b6fd-af714d9733e8, connection: ClientConnection{alive=false, connectionId=1, channel=NioChannel{/172.18.0.5:54021->hz-1/172.18.0.4:5701}, remoteAddress=[hz-1]:5701, remoteUuid=4ca4f412-ed55-4bc1-b6fd-af714d9733e8, clusterUuid=e15606f8-973f-40f2-9080-a127fa13c752, lastReadTime=2026-11-08 18:17:32.654, lastWriteTime=2026-11-08 18:17:32.654, closedTime=2026-11-08 18:17:32.732}
+indexing-1  | 2026-11-08T18:17:32.761971457Z Nov 08, 2026 6:17:32 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:32.761989987Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_DISCONNECTED
+indexing-1  | 2026-11-08T18:17:32.764142433Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:32.764204166Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to cluster: search-engine
+indexing-1  | 2026-11-08T18:17:32.764220049Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:32.764245593Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+indexing-1  | 2026-11-08T18:17:32.767931602Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:32.767951812Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-1]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-1/172.18.0.4:5701
+indexing-1  | 2026-11-08T18:17:32.768454465Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:32.768482986Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-2]:5701
+indexing-1  | 2026-11-08T18:17:32.826462841Z Nov 08, 2026 6:17:32 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:32.826496400Z INFO: hz.client_1 [search-engine] [5.7.0] Authenticated with server [hz-2]:5701:349f0416-db42-4fb3-a237-a4349efda507, server version: 5.7.0, local address: /172.18.0.5:54847
+indexing-1  | 2026-11-08T18:17:32.839104103Z Nov 08, 2026 6:17:32 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:32.839135725Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_CONNECTED
+indexing-1  | 2026-11-08T18:17:33.095815885Z Nov 08, 2026 6:17:33 PM com.hazelcast.client.impl.connection.tcp.TcpClientConnection
+indexing-1  | 2026-11-08T18:17:33.095843038Z INFO: hz.client_1 [search-engine] [5.7.0] ClientConnection{alive=false, connectionId=2, channel=NioChannel{/172.18.0.5:54847->hz-2/172.18.0.3:5701}, remoteAddress=[hz-2]:5701, remoteUuid=349f0416-db42-4fb3-a237-a4349efda507, clusterUuid=e15606f8-973f-40f2-9080-a127fa13c752, lastReadTime=2026-11-08 18:17:32.920, lastWriteTime=2026-11-08 18:17:32.849, closedTime=2026-11-08 18:17:33.094} closed. Reason: Connection closed by the other side
+indexing-1  | 2026-11-08T18:17:33.098164570Z Nov 08, 2026 6:17:33 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:33.098184321Z INFO: hz.client_1 [search-engine] [5.7.0] Removed connection to endpoint: [hz-2]:5701:349f0416-db42-4fb3-a237-a4349efda507, connection: ClientConnection{alive=false, connectionId=2, channel=NioChannel{/172.18.0.5:54847->hz-2/172.18.0.3:5701}, remoteAddress=[hz-2]:5701, remoteUuid=349f0416-db42-4fb3-a237-a4349efda507, clusterUuid=e15606f8-973f-40f2-9080-a127fa13c752, lastReadTime=2026-11-08 18:17:32.920, lastWriteTime=2026-11-08 18:17:32.849, closedTime=2026-11-08 18:17:33.094}
+indexing-1  | 2026-11-08T18:17:33.098600710Z Nov 08, 2026 6:17:33 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:33.098619844Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_DISCONNECTED
+indexing-1  | 2026-11-08T18:17:33.103109270Z Nov 08, 2026 6:17:33 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:33.103147725Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to cluster: search-engine
+indexing-1  | 2026-11-08T18:17:33.103155438Z Nov 08, 2026 6:17:33 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:33.103162144Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+indexing-1  | 2026-11-08T18:17:34.151715051Z Nov 08, 2026 6:17:34 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:34.151744609Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-1]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-1/172.18.0.4:5701
+indexing-1  | 2026-11-08T18:17:34.151766775Z Nov 08, 2026 6:17:34 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:34.151776749Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-2]:5701
+indexing-1  | 2026-11-08T18:17:34.152730374Z Nov 08, 2026 6:17:34 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:34.152774717Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-2]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-2/172.18.0.3:5701
+indexing-1  | 2026-11-08T18:17:34.153448900Z Nov 08, 2026 6:17:34 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:34.153479383Z WARNING: hz.client_1 [search-engine] [5.7.0] Unable to get live cluster connection, retry in 1000 ms, attempt: 1, cluster connect timeout: INFINITE, max backoff: 30000 ms
+indexing-1  | 2026-11-08T18:17:35.153848421Z Nov 08, 2026 6:17:35 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:35.153857151Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+indexing-1  | 2026-11-08T18:17:35.154192399Z Nov 08, 2026 6:17:35 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:35.154199713Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-1]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-1/172.18.0.4:5701
+indexing-1  | 2026-11-08T18:17:35.154267783Z Nov 08, 2026 6:17:35 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:35.154272388Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-2]:5701
+indexing-1  | 2026-11-08T18:17:35.154628636Z Nov 08, 2026 6:17:35 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:35.154636180Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-2]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-2/172.18.0.3:5701
+indexing-1  | 2026-11-08T18:17:35.154794320Z Nov 08, 2026 6:17:35 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:35.154801321Z WARNING: hz.client_1 [search-engine] [5.7.0] Unable to get live cluster connection, retry in 1050 ms, attempt: 2, cluster connect timeout: INFINITE, max backoff: 30000 ms
+indexing-1  | 2026-11-08T18:17:36.205456055Z Nov 08, 2026 6:17:36 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:36.205477599Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+indexing-1  | 2026-11-08T18:17:36.206468498Z Nov 08, 2026 6:17:36 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:36.206491422Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-1]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-1/172.18.0.4:5701
+indexing-1  | 2026-11-08T18:17:36.206652489Z Nov 08, 2026 6:17:36 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:36.206683420Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-2]:5701
+indexing-1  | 2026-11-08T18:17:36.207436750Z Nov 08, 2026 6:17:36 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:36.207459427Z WARNING: hz.client_1 [search-engine] [5.7.0] Exception during initial connection to [hz-2]:5701: com.hazelcast.core.HazelcastException: java.io.IOException: Connection refused to address hz-2/172.18.0.3:5701
+indexing-1  | 2026-11-08T18:17:36.207866757Z Nov 08, 2026 6:17:36 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:36.207883625Z WARNING: hz.client_1 [search-engine] [5.7.0] Unable to get live cluster connection, retry in 1102 ms, attempt: 3, cluster connect timeout: INFINITE, max backoff: 30000 ms
+indexing-1  | 2026-11-08T18:17:37.310601507Z Nov 08, 2026 6:17:37 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:37.310626936Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+indexing-1  | 2026-11-08T18:17:42.827218104Z Nov 08, 2026 6:17:42 PM com.hazelcast.client.util.ClientConnectivityLogger
+indexing-1  | 2026-11-08T18:17:42.827255781Z INFO: hz.client_1 [search-engine] [5.7.0] 
+indexing-1  | 2026-11-08T18:17:42.827258525Z 
+indexing-1  | 2026-11-08T18:17:42.827260100Z Client Connectivity [2] {
+indexing-1  | 2026-11-08T18:17:42.827261732Z 	Member [hz-1]:5701 - 4ca4f412-ed55-4bc1-b6fd-af714d9733e8 - disconnected
+indexing-1  | 2026-11-08T18:17:42.827263491Z 	Member [hz-2]:5701 - 349f0416-db42-4fb3-a237-a4349efda507 - connected
+indexing-1  | 2026-11-08T18:17:42.827265046Z }
+indexing-1  | 2026-11-08T18:17:42.827266634Z 
+indexing-1  | 2026-11-08T18:17:44.538437614Z Nov 08, 2026 6:17:44 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:44.538456476Z WARNING: hz.client_1 [search-engine] [5.7.0] Switching from current cluster: e15606f8-973f-40f2-9080-a127fa13c752 to new cluster: 96ab86db-57b2-473a-a8ef-7d53260e1097
+indexing-1  | 2026-11-08T18:17:44.538686959Z Nov 08, 2026 6:17:44 PM com.hazelcast.core.HazelcastInstance
+indexing-1  | 2026-11-08T18:17:44.538694538Z INFO: hz.client_1 [search-engine] [5.7.0] Clearing local state of the client, because of a cluster restart.
+indexing-1  | 2026-11-08T18:17:44.539768024Z Nov 08, 2026 6:17:44 PM com.hazelcast.client.impl.spi.ClientClusterService
+indexing-1  | 2026-11-08T18:17:44.539780561Z INFO: hz.client_1 [search-engine] [5.7.0] Members [2] {
+indexing-1  | 2026-11-08T18:17:44.539784220Z 	Member [hz-1]:5701 - e0ac1356-1708-4e93-ab3f-4288cbba5745
+indexing-1  | 2026-11-08T18:17:44.539787206Z 	Member [hz-2]:5701 - 44ec5150-a11a-4494-b4c6-eacd6ad31b24
+indexing-1  | 2026-11-08T18:17:44.539789979Z }
+indexing-1  | 2026-11-08T18:17:44.539792603Z 
+indexing-1  | 2026-11-08T18:17:44.540104164Z Nov 08, 2026 6:17:44 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:17:44.540117492Z INFO: hz.client_1 [search-engine] [5.7.0] Authenticated with server [hz-2]:5701:44ec5150-a11a-4494-b4c6-eacd6ad31b24, server version: 5.7.0, local address: /172.18.0.5:41319
+indexing-1  | 2026-11-08T18:17:44.596669267Z Nov 08, 2026 6:17:44 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:17:44.596712276Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_CONNECTED
+indexing-1  | 2026-11-08T18:17:44.989425823Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000004 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.088834035Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000005 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.093817482Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000006 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.094855461Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000007 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.096880095Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000008 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.099321905Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000009 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.126552015Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000010 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.188782589Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000011 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.190912647Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000012 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.191945352Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000013 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.192907724Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000014 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.195396442Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000015 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.197706469Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000016 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.198752215Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000017 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.200741882Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000018 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.271475335Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000019 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.289557230Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000020 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.291212852Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000021 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.292702871Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000022 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.293718200Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000023 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.294797059Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000024 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.295858731Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000025 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.297703967Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000026 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.299513207Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000027 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.301417187Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000028 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.302414264Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000029 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.370970807Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000030 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.371712245Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000031 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.372854883Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000032 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.374014309Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000033 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.388815480Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000034 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.390354719Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000035 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.393426018Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000036 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.395134702Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000037 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.396789289Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000038 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.397690029Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000039 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.399060327Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000040 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.399784348Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000041 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.400452470Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000042 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.401899421Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000043 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.407475560Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000044 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.409256393Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000045 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.425637082Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000046 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.426486430Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000047 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.427155602Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000048 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.430313839Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000049 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.431778476Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000050 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.488536155Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000051 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.490099809Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000052 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.491045885Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000053 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.491882202Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000054 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.492694672Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000055 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.493363819Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000056 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.494654357Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000057 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.496047868Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000058 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.497480174Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000059 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.498041417Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000060 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.499236198Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000061 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.499866541Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000062 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.500313116Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000063 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.501702122Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000064 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.502490733Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000065 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.503811072Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000066 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.504466555Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000067 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.505754756Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000068 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.506865569Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000069 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.508092708Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000070 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.509277271Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000071 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.510617815Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000072 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.511934456Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000073 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.512562598Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000074 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.513140448Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000075 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.514804230Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000076 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.516123986Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000077 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.517492948Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000078 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.570819380Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000079 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.572563615Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000080 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.573464744Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000081 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.574911739Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000082 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.575652781Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000083 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.576335415Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000084 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.577635050Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000085 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.578632183Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000086 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.579372728Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000087 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.580671683Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000088 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.581980280Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000089 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.582853015Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000090 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.584240629Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000091 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.584939179Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000092 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.585710886Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000093 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.586823139Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000094 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.587978280Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000095 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.588654801Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000096 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.589757898Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000097 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.591001168Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000098 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.591720000Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000099 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.592443746Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000100 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.593016271Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000101 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.593709009Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000102 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.594271400Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: lost the lease of book 1000103 before complete; dropped
+indexing-1  | 2026-11-08T18:17:45.594311119Z [indexing-service-writer] WARN es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: the cluster was lost while holding index-writer; taking it again before the next batch
+indexing-1  | 2026-11-08T18:17:45.607573471Z [indexing-service-writer] INFO es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: index-writer was no longer ours
+indexing-1  | 2026-11-08T18:17:45.671347395Z [indexing-service-writer] INFO es.ulpgc.bigdata.indexing.IndexingWriter - indexing-eb44d107f359/w0: holds index-writer, consuming index-queue
+indexing-1  | 2026-11-08T18:17:46.334193196Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 2: 100 new books, 103 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:17:46.794578698Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 2)
+indexing-1  | 2026-11-08T18:17:53.399817459Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 3: 100 new books, 203 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:17:53.591971628Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 3)
+indexing-1  | 2026-11-08T18:17:54.540682656Z Nov 08, 2026 6:17:54 PM com.hazelcast.client.util.ClientConnectivityLogger
+indexing-1  | 2026-11-08T18:17:54.540713121Z INFO: hz.client_1 [search-engine] [5.7.0] 
+indexing-1  | 2026-11-08T18:17:54.540719162Z 
+indexing-1  | 2026-11-08T18:17:54.540739247Z Client Connectivity [2] {
+indexing-1  | 2026-11-08T18:17:54.540743861Z 	Member [hz-1]:5701 - e0ac1356-1708-4e93-ab3f-4288cbba5745 - disconnected
+indexing-1  | 2026-11-08T18:17:54.540747973Z 	Member [hz-2]:5701 - 44ec5150-a11a-4494-b4c6-eacd6ad31b24 - connected
+indexing-1  | 2026-11-08T18:17:54.540751915Z }
+indexing-1  | 2026-11-08T18:17:54.540755977Z 
+indexing-1  | 2026-11-08T18:17:59.521350823Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 4: 100 new books, 303 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:17:59.770480186Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 4)
+indexing-1  | 2026-11-08T18:18:08.681952900Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 5: 100 new books, 403 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:08.797077515Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 5)
+indexing-1  | 2026-11-08T18:18:14.711802821Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 6: 100 new books, 503 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:14.750462138Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 64 books PUBLISHED in book-state (version 6)
+indexing-1  | 2026-11-08T18:18:19.746559601Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 36 books PUBLISHED in book-state (version 6)
+indexing-1  | 2026-11-08T18:18:21.746124614Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 7: 100 new books, 603 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:21.786959329Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 7)
+indexing-1  | 2026-11-08T18:18:27.028994714Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 8: 100 new books, 703 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:27.138700141Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 8)
+indexing-1  | 2026-11-08T18:18:33.085704729Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 9: 100 new books, 803 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:33.217362650Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 9)
+indexing-1  | 2026-11-08T18:18:41.116411119Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 10: 100 new books, 903 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:41.162885581Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 10)
+indexing-1  | 2026-11-08T18:18:47.148885586Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 11: 100 new books, 1003 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:47.211691312Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 11)
+indexing-1  | 2026-11-08T18:18:56.196276709Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 12: 100 new books, 1103 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:18:56.330313119Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 12)
+indexing-1  | 2026-11-08T18:19:04.296786972Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 13: 100 new books, 1203 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:04.410592340Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 13)
+indexing-1  | 2026-11-08T18:19:12.332685670Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 14: 100 new books, 1303 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:12.362414930Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 14)
+indexing-1  | 2026-11-08T18:19:20.363745472Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 15: 100 new books, 1403 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:20.402966648Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 15)
+indexing-1  | 2026-11-08T18:19:29.484521140Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 16: 100 new books, 1503 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:29.520699315Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 16)
+indexing-1  | 2026-11-08T18:19:37.599336677Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 17: 100 new books, 1603 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:37.705041923Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 17)
+indexing-1  | 2026-11-08T18:19:46.638758707Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 18: 100 new books, 1703 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:46.680976517Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 18)
+indexing-1  | 2026-11-08T18:19:55.747476957Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 19: 100 new books, 1803 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:19:55.950691926Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 19)
+indexing-1  | 2026-11-08T18:20:06.900854074Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 20: 100 new books, 1903 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:20:06.932072901Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 20)
+indexing-1  | 2026-11-08T18:20:15.938254746Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 21: 97 new books, 2000 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:20:15.984724613Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 97 books PUBLISHED in book-state (version 21)

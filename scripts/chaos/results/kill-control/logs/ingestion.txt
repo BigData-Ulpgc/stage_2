@@ -1,0 +1,43 @@
+ingestion-1  | 2026-11-08T18:13:56.359535553Z [main] INFO io.javalin.Javalin - Starting Javalin ...
+ingestion-1  | 2026-11-08T18:13:56.363756787Z [main] INFO org.eclipse.jetty.server.Server - jetty-11.0.20; built: 2024-01-29T21:04:22.394Z; git: 922f8dc188f7011e60d0361de585fd4ac4d63064; jvm 17.0.21+9
+ingestion-1  | 2026-11-08T18:13:56.525713266Z [main] INFO org.eclipse.jetty.server.session.DefaultSessionIdManager - Session workerName=node0
+ingestion-1  | 2026-11-08T18:13:56.538458542Z [main] INFO org.eclipse.jetty.server.handler.ContextHandler - Started o.e.j.s.ServletContextHandler@306f16f3{/,null,AVAILABLE}
+ingestion-1  | 2026-11-08T18:13:56.546574739Z [main] INFO org.eclipse.jetty.server.AbstractConnector - Started ServerConnector@9353778{HTTP/1.1, (http/1.1)}{0.0.0.0:7001}
+ingestion-1  | 2026-11-08T18:13:56.555685946Z [main] INFO org.eclipse.jetty.server.Server - Started Server@7fa98a66{STARTING}[11.0.20,sto=0] @1108ms
+ingestion-1  | 2026-11-08T18:13:56.557311193Z [main] INFO io.javalin.Javalin - Javalin started in 482ms \o/
+ingestion-1  | 2026-11-08T18:13:56.624634195Z [main] INFO io.javalin.Javalin - Listening on http://localhost:7001/
+ingestion-1  | 2026-11-08T18:13:56.644116484Z [main] INFO io.javalin.Javalin - You are running Javalin 6.1.3 (released March 2, 2024. Your Javalin version is 981 days old. Consider checking for a newer version.).
+ingestion-1  | 2026-11-08T18:13:56.644380488Z [main] INFO es.ulpgc.bigdata.ingestion.App - ingestion-service on port 7001 · datalake /data/datalake/range · source local /books · 4 workers
+ingestion-1  | 2026-11-08T18:13:57.562618175Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.spi.ClientInvocationService
+ingestion-1  | 2026-11-08T18:13:57.562639373Z INFO: hz.client_1 [search-engine] [5.7.0] Running with 2 response threads, dynamic=true
+ingestion-1  | 2026-11-08T18:13:57.658399219Z Nov 08, 2026 6:13:57 PM com.hazelcast.core.LifecycleService
+ingestion-1  | 2026-11-08T18:13:57.658419331Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTING
+ingestion-1  | 2026-11-08T18:13:57.659268471Z Nov 08, 2026 6:13:57 PM com.hazelcast.core.LifecycleService
+ingestion-1  | 2026-11-08T18:13:57.659280946Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTED
+ingestion-1  | 2026-11-08T18:13:57.744810799Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+ingestion-1  | 2026-11-08T18:13:57.744830770Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to cluster: search-engine
+ingestion-1  | 2026-11-08T18:13:57.748738233Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+ingestion-1  | 2026-11-08T18:13:57.748757907Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-2]:5701
+ingestion-1  | 2026-11-08T18:13:57.839416375Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.spi.ClientClusterService
+ingestion-1  | 2026-11-08T18:13:57.839439553Z INFO: hz.client_1 [search-engine] [5.7.0] Members [2] {
+ingestion-1  | 2026-11-08T18:13:57.839442939Z 	Member [hz-1]:5701 - bf00f292-b60d-4bca-88b6-ac10bcccbd31
+ingestion-1  | 2026-11-08T18:13:57.839445457Z 	Member [hz-2]:5701 - 75d858a1-cd94-4ee9-a45a-f6716440ec9e
+ingestion-1  | 2026-11-08T18:13:57.839447737Z }
+ingestion-1  | 2026-11-08T18:13:57.839449891Z 
+ingestion-1  | 2026-11-08T18:13:57.841631091Z Nov 08, 2026 6:13:57 PM com.hazelcast.core.LifecycleService
+ingestion-1  | 2026-11-08T18:13:57.841658514Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_CONNECTED
+ingestion-1  | 2026-11-08T18:13:57.842121920Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+ingestion-1  | 2026-11-08T18:13:57.842135152Z INFO: hz.client_1 [search-engine] [5.7.0] Authenticated with server [hz-2]:5701:75d858a1-cd94-4ee9-a45a-f6716440ec9e, server version: 5.7.0, local address: /172.18.0.5:39659
+ingestion-1  | 2026-11-08T18:13:57.842954241Z Nov 08, 2026 6:13:57 PM com.hazelcast.internal.diagnostics.Diagnostics
+ingestion-1  | 2026-11-08T18:13:57.842964817Z INFO: hz.client_1 [search-engine] [5.7.0] Diagnostics service is disabled. You can enable it over Management Center or Operator dynamically.
+ingestion-1  | 2026-11-08T18:13:57.964752974Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.statistics.ClientStatisticsService
+ingestion-1  | 2026-11-08T18:13:57.964816499Z INFO: Client statistics is enabled with period 5 seconds.
+ingestion-1  | 2026-11-08T18:13:58.037951124Z [hazelcast-connect] INFO es.ulpgc.bigdata.ingestion.App - connected to Hazelcast [hz-1:5701, hz-2:5701] · 4 workers started
+ingestion-1  | 2026-11-08T18:14:07.844042621Z Nov 08, 2026 6:14:07 PM com.hazelcast.client.util.ClientConnectivityLogger
+ingestion-1  | 2026-11-08T18:14:07.844066252Z INFO: hz.client_1 [search-engine] [5.7.0] 
+ingestion-1  | 2026-11-08T18:14:07.844069319Z 
+ingestion-1  | 2026-11-08T18:14:07.844071369Z Client Connectivity [2] {
+ingestion-1  | 2026-11-08T18:14:07.844073363Z 	Member [hz-1]:5701 - bf00f292-b60d-4bca-88b6-ac10bcccbd31 - disconnected
+ingestion-1  | 2026-11-08T18:14:07.844075559Z 	Member [hz-2]:5701 - 75d858a1-cd94-4ee9-a45a-f6716440ec9e - connected
+ingestion-1  | 2026-11-08T18:14:07.844077515Z }
+ingestion-1  | 2026-11-08T18:14:07.844079359Z 

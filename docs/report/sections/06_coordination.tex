@@ -130,14 +130,14 @@ evidence (the states, a timeline of the books and the logs of every service).
 \textbf{Failure} & \textbf{Expected} & \textbf{Result} \\
 \midrule
 SIGKILL of one of two Ingestion replicas while it ingests & Its books are requeued when their lease expires and the
-  other replica finishes them; no book \code{FAILED} or duplicated & \pending{kill-ingestion} \\
+  other replica finishes them; no book \code{FAILED} or duplicated & \textbf{PASS.} Killed while holding a book; its lease expired and the Control requeued it; 2,000 of 2,000 \code{DOWNLOADED} \\
 SIGKILL of one Hazelcast member & Nothing lost (backup), the clients carry on, no recovery; the member rejoins &
-  \pending{kill-hazelcast-member} \\
+  \textbf{PASS.} \code{hz-2} carried on alone with 1,848 books to go; no rebuild; \code{hz-1} rejoined \\
 SIGKILL of the Control while Indexing indexes & The workers keep going, nothing is published until it is back; it rebuilds
-  nothing & \pending{kill-control} \\
+  nothing & \textbf{PASS.} Indexing went from 100 to 500 books, \code{index\_books} stayed at 100; no rebuild \\
 Both members killed and started empty & The Control rebuilds \code{book-state} from the evidence; the books without
   evidence are sent again; none with \code{\_READY} is ingested again; all end \code{PUBLISHED} &
-  \pending{restart-hazelcast} \\
+  \textbf{PASS.} Rebuilt in 1.9~s: 3 \code{PUBLISHED}, 100 \code{INDEXED}, 336 \code{DOWNLOADED}; the 1,561 without evidence sent again, none ingested twice \\
 \bottomrule
 \end{tabularx}
 \caption{Documented failure tests. Each run checks that every book reaches its final state exactly once, that none is
@@ -145,3 +145,12 @@ Both members killed and started empty & The Control rebuilds \code{book-state} f
 \code{index\_books}.}
 \label{tab:failure-tests}
 \end{table}
+
+\textbf{How they ran.} On the reference machine, on 8 November, with 2,000 synthetic books per scenario, leases of
+15~s and the commit recorded in each \code{report.md} (\code{scripts/chaos/results/}). With the local source a book takes
+milliseconds, so the scenarios that kill during the ingestion run one worker per replica and check that books were still
+in flight right after the failure. To be sure that the killed Ingestion replica held a book, it is frozen first
+(\code{docker pause}) and killed only while the Control shows its book \code{INGESTING}. A first run gave three FAILs
+with every check of the end state passing: two came from errors in the checks themselves, and in the third the killed
+replica held no book, so no lease was tested. The script was fixed and the four scenarios run again; the table gives
+that second run.
