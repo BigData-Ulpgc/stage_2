@@ -1,0 +1,7 @@
+operation,list_length,median_ms,max_ms
+addToSet,1000,6.073,8.452
+push,1000,1.243,1.394
+addToSet,10000,27.062,29.437
+push,10000,1.928,2.231
+addToSet,100000,232.571,278.188
+push,100000,11.877,13.586
