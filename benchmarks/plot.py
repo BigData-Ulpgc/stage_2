@@ -9,8 +9,9 @@ benchmarks/search/analyze.py (colors, ink, grid, size), so every figure of the r
     benchmarks/indexing/results/experiments/probe.csv
     benchmarks/indexing/results/jmh/PrepareBatchBenchmark.csv  (DR-12)
 
-Usage:  python3 benchmarks/plot.py [--out DIR]
-        default DIR: benchmarks/indexing/results/figures
+Usage:  python3 benchmarks/plot.py [--out DIR] [--format png|pdf]
+        default: PNG in benchmarks/indexing/results/figures
+        for the report: --format pdf --out docs/report/figures (vector, as docs/report/charts.py)
 
 Needs matplotlib. Only the standard library otherwise.
 """
@@ -109,7 +110,7 @@ def save(plt, fig, path):
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
-    print(f"  {path.relative_to(ROOT)}")
+    print(f"  {path.name}")
 
 
 def threads_figure(plt, summary, prepare, path):
@@ -237,6 +238,7 @@ def publish_figure(plt, summary, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=INDEXING / "figures")
+    parser.add_argument("--format", choices=["png", "pdf"], default="png")
     args = parser.parse_args()
     try:
         import matplotlib
@@ -251,11 +253,11 @@ def main():
     prepare = jmh(INDEXING / "jmh" / "PrepareBatchBenchmark.csv", "threads")
     args.out.mkdir(parents=True, exist_ok=True)
     print(f"figures in {args.out.relative_to(ROOT) if args.out.is_relative_to(ROOT) else args.out}:")
-    threads_figure(plt, summary, prepare, args.out / "index_threads.png")
-    cpu_figure(plt, summary, args.out / "index_threads_cpu.png")
-    rate_figure(plt, experiments / "runs", args.out / "index_rate.png")
-    probe_figure(plt, read_csv(experiments / "probe.csv"), args.out / "index_probe.png")
-    publish_figure(plt, summary, args.out / "index_publish.png")
+    threads_figure(plt, summary, prepare, args.out / f"index_threads.{args.format}")
+    cpu_figure(plt, summary, args.out / f"index_threads_cpu.{args.format}")
+    rate_figure(plt, experiments / "runs", args.out / f"index_rate.{args.format}")
+    probe_figure(plt, read_csv(experiments / "probe.csv"), args.out / f"index_probe.{args.format}")
+    publish_figure(plt, summary, args.out / f"index_publish.{args.format}")
 
 
 if __name__ == "__main__":
