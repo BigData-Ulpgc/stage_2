@@ -5,8 +5,62 @@ Big Data · Grado en Ciencia e Ingeniería de Datos · ULPGC · 2026-2027
 Ingestion, Indexing and Search microservices (Java 17, Javalin) coordinated with Hazelcast
 and deployed on one host with Docker Compose.
 
-> Work in progress. The full README (build, run, configuration, tests and benchmarks)
-> is task DP-13.
+**Repository:** <https://github.com/BigData-Ulpgc/stage_2>
+
+| I want to... | Go to |
+|---|---|
+| See how it works | [Architecture](#architecture) |
+| Run it in five minutes | [Quick start](#quick-start) |
+| Compile each service | [Build](#build-maven-multi-module) |
+| Change ports, data paths, replicas or threads | [Run without Docker](#run-a-service-without-docker), [Run with Docker](#run-the-whole-system-with-docker) |
+| Find the API specifications and check them | [APIs and validation](#apis-and-validation) |
+| Repeat the benchmarks | [Benchmarks](#benchmarks) |
+
+## Architecture
+
+All the processes run on one host. nginx is the only public entry; the services coordinate through
+Hazelcast and share their results in the datalake and MongoDB.
+
+| Piece | Role | Talks to |
+|---|---|---|
+| **Control Module** | Seeds the books, requeues expired leases, decides when to publish, rebuilds the state if Hazelcast loses it | Hazelcast, Indexing (`POST /index/publish`), MongoDB and datalake (read-only) |
+| **Ingestion** (1-4 replicas) | Downloads each book and stores it in the datalake, with `<id>._READY` last | Hazelcast, datalake |
+| **Indexing** | Indexes the complete books and publishes versions | Hazelcast, datalake (read-only), MongoDB |
+| **Search** (1-4 replicas) | Answers the front-end from an immutable snapshot of the published version | MongoDB (read-only), Hazelcast (`IndexPublished`) |
+| **nginx** | Public entry on port 8080, round-robin over the Search replicas | Search |
+| **Hazelcast** (2 members) | Book states, queues, leases, events and the lock of the index writer | The services |
+| **MongoDB** | Inverted index, metadata and published versions | The services |
+
+The route of a book: `PENDING` → `INGESTING` → `DOWNLOADED` → `INDEXING` → `INDEXED` → `PUBLISHED`,
+or `FAILED`. Each state is only written once its evidence is persistent (`_READY`, `index_log`,
+`CURRENT`), so the Control can rebuild the coordination state if Hazelcast loses it. Search only shows
+what a published version contains.
+
+## Quick start
+
+Requirements: Docker with Compose and about 6 GB of memory for Docker. Nothing else is needed.
+
+```bash
+docker compose up -d --build                # first time: some minutes
+docker compose ps                           # wait until every service is "(healthy)"
+
+# Ask for three books: they are downloaded from Project Gutenberg, indexed and published
+curl -X POST localhost:7000/control/jobs -H "Content-Type: application/json" -d "{\"book_ids\":[1342,84,11]}"
+curl localhost:7000/control/status          # books per state, queues and last publication
+
+# Within about 30 s (PUBLISH_INTERVAL_S) they can be searched, through nginx
+curl "localhost:8080/search?q=elizabeth&limit=5"
+curl "localhost:8080/search?q=monster&language=en&offset=0&limit=2"
+curl "localhost:8080/search/filters"
+curl "localhost:8080/books/84"
+
+docker compose up -d --scale search=3       # three replicas: see the header X-Served-By
+curl -si "localhost:8080/search?q=monster" | grep -i x-served-by
+docker compose down                         # stop; down -v also wipes MongoDB
+```
+
+To seed the 200 books of the common dataset when the Control starts:
+`CONTROL_SEED_FILE=/shared/book_ids.txt docker compose up -d`.
 
 ## Build (Maven multi-module)
 
@@ -190,6 +244,58 @@ repository root with the Maven module as an argument (Compose does it for you):
 ```bash
 docker build -f docker/service.Dockerfile --build-arg MODULE=search-service -t stage2/search-service .
 ```
+
+## APIs and validation
+
+| What | Where |
+|---|---|
+| Inventory: front-end, internal and operational | [`api/endpoints.md`](api/endpoints.md) |
+| Search (front-end API) | [`api/openapi.yaml`](api/openapi.yaml) |
+| Indexing, Ingestion, Control | [`api/indexing-openapi.yaml`](api/indexing-openapi.yaml), [`api/ingestion-openapi.yaml`](api/ingestion-openapi.yaml), [`api/control-openapi.yaml`](api/control-openapi.yaml) |
+| Contracts that are not HTTP | [`api/contracts/`](api/contracts) |
+| Examples to run by hand, with their expected results | [`http/`](http) |
+
+One command checks every API on the running stack, with the expected results. It needs JDK 17, Maven and
+`stage_1` next to `stage_2`, because it uses the 15 books of its sample dataset; the steps are in
+[`http/README.md`](http/README.md):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.validation.yml up -d --build
+mvn -q install -DskipTests -pl common -am
+(cd search-service && mvn -q test-compile exec:java -Dexec.args="../../stage_1/sample_dataset/book")
+bash scripts/validate-api.sh                # PASS, FAIL or SKIP per check; exit code 1 if one failed
+```
+
+## Tests
+
+```bash
+docker compose up -d mongo                  # without it, the MongoDB tests are skipped
+mvn -B clean verify                         # every module
+```
+
+## Benchmarks
+
+| What | Where | Run it |
+|---|---|---|
+| JMH of Search, on the host: intersection, filters, pagination, threads | [`benchmarks/search/`](benchmarks/search/README.md) | `bash benchmarks/search/run-jmh.sh` |
+| Load through nginx: clients, replicas, Jetty threads, MongoDB connections, nginx | [`benchmarks/search/`](benchmarks/search/README.md) | `bash benchmarks/search/run-load.sh` |
+| Tables, figures and the common CSV | [`benchmarks/search/`](benchmarks/search/README.md) | `python benchmarks/search/analyze.py` |
+| CPU and memory of each container | [`scripts/monitor.sh`](scripts/monitor.sh) | `bash scripts/monitor.sh -l name -d 120` |
+
+All the valid measures must come from one idle machine, with the limits of `.env` recorded in `host.txt`.
+
+## Repository layout
+
+| Path | Content |
+|---|---|
+| `common/` | Code shared by the services: configuration, HTTP conventions, datalake, MongoDB, coordination |
+| `ingestion-service/`, `indexing-service/`, `search-service/`, `control-module/` | The microservices |
+| `hazelcast/hazelcast.yaml` | Configuration of the Hazelcast members |
+| `docker-compose.yml`, `.env`, `docker/`, `scripts/nginx.conf` | Deployment on one host |
+| `api/` | OpenAPI of each service, inventory and contracts |
+| `http/`, `scripts/validate-api.sh` | Validation of the APIs |
+| `benchmarks/`, `scripts/monitor.sh` | Benchmarks, results and monitoring |
+| `shared/` | The common lists of books and queries |
 
 ## Contributing: branches, pull requests and protection rules
 

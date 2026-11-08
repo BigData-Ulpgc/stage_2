@@ -1,0 +1,19 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: books","Param: limit","Param: position"
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,2.582171,0.131591,"us/op",200,20,0
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,2.474944,0.070790,"us/op",200,20,50
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,2.420629,0.025777,"us/op",200,20,99
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,2.805266,0.166713,"us/op",200,100,0
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,2.627700,0.202863,"us/op",200,100,50
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,2.580949,0.167046,"us/op",200,100,99
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,382.631012,31.550218,"us/op",10000,20,0
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,364.367758,23.552383,"us/op",10000,20,50
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,366.639617,24.693415,"us/op",10000,20,99
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,377.589299,43.443520,"us/op",10000,100,0
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,355.278365,20.361515,"us/op",10000,100,50
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,363.128447,34.897622,"us/op",10000,100,99
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,4869.415782,347.159818,"us/op",100000,20,0
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,4841.659505,350.725482,"us/op",100000,20,50
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,4836.850336,350.874335,"us/op",100000,20,99
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,4825.976061,346.289936,"us/op",100000,100,0
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,4999.582151,614.415693,"us/op",100000,100,50
+"es.ulpgc.bigdata.search.benchmark.PaginationBenchmark.search","avgt",1,20,4740.253094,341.006777,"us/op",100000,100,99
