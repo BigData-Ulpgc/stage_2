@@ -31,8 +31,9 @@ on 8 November without it; this section uses that second run, and the first one i
 (the largest difference is 19~\%). Pagination and threads, the last benchmarks of the run, came out slower than in the
 first run, by up to 58~\%, with errors of up to 15~\%: the same search (\code{common}, 100,000 books, first page of 20) took 4.92~ms in the
 intersection benchmark and 7.02~ms in the pagination benchmark a quarter of an hour later, while the first run gave
-4.84~ms for both. Something slowed the machine down at the end of the second run, and we could not find out what. The
-conclusions below compare configurations measured together, and they are the same in both runs; the absolute times of
+4.84~ms for both. Nothing else heavy ran on the machine at that time, and its kernel had logged about 11 hours of
+thermal throttling since it booted, so the most likely cause is that the CPU heated up and lowered its frequency at the
+end of the run; we could not prove it. The conclusions below compare configurations measured together, and they are the same in both runs; the absolute times of
 pagination and threads are the least reliable numbers of this section.
 
 \subsection{Microbenchmarks with JMH}
@@ -142,7 +143,7 @@ and one factor changes at a time:
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\linewidth}{@{}L{1.9cm}L{5.2cm}X@{}}
+\begin{tabularx}{\linewidth}{@{}L{2.1cm}L{5.0cm}X@{}}
 \toprule
 \textbf{Experiment} & \textbf{What changes} & \textbf{Fixed} \\
 \midrule
