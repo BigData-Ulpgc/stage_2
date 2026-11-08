@@ -80,6 +80,10 @@ curl localhost:7012/status    # {"service":"indexing-service","status":"running"
 | `INGESTION_FETCH_RETRIES` | 2 | Retries of a transient source failure inside one attempt (after 1 s, 2 s…); a 429 or 403 is not retried, it pauses the replica |
 | `HZ_MEMBERS`, `HZ_CLUSTER_NAME` | `localhost:5701,localhost:5702`, `search-engine` | Hazelcast cluster of the workers (inside Docker: `hz-1:5701,hz-2:5701`) |
 | `LEASE_SECONDS`, `MAX_ATTEMPTS`, `LEASE_CHECK_SECONDS` | 120, 3, 10 | Leases and attempts of the coordination contract (`api/contracts/coordination.md` §8) |
+| `PUBLISH_BATCH`, `PUBLISH_INTERVAL_S` | 100, 30 | The Control publishes (`POST /index/publish`) when this many books are `INDEXED`, or this long after the last publication if any is |
+| `INDEXING_URL` | `http://localhost:7002` | Where the Control calls Indexing (inside Docker: `http://indexing:7002`) |
+| `CONTROL_SEED_FILE` | (none) | A `book_ids.txt` the Control seeds once connected: one id per line, `#` comments and blank lines skipped; a bad line stops the start |
+| `MONGO_URI`, `MONGO_DATABASE`, `DATA_DIR` (Control) | as above | Where the Control finds the evidence to rebuild `book-state` when the cluster loses it (`index_books`, `index_log`, the `_READY` markers; the datalake is only read) |
 
 The request thread pool is always set explicitly (`common` → `ServiceServer`): a Jetty
 `QueuedThreadPool` with max `<SERVICE>_HTTP_THREADS`, min 8, idle timeout 60 s. These are the
@@ -158,7 +162,23 @@ nginx (`scripts/nginx.conf`) does round-robin over the replicas of `search`, fou
 Docker, so scaling needs no other change. Each response has an `X-Served-By` header with the replica
 that answered. If a replica dies, nginx sends the request to another one; a 503 is passed on to the client, not retried.
 
+**Without network: the sample and the synthetic dataset.** With `INGESTION_SOURCE=local`, Ingestion reads the `pg<id>.txt` files of `INGESTION_LOCAL_HOST_DIR`
+(`./data/books`) instead of downloading them. Two datasets have that format:
+
+- **The sample dataset:** its `raw/` folder, the 15 real books, as `stage_1/sample_dataset/raw`.
+- **The synthetic dataset of DR-16:** for the scale experiments, 10,000 or 100,000 books with the format of Gutenberg and the word distribution of the real books. It is reproducible with its seed; see `scripts/dataset/README.md`.
+
+```bash
+python3 scripts/dataset/generate_dataset.py --count 10000   # into data/books, about 1.2 GB, 1 min
+INGESTION_SOURCE=local docker compose up -d
+```
+
+Then seed the ids of `data/books/book_ids.txt`. The synthetic ids start at 1,000,001, so they never
+collide with a real book.
+
 To record the CPU and memory of each container during an experiment, see `scripts/monitor.sh`.
+
+To check every API on the running stack, with the expected results, see `http/README.md`.
 
 ## Service images
 

@@ -8,3 +8,5 @@ data/
 .vscode/
 # Logs and large raw benchmark output
 *.log
+# Python bytecode (scripts)
+__pycache__/

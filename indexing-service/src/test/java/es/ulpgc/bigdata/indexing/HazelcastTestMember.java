@@ -67,9 +67,10 @@ final class HazelcastTestMember {
         return new CoordinationSettings(List.of(address()), clusterName(), 120, 3, 10);
     }
 
-    /** Empties book-state and the queues: every test starts from nothing. */
+    /** Empties book-state and the queues and frees index-writer: every test starts from nothing. */
     static void reset() {
         HazelcastInstance hz = start();
+        hz.getMap(CoordinationNames.LOCKS).forceUnlock(CoordinationNames.INDEX_WRITER_LOCK);
         hz.getMap(CoordinationNames.BOOK_STATE).clear();
         hz.getQueue(CoordinationNames.INGEST_QUEUE).clear();
         hz.getQueue(CoordinationNames.INDEX_QUEUE).clear();
