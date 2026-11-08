@@ -25,7 +25,7 @@ Hazelcast and share their results in the datalake and MongoDB.
 |---|---|---|
 | **Control Module** | Seeds the books, requeues expired leases, decides when to publish, rebuilds the state if Hazelcast loses it | Hazelcast, Indexing (`POST /index/publish`), MongoDB and datalake (read-only) |
 | **Ingestion** (1-4 replicas) | Downloads each book and stores it in the datalake, with `<id>._READY` last | Hazelcast, datalake |
-| **Indexing** | Indexes the complete books and publishes versions | Hazelcast, datalake (read-only), MongoDB |
+| **Indexing** (1-2 replicas) | Indexes the complete books and publishes versions. Only the replica holding the lock `index-writer` writes; the others wait to take over | Hazelcast, datalake (read-only), MongoDB |
 | **Search** (1-4 replicas) | Answers the front-end from an immutable snapshot of the published version | MongoDB (read-only), Hazelcast (`IndexPublished`) |
 | **nginx** | Public entry on port 8080, round-robin over the Search replicas | Search |
 | **Hazelcast** (2 members) | Book states, queues, leases, events and the lock of the index writer | The services |
@@ -200,7 +200,7 @@ docker compose down                                         # stop; down -v also
 |---|---|---|---|---|
 | `nginx` | 1 | 8080: the public API | none | `NGINX_CPUS`, `NGINX_MEM_LIMIT` |
 | `search` | 1-4 | none, only behind nginx | none | `SEARCH_CPUS`, `SEARCH_MEM_LIMIT` |
-| `indexing` | 1 | none | read-only | `INDEXING_CPUS`, `INDEXING_MEM_LIMIT` |
+| `indexing` | 1-2 (one writes, the others wait) | none | read-only | `INDEXING_CPUS`, `INDEXING_MEM_LIMIT` |
 | `ingestion` | 1-4 | none | read-write | `INGESTION_CPUS`, `INGESTION_MEM_LIMIT` |
 | `control` | 1 | 7000, only on 127.0.0.1 | read-only | `CONTROL_CPUS`, `CONTROL_MEM_LIMIT` |
 | `hz-1`, `hz-2` | 2 | 5701, 5702, only on 127.0.0.1 | none | `HZ_CPUS`, `HZ_MEM_LIMIT` |
