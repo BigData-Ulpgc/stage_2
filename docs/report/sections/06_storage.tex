@@ -55,12 +55,12 @@ One Indexing process runs these threads:
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\linewidth}{@{}L{3.6cm}L{2.2cm}X@{}}
+\begin{tabularx}{\linewidth}{@{}L{2.6cm}L{4.4cm}X@{}}
 \toprule
 \textbf{Threads} & \textbf{How many} & \textbf{What they do} \\
 \midrule
-Jetty pool & up to \code{INDEXING\_HTTP\_THREADS} (250) & One per HTTP request \\
-Parsers & \code{INDEXING\_THREADS} (4) & Read, parse and tokenize the books of a batch, in parallel \\
+Jetty pool & up to 250 (\code{INDEXING\_HTTP\_THREADS}) & One per HTTP request \\
+Parsers & 4 (\code{INDEXING\_THREADS}) & Read, parse and tokenize the books of a batch, in parallel \\
 Queue writer & 1 & Holds \code{index-writer}, claims, writes, completes \\
 Lease renewer & 1 & Renews the leases of the batch being written \\
 Notifier & 1 & Announces each publication and marks its books \code{PUBLISHED} \\

@@ -2,15 +2,15 @@
 \label{sec:indexing}
 
 Indexing turns the complete books of the datalake into the inverted index and the metadata in MongoDB, and decides
-when a new version of the index becomes visible to Search. It is written in Java 17 with Javalin and Gson, and implements
-\code{api/indexing-openapi.yaml}: \code{POST /index/update/\{book\_id\}}, \code{POST /index/publish},
-\code{POST /index/rebuild}, \code{GET /index/status} and \code{GET /status}. Its MongoDB side is specified in
-\code{api/contracts/index-publication.md}, and its Hazelcast side in \code{api/contracts/coordination.md}. Its main
-classes are:
+when a new version of the index becomes visible to Search. It is written in Java 17 with Javalin and Gson. Its HTTP
+API, \code{api/indexing-openapi.yaml}, has five endpoints: \code{POST /index/update/\{book\_id\}} indexes one book,
+\code{POST /index/publish} and \code{POST /index/rebuild} publish and rebuild the index, and \code{GET /index/status}
+and \code{GET /status} report its state. Its MongoDB side is specified in \code{index-publication.md} and its
+Hazelcast side in \code{coordination.md}, both in \code{api/contracts/}. Its main classes are:
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\linewidth}{@{}L{4.6cm}X@{}}
+\begin{tabularx}{\linewidth}{@{}L{5.3cm}>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Class} & \textbf{Responsibility} \\
 \midrule
