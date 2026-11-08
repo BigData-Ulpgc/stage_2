@@ -154,6 +154,25 @@ class ControlTasksTest {
         assertEquals(3, indexing.calls);
     }
 
+    @Test
+    void aLateT10DoesNotDelayTheNextFullBatch() throws Exception {
+        ControlTasks tasks = tasks(1);
+        indexed(1);
+        indexing.booksPublished = 0;                    // published, but T10 has not marked it yet
+        assertTrue(tasks.maybePublish().isPresent());
+        clock.advance(Duration.ofSeconds(1));
+        assertTrue(tasks.maybePublish().isEmpty(), "the same INDEXED book: nothing new");
+
+        coordination.markPublished(List.of(1));         // T10 arrives
+        clock.advance(Duration.ofSeconds(1));
+        assertTrue(tasks.maybePublish().isEmpty(), "nothing INDEXED");
+        indexed(2);
+        indexing.booksPublished = 1;
+        clock.advance(Duration.ofSeconds(1));
+        assertTrue(tasks.maybePublish().isPresent(), "a new full batch, long before the interval");
+        assertEquals(2, indexing.calls);
+    }
+
     // --- Lease check ---------------------------------------------------------------------
 
     @Test

@@ -33,7 +33,8 @@ import java.util.Optional;
  * already published, or never will be: T10 has not marked them yet, it failed, or MongoDB was
  * emptied without Hazelcast. A full batch then does not trigger again until the interval is
  * over, so Indexing gets at most one useless call per interval instead of one per second
- * (review of #35). The methods are called by ControlScheduler,
+ * (review of #35), unless the INDEXED books first drop below the batch: Indexing runs T10
+ * right after answering (review of #43), and a slow T10 must not delay the next full batch. The methods are called by ControlScheduler,
  * one thread each, and by the tests with their own clock.
  */
 public final class ControlTasks {
@@ -94,6 +95,9 @@ public final class ControlTasks {
             return Optional.empty();                    // backing off after a failure
         }
         long indexed = coordination.count(BookState.INDEXED);
+        if (indexed < publishBatch) {
+            lastWasEmpty = false;                       // T10 caught up: a full batch is new again
+        }
         boolean batchFull = indexed >= publishBatch && !lastWasEmpty;
         boolean intervalOver = indexed > 0 && now - lastPublishedAt >= publishInterval.toMillis();
         if (!batchFull && !intervalOver) {

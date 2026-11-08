@@ -123,7 +123,7 @@ class PublicationEventsTest {
     @Test
     void oneEventArrivesAfterTheClusterRestarts() throws Exception {
         String cluster = "search-restart-" + UUID.randomUUID();
-        CoordinationSettings settings = new CoordinationSettings(List.of("127.0.0.1:5971"), cluster, 120, 3, 10);
+        CoordinationSettings settings = new CoordinationSettings(List.of("127.0.0.1:5991"), cluster, 120, 3, 10);
         HazelcastInstance restarted = memberOn(cluster);
         AtomicInteger deliveries = new AtomicInteger();
         try (PublicationEvents events = new PublicationEvents(() -> Coordination.connect(settings), deliveries::incrementAndGet)) {
@@ -131,9 +131,12 @@ class PublicationEventsTest {
             publishUntilDelivered(restarted, settings, deliveries);
             publishOnce(restarted, settings, deliveries, "before the restarts");
             for (int restart = 1; restart <= 3; restart++) {
+                int beforeRestart = deliveries.get();
                 restarted.getLifecycleService().terminate();
                 restarted = memberOn(cluster);
                 Thread.sleep(RECONNECTION_MILLIS);
+                // Nothing was published: the one call is the check of CURRENT after reconnecting
+                assertTrue(deliveries.get() > beforeRestart, "no check of CURRENT after restart " + restart);
                 publishOnce(restarted, settings, deliveries, "after restart " + restart);
                 publishOnce(restarted, settings, deliveries, "again after restart " + restart);
             }
@@ -145,7 +148,7 @@ class PublicationEventsTest {
     private static HazelcastInstance memberOn(String cluster) {
         Config config = new Config().setClusterName(cluster);
         config.setProperty("hazelcast.logging.type", "none");
-        config.getNetworkConfig().setPort(5971).setPortAutoIncrement(false);
+        config.getNetworkConfig().setPort(5991).setPortAutoIncrement(false);
         JoinConfig join = config.getNetworkConfig().getJoin();
         join.getAutoDetectionConfig().setEnabled(false);
         join.getMulticastConfig().setEnabled(false);

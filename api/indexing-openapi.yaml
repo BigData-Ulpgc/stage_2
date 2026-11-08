@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.5.0
+  version: 0.7.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.5.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b, plan v3.3).
+    **Status: draft v0.6.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b and its review follow-up, plan v3.3).
     `POST /index/rebuild` answers 501 until DR-10; its contract is already the final one. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
@@ -17,9 +17,14 @@ info:
     HTTP: the HTTP endpoints are for the Control Module (publication), for administration
     (single update, rebuild) and for the functional validation. Both paths run the same code.
     The queue is consumed by the **index writer** of the replica that holds the lock
-    `index-writer` (coordination contract §5); the other replicas wait as standbys. It claims
-    each book (`INDEXING`), indexes it and marks it `INDEXED` once it is in `index_log`; failures
-    follow the codes of the contract (§4.3). The HTTP update does not change `book-state`.
+    `index-writer` (coordination contract §5); the other replicas wait as standbys. It works in
+    **batches** (DR-09): it claims a book (`INDEXING`), waiting for one, then the ones already in
+    the queue without waiting, up to `INDEX_WRITE_BATCH` (default 100). The books are read and
+    parsed on `INDEXING_THREADS` threads (default 4) and written together, so each distinct
+    term is written once per batch; each book becomes `INDEXED` once it is in `index_log`. With
+    an empty queue a batch is one book and nothing waits for more. Failures follow the codes
+    of the contract (§4.3): a book that cannot be read fails alone, a MongoDB failure requeues
+    the whole batch. The HTTP update indexes one book and does not change `book-state`.
 
     1. Ingestion writes `<id>._READY` and puts the id in `index-queue`.
     2. Indexing reads the book, saves its metadata (`books`) and its terms (`inverted_index`),
@@ -38,7 +43,7 @@ info:
       have) answers 404 `NOT_FOUND` with the same `Error` schema and `field: null`, never
       the web framework's own page. All services share this rule (`ServiceServer` in `common`).
     - **Writes are serialized** inside the service: concurrent requests and the index writer
-      are answered correctly, one write at a time. Across replicas, only the holder of
+      are answered correctly, one write (one book, or one batch of the writer) at a time. Across replicas, only the holder of
       `index-writer` consumes the queue; the writes of indexing are idempotent.
     - **Timeouts and retries (callers).** Connect timeout 2 s; request timeout 30 s for
       `update` and `publish`, 5 s for the status endpoints. Every `POST` is safe to retry after
@@ -152,23 +157,27 @@ paths:
         **Provider:** Indexing Service. **Consumers:** Control Module (every `PUBLISH_BATCH`
         books or `PUBLISH_INTERVAL_S` seconds).
 
-        Publishes version V+1 (contract §6.5): records the books of `index_log` that are not
+        Publishes version V+1 (`api/contracts/index-publication.md` §7): records the books of `index_log` that are not
         published yet in `index_books` with version V+1 (a book keeps the first version in which
         it became visible), then switches the `CURRENT` document of `index_meta` to V+1 in ONE
         atomic operation, and records the version in `index_publications`. The index itself is
-        never copied. Then, through Hazelcast (coordination contract §4.1 T10 and §6), it marks
-        `PUBLISHED` in `book-state` every `INDEXED` book that is visible in `CURRENT`, and, only
-        when a new version was created, announces it with `IndexPublished` on the topic
-        `index-events`.
+        never copied. Right after answering, through Hazelcast (coordination contract §4.1 T10
+        and §6), it announces the version with `IndexPublished` on the topic `index-events`
+        (only when a new version was created, one event per version) and marks `PUBLISHED` in
+        `book-state` every `INDEXED` book that is visible in `CURRENT`. That runs in a thread of
+        its own, so a slow cluster never delays the answer; a caller that counts `INDEXED`
+        books just after the 200 may still see the published ones for a few milliseconds.
 
         **Completion: synchronous.** A 200 means `CURRENT` already points to the returned
         version; each Search replica loads it as soon as it receives the event, or at its next
-        check of `CURRENT`.
+        check of `CURRENT`. Once `CURRENT` has switched the answer is 200 even if writing the
+        `index_publications` entry fails: the next call (or the next start) writes it.
 
         **Without Hazelcast** (still connecting, or the cluster is down) the publication is
-        made and answers 200 anyway: MongoDB is the truth. The states are marked by the next
-        publication or when the service connects (that also repairs a T10 interrupted by a
-        crash, contract §7); a lost event is covered by the periodic check of Search.
+        made and answers 200 anyway: MongoDB is the truth. When the service connects or
+        reconnects, it announces the last version it could not announce and marks the states
+        (that also repairs a T10 interrupted by a crash, contract §7); a lost event is covered
+        by the periodic check of Search.
         `GET /status` shows the state of the connection.
 
         **Idempotency.** If no book was indexed since the last publication, no empty version
@@ -327,7 +336,7 @@ paths:
         Answers 200 while the process is running. It does NOT contact MongoDB on purpose: if
         MongoDB is down, restarting the Indexing Service would not fix it, so the healthcheck
         must not fail because of it, nor Hazelcast: `coordination` only reports the state of the
-        connection, used to notify the publications. The state of the index is in
+        connection, used to announce the publications and to consume `index-queue`. The state of the index is in
         `GET /index/status`.
       responses:
         '200':
@@ -340,6 +349,7 @@ paths:
                 service: indexing-service
                 status: running
                 coordination: connected
+                coordination_failure: null
                 writer:
                   role: active
                   indexed: 187
@@ -347,6 +357,7 @@ paths:
                   failed: 1
                   lease_lost: 0
                   outage_pauses: 0
+                  last_batch: 100
                   invalid_ids_dropped: 0
                   ids_skipped: 0
 
@@ -461,16 +472,25 @@ components:
 
     ServiceStatus:
       type: object
-      required: [service, status, coordination, writer]
+      required: [service, status, coordination, coordination_failure, writer]
       properties:
         service: { type: string, example: indexing-service }
         status: { type: string, enum: [running] }
         coordination:
           type: string
-          enum: [connecting, connected, disconnected]
+          enum: [connecting, connected, disconnected, failed, closed]
           description: |
-            Connection to Hazelcast, used to mark the published books and announce each version.
-            `connecting` until the cluster first answers (the service keeps working meanwhile).
+            Connection to Hazelcast, used to mark the published books, announce each version and
+            consume `index-queue`. `connecting` until the cluster first answers (the service
+            keeps working meanwhile); `disconnected` while the client reconnects by itself;
+            `failed` if the connection could not even be attempted; `closed` while stopping.
+        coordination_failure:
+          type: string
+          nullable: true
+          description: |
+            Why the connection `failed`, or what failed once connected (for example, starting
+            the writer): then `coordination` may say `connected` while the writer is null. Null
+            if nothing failed.
         writer:
           $ref: '#/components/schemas/WriterStatus'
 
@@ -480,7 +500,7 @@ components:
       description: |
         The consumer of `index-queue` of this replica, counting since the process started; null
         until the service has connected to Hazelcast once.
-      required: [role, indexed, requeued, failed, lease_lost, outage_pauses, invalid_ids_dropped, ids_skipped]
+      required: [role, indexed, requeued, failed, lease_lost, outage_pauses, last_batch, invalid_ids_dropped, ids_skipped]
       properties:
         role:
           type: string
@@ -492,7 +512,8 @@ components:
         requeued: { type: integer, description: "Failed attempts sent back to the queue (T8)." }
         failed: { type: integer, description: "Books sent to FAILED (T9), permanent error or no attempts left." }
         lease_lost: { type: integer, description: "Books dropped because the Control had requeued them meanwhile." }
-        outage_pauses: { type: integer, description: "Pauses because MongoDB did not answer (STORAGE_UNAVAILABLE, not counted as an attempt)." }
+        outage_pauses: { type: integer, description: "Pauses because MongoDB did not answer (STORAGE_UNAVAILABLE, not counted as an attempt); one per batch." }
+        last_batch: { type: integer, description: "Books of the last batch taken from the queue (1 to INDEX_WRITE_BATCH; 0 before the first one). Close to INDEX_WRITE_BATCH means a backlog." }
         invalid_ids_dropped: { type: integer, description: "Invalid ids taken from the queue and dropped; not 0 means someone offered a bad id (contract §2)." }
         ids_skipped: { type: integer, description: "Ids taken from the queue whose book was not DOWNLOADED (duplicates); harmless." }
 

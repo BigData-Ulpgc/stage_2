@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: threads"
+"es.ulpgc.bigdata.ingestion.benchmark.DatalakeWriteBenchmark.saveRound","avgt",1,20,234.652515,4.495573,"us/op",1
+"es.ulpgc.bigdata.ingestion.benchmark.DatalakeWriteBenchmark.saveRound","avgt",1,20,141.563279,3.909973,"us/op",2
+"es.ulpgc.bigdata.ingestion.benchmark.DatalakeWriteBenchmark.saveRound","avgt",1,20,112.272624,3.552172,"us/op",4
+"es.ulpgc.bigdata.ingestion.benchmark.DatalakeWriteBenchmark.saveRound","avgt",1,20,121.350569,1.623210,"us/op",8

@@ -3,8 +3,10 @@ package es.ulpgc.bigdata.indexing;
 /**
  * What the rest of the system learns of a publication (DR-08b), outside MongoDB: Publisher
  * calls it after every publish, inside its lock, so two calls never overlap and the events
- * leave in the order of the versions. Publisher does not know Hazelcast: the implementation
- * of the service is HazelcastPublicationNotifier.
+ * leave in the order of the versions. Being inside the lock, it must return at once: an
+ * implementation that talks to another system queues the work for a thread of its own.
+ * Publisher does not know Hazelcast: the implementation of the service is
+ * HazelcastPublicationNotifier.
  *
  * A failure here never undoes nor fails the publication: CURRENT has already switched, which
  * is the truth (MongoDB). Publisher logs it and answers 200 anyway; what was not done is

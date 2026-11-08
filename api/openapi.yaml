@@ -19,7 +19,7 @@ info:
       that version (`index_books`) and their metadata (`books`). A request takes the snapshot
       once when it starts, reads the posting lists of its terms from MongoDB and discards any
       book that is not in the snapshot, so it never sees a book that is indexed but not yet
-      published, nor mixes two versions (contract §6.5 of the group plan). Filters are applied
+      published, nor mixes two versions (`api/contracts/index-publication.md` §8). Filters are applied
       in memory on the snapshot metadata.
     - **Errors** always use the `Error` schema with a machine-readable `code`:
       `MISSING_PARAMETER`, `INVALID_PARAMETER` (400), `NOT_FOUND` (404),

@@ -1,6 +1,47 @@
-# Control Module. Its port is published in the normal deployment. How to run: http/README.md.
-# Today it only has GET /status: its other endpoints arrive with CF-09.
+# Control Module (contract: api/control-openapi.yaml). Its port is published in the normal
+# deployment. How to run: http/README.md.
 
 ### Status of the service
-# Expected: 200, control-module
+# Expected: 200, control-module, coordination connected
 GET {{control}}/status
+
+### Books per state, queues, last publication and lease check
+# Expected: 200
+GET {{control}}/control/status
+
+### Seed books: changes data, and downloads them with INGESTION_SOURCE=gutenberg
+# Expected: 202 with submitted, added and already_known; repeating it adds nothing
+POST {{control}}/control/jobs
+Content-Type: application/json
+
+{"book_ids": [1342, 84]}
+
+### State of one book
+# Expected: 200 with its book-state entry, or 404 if it was never submitted
+GET {{control}}/control/tasks/1342
+
+### Task: invalid id
+# Expected: 400 INVALID_PARAMETER, field book_id
+GET {{control}}/control/tasks/0084
+
+### Task: a book never submitted
+# Expected: 404 NOT_FOUND, field book_id
+GET {{control}}/control/tasks/999999
+
+### Jobs: one invalid id rejects the whole request
+# Expected: 400 INVALID_PARAMETER, field book_ids; nothing is seeded
+POST {{control}}/control/jobs
+Content-Type: application/json
+
+{"book_ids": [84, 0]}
+
+### Jobs: a body that is not JSON
+# Expected: 400 INVALID_PARAMETER, field body
+POST {{control}}/control/jobs
+Content-Type: application/json
+
+not json
+
+### Put the FAILED books back in their queue
+# Expected: 200 with requeued
+POST {{control}}/control/retry-failed
