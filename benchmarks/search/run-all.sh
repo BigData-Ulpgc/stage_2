@@ -94,7 +94,10 @@ step() {    # step NAME RESULT_DIR COMMAND...
         touch "$dir/.done"
         say "$name: done in $(( (SECONDS - start) / 60 )) min"
     else
-        say "$name: FAILED, see $LOG. The other steps go on."
+        # Moved now, so the commit at the end and analyze.py never take it, and the next run measures it again
+        local failed="$dir.failed-$(date -u +%Y%m%dT%H%M%S)"
+        [ -e "$dir" ] && mv "$dir" "$failed"
+        say "$name: FAILED, see $LOG; its results were moved to $failed. The other steps go on."
         FAILED_STEPS="$FAILED_STEPS $name"
     fi
 }

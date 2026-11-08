@@ -85,7 +85,8 @@ if [ ! -f "$BOOKS/manifest.json" ] || ! grep -q "\"count\": $TOTAL\b" "$BOOKS/ma
         "$PYTHON" scripts/dataset/generate_dataset.py --count "$TOTAL" --out "$BOOKS"
     fi
 fi
-grep -E '^[0-9]+$' "$BOOKS/book_ids.txt" | head -n "$BASE" > "$OUT/base-ids.txt"
+# grep stops by itself: "grep | head" would die of SIGPIPE under pipefail once head has its lines
+grep -E -m "$BASE" '^[0-9]+$' "$BOOKS/book_ids.txt" > "$OUT/base-ids.txt"
 grep -E '^[0-9]+$' "$BOOKS/book_ids.txt" | sed -n "$((BASE + 1)),$((BASE + EXTRA))p" > "$OUT/extra-ids.txt"
 
 echo "Building the images"
