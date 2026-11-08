@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Indexing Service API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Internal API of the **Indexing Service**, plus its operational status endpoint. None of
     these endpoints is public: nginx only exposes the Search Service, and the Indexing Service is
     reached inside the Docker network (`http://indexing:7002`).
 
-    **Status: draft v0.8.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b and its review follow-up, DR-09, DR-10, plan v3.3).
+    **Status: draft v0.9.0** (DR-05 and its review follow-up, DR-06b, DR-07, DR-08a, DR-08b and its review follow-up, DR-09, DR-10, plan v3.3; v0.9.0 the `coordination_cost` of the writer, CF-12).
     Every endpoint is implemented. Behaviour that arrives with a later task is marked **from DR-xx**. The
     inventory of all endpoints of the system is `api/endpoints.md`; the Search API is
     `api/openapi.yaml`.
@@ -377,6 +377,11 @@ paths:
                   last_batch: 100
                   invalid_ids_dropped: 0
                   ids_skipped: 0
+                  coordination_cost:
+                    queue_wait: { count: 190, mean_ms: 21450.3, p50_ms: 20100.0, p95_ms: 41800.0, p99_ms: 44200.0, max_ms: 44871.2 }
+                    claim: { count: 190, mean_ms: 26.1, p50_ms: 1.4, p95_ms: 2.9, p99_ms: 980.0, max_ms: 1001.7 }
+                    work: { count: 187, mean_ms: 6620.4, p50_ms: 6500.0, p95_ms: 7300.0, p99_ms: 7400.0, max_ms: 7412.9 }
+                    complete: { count: 187, mean_ms: 1.8, p50_ms: 1.6, p95_ms: 3.0, p99_ms: 3.6, max_ms: 3.7 }
 
 components:
   schemas:
@@ -520,7 +525,7 @@ components:
       description: |
         The consumer of `index-queue` of this replica, counting since the process started; null
         until the service has connected to Hazelcast once.
-      required: [role, indexed, requeued, failed, lease_lost, outage_pauses, last_batch, invalid_ids_dropped, ids_skipped]
+      required: [role, indexed, requeued, failed, lease_lost, outage_pauses, last_batch, invalid_ids_dropped, ids_skipped, coordination_cost]
       properties:
         role:
           type: string
@@ -537,6 +542,39 @@ components:
         last_batch: { type: integer, description: "Books of the last batch taken from the queue (1 to INDEX_WRITE_BATCH; 0 before the first one). Close to INDEX_WRITE_BATCH means a backlog." }
         invalid_ids_dropped: { type: integer, description: "Invalid ids taken from the queue and dropped; not 0 means someone offered a bad id (contract §2)." }
         ids_skipped: { type: integer, description: "Ids taken from the queue whose book was not DOWNLOADED (duplicates); harmless." }
+        coordination_cost:
+          type: object
+          description: |
+            What coordinating the books through Hazelcast cost this replica since it started
+            (CF-12), one sample per book claimed or completed; the same object as the
+            `coordination_cost` of Ingestion. `queue_wait`: from entering `index-queue` to the claim.
+            `claim`: the transaction that takes the book; for the first book of a batch it includes
+            the wait for an id when the queue is empty, the others of the batch are taken without
+            waiting. `work`: from the claim to the completion, the whole batch of the book (prepare,
+            write, `index_log`); the lease renewals keep its start. `complete`: the transaction that
+            marks it `INDEXED`. Only the transitions that happened count: a completion whose lease was
+            lost is not measured.
+          required: [queue_wait, claim, work, complete]
+          properties:
+            queue_wait: { $ref: '#/components/schemas/Latency' }
+            claim: { $ref: '#/components/schemas/Latency' }
+            work: { $ref: '#/components/schemas/Latency' }
+            complete: { $ref: '#/components/schemas/Latency' }
+
+    Latency:
+      type: object
+      description: |
+        Durations in milliseconds. The percentiles come from logarithmic buckets and are within
+        about 3 % of the true value; count, mean and max are exact. All 0 without samples. Same
+        schema as in `api/ingestion-openapi.yaml`.
+      required: [count, mean_ms, p50_ms, p95_ms, p99_ms, max_ms]
+      properties:
+        count: { type: integer, minimum: 0 }
+        mean_ms: { type: number }
+        p50_ms: { type: number }
+        p95_ms: { type: number }
+        p99_ms: { type: number }
+        max_ms: { type: number }
 
     Error:
       type: object

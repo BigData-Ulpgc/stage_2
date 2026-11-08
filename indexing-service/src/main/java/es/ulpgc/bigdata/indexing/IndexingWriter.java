@@ -252,6 +252,8 @@ public final class IndexingWriter implements Runnable {
         status.put("last_batch", lastBatch);
         status.put("invalid_ids_dropped", coordination.invalidIdsDropped());
         status.put("ids_skipped", coordination.idsSkipped());
+        // CF-12: queue wait, claim, work and complete of the books of index-queue, as Ingestion shows
+        status.put("coordination_cost", coordination.metrics().summary(Stage.INDEXING));
         return status;
     }
 
