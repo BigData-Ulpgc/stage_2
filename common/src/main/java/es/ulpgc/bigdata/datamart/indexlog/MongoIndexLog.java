@@ -21,6 +21,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -128,5 +129,15 @@ public class MongoIndexLog implements IndexLog {
         return Optional.ofNullable(last)
                 .map(doc -> doc.getDate(INDEXED_AT))
                 .map(Date::toInstant);
+    }
+
+    /** Only the _id travels: MongoDB answers it from the _id index, without reading the documents. */
+    @Override
+    public Set<Integer> indexedIds() {
+        Set<Integer> ids = new TreeSet<>();
+        collection.find()
+                .projection(Projections.include(ID))
+                .forEach(doc -> ids.add(doc.get(ID, Number.class).intValue()));
+        return ids;
     }
 }

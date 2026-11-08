@@ -1,0 +1,6 @@
+# Control Module. Its port is published in the normal deployment. How to run: http/README.md.
+# Today it only has GET /status: its other endpoints arrive with CF-09.
+
+### Status of the service
+# Expected: 200, control-module
+GET {{control}}/status

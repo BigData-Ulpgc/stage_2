@@ -1,0 +1,91 @@
+# Public API of the Search Service, through nginx (contract: api/openapi.yaml).
+# The results are those of the 15 books of the sample dataset. How to run: http/README.md.
+
+### Keyword search
+# Expected: 200, total 1, book 84
+GET {{public}}/search?q=frankenstein
+
+### Several terms are AND
+# Expected: 200, total 3, books 84, 345, 2701
+GET {{public}}/search?q=whale+monster
+
+### Filter: part of the author name, in any case
+# Expected: 200, total 2, books 74, 76
+GET {{public}}/search?q=river&author=twain
+
+### Filter: year
+# Expected: 200, total 3, books 46, 74, 76
+GET {{public}}/search?q=river&year=2004
+
+### Filter: language
+# Expected: 200, total 1, book 84
+GET {{public}}/search?q=frankenstein&language=en
+
+### Filters combined (AND)
+# Expected: 200, total 1, book 98
+GET {{public}}/search?q=river&author=dickens&year=1994&language=en
+
+### Empty result: a word in no book
+# Expected: 200, total 0, results []
+GET {{public}}/search?q=xyzzyqqq
+
+### Empty result: a filter nobody matches
+# Expected: 200, total 0, results []
+GET {{public}}/search?q=whale&author=nobody
+
+### Pagination: first page
+# Expected: 200, total 10, books 46, 74, 76
+GET {{public}}/search?q=river&limit=3
+
+### Pagination: second page
+# Expected: 200, total 10, books 84, 98, 174
+GET {{public}}/search?q=river&limit=3&offset=3
+
+### Pagination: offset beyond the end
+# Expected: 200, total 10, results []
+GET {{public}}/search?q=river&offset=10
+
+### Invalid: q missing
+# Expected: 400 MISSING_PARAMETER, field q
+GET {{public}}/search
+
+### Invalid: q with only stopwords
+# Expected: 400 INVALID_PARAMETER, field q
+GET {{public}}/search?q=the
+
+### Invalid: language not supported
+# Expected: 400 INVALID_PARAMETER, field language
+GET {{public}}/search?q=whale&language=xx
+
+### Invalid: year is not 4 digits
+# Expected: 400 INVALID_PARAMETER, field year
+GET {{public}}/search?q=whale&year=99
+
+### Invalid: limit above the maximum
+# Expected: 400 INVALID_PARAMETER, field limit
+GET {{public}}/search?q=whale&limit=101
+
+### Metadata of a published book
+# Expected: 200, Pride and Prejudice, year 1998, year_source release_date
+GET {{public}}/books/1342
+
+### A book that is not in the published index
+# Expected: 404 NOT_FOUND, field book_id
+GET {{public}}/books/999999
+
+### Invalid: book_id not canonical (also 0 and +84)
+# Expected: 400 INVALID_PARAMETER, field book_id
+GET {{public}}/books/0084
+
+### Values for the filters of the front-end
+# Expected: 200, 15 books, language en, years 1975 to 2008
+GET {{public}}/search/filters
+
+### Operational status; the X-Served-By header shows the replica that answered
+# Expected: 200, search-service, index_version and books_indexed 15
+GET {{public}}/status
+
+### A browser on an allowed origin
+# Expected: 200, with the header Access-Control-Allow-Origin: http://localhost:3000
+GET {{public}}/search?q=whale
+Origin: http://localhost:3000

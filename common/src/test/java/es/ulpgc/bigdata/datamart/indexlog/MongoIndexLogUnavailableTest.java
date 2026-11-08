@@ -50,6 +50,7 @@ class MongoIndexLogUnavailableTest {
         assertThrows(MongoException.class, () -> log.markIndexed(List.of(1342), Instant.now()));
         assertThrows(MongoException.class, log::count);
         assertThrows(MongoException.class, log::lastIndexedAt);
+        assertThrows(MongoException.class, log::indexedIds);
     }
 
     @Test
