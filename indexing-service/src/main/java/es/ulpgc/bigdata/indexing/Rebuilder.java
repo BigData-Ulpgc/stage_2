@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -52,10 +53,12 @@ import java.util.regex.Pattern;
  * If anything fails before the switch, rNN is dropped and CURRENT is untouched: Search did not
  * notice anything, and calling again starts from scratch.
  *
- * The marker has a TTL (MARKER_TTL) that the rebuild renews while it waits for the lock and
- * before each batch. If the replica dies the marker expires and the writers go on. If a
- * renewal finds it gone (the replica stalled longer than the TTL), the rebuild stops: the
- * writers may be writing again.
+ * The marker has a TTL (MARKER_TTL) that a thread of its own renews every MARKER_TTL / 3 for as
+ * long as the rebuild runs, also in the middle of a batch: on an index of 10,000 books one
+ * batch of 100 takes about 33 s, longer than the TTL (review of #55). The rebuild also checks it
+ * while it waits for the lock and before each batch. If the replica dies the marker expires and
+ * the writers go on. If a check finds it gone (the replica stalled longer than the TTL, or
+ * Hazelcast lost it), the rebuild stops: the writers may be writing again.
  */
 public final class Rebuilder implements AutoCloseable {
 
@@ -79,7 +82,10 @@ public final class Rebuilder implements AutoCloseable {
     private final int batchSize;
     private final Duration dropDelay;
     private final Clock clock;
+    private final Duration markerTtl;
     private final ScheduledExecutorService worker;
+    /** Renews the marker while the rebuild runs; not the worker, which is busy with the rebuild. */
+    private final ScheduledExecutorService keeper;
 
     /** The rebuild of this replica runs now (the marker only says that one runs somewhere). */
     private volatile boolean runningHere = false;
@@ -98,6 +104,14 @@ public final class Rebuilder implements AutoCloseable {
     public Rebuilder(Supplier<Optional<Coordination>> coordination, IndexingService service, Datalake datalake,
                      PublicationRepository publications, Publisher publisher, RebuildRepository repository,
                      String defaultCollection, int batchSize, Duration dropDelay, Clock clock) {
+        this(coordination, service, datalake, publications, publisher, repository, defaultCollection, batchSize,
+                dropDelay, clock, MARKER_TTL);
+    }
+
+    /** @param markerTtl the TTL of the marker; MARKER_TTL in the service, shorter in the tests */
+    Rebuilder(Supplier<Optional<Coordination>> coordination, IndexingService service, Datalake datalake,
+              PublicationRepository publications, Publisher publisher, RebuildRepository repository,
+              String defaultCollection, int batchSize, Duration dropDelay, Clock clock, Duration markerTtl) {
         this.coordination = Objects.requireNonNull(coordination, "coordination");
         this.service = Objects.requireNonNull(service, "service");
         this.datalake = Objects.requireNonNull(datalake, "datalake");
@@ -112,9 +126,18 @@ public final class Rebuilder implements AutoCloseable {
         this.batchSize = batchSize;
         this.dropDelay = Objects.requireNonNull(dropDelay, "dropDelay");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.markerTtl = Objects.requireNonNull(markerTtl, "markerTtl");
+        if (markerTtl.compareTo(Duration.ofSeconds(2)) < 0) {
+            throw new IllegalArgumentException("el TTL de la marca debe ser de al menos 2 s: " + markerTtl);
+        }
         // One thread: the rebuild, then the drops it schedules. Daemon: it never keeps the JVM alive.
         this.worker = Executors.newSingleThreadScheduledExecutor(task -> {
             Thread thread = new Thread(task, "indexing-service-rebuild");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.keeper = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "indexing-service-rebuild-marker");
             thread.setDaemon(true);
             return thread;
         });
@@ -131,7 +154,7 @@ public final class Rebuilder implements AutoCloseable {
      */
     public Rebuild start() {
         Coordination cluster = coordination.get().orElseThrow(CoordinationUnavailableException::new);
-        OptionalLong marker = cluster.tryStartRebuild(MARKER_TTL);
+        OptionalLong marker = cluster.tryStartRebuild(markerTtl);
         if (marker.isEmpty()) {
             throw new RebuildInProgressException();
         }
@@ -201,6 +224,7 @@ public final class Rebuilder implements AutoCloseable {
     public void close() {
         closing = true;
         worker.shutdownNow();
+        keeper.shutdownNow();
         try {
             worker.awaitTermination(5, TimeUnit.SECONDS);          // it drops its collection and says failed
         } catch (InterruptedException e) {
@@ -268,6 +292,7 @@ public final class Rebuilder implements AutoCloseable {
         boolean interrupted = false;
         Rebuild progress = started;
         String target = started.collection();
+        ScheduledFuture<?> keeping = keepMarker(cluster, token);
         try {
             locked = waitForTheWriters(cluster, token, lock);
             Optional<Publication> current = publications.current();
@@ -310,6 +335,7 @@ public final class Rebuilder implements AutoCloseable {
             interrupted = Thread.interrupted();
             progress = failed(progress, switched, target, reasonOf(e, target));
         } finally {
+            keeping.cancel(false);
             interrupted |= Thread.interrupted();
             if (locked) {
                 quietly("release index-writer", lock::unlock);
@@ -353,8 +379,33 @@ public final class Rebuilder implements AutoCloseable {
         }
     }
 
+    /**
+     * Renews the marker every markerTtl / 3 until cancelled, whatever the rebuild is doing. A
+     * renewal that fails (Hazelcast slow or away) is retried at the next tick. One that finds
+     * the marker gone stops: the next check of the rebuild (renew) finds it gone too and stops it.
+     * Hazelcast keeps the times of an entry in whole seconds, so it may expire up to 1 s early:
+     * a renewal every TTL / 3 comes in time from a TTL of 2 s on (the constructor checks it).
+     */
+    private ScheduledFuture<?> keepMarker(Coordination cluster, long token) {
+        long period = Math.max(1, markerTtl.toMillis() / 3);
+        AtomicBoolean gone = new AtomicBoolean();
+        return keeper.scheduleWithFixedDelay(() -> {
+            if (gone.get()) {
+                return;
+            }
+            try {
+                if (!cluster.renewRebuild(token, markerTtl)) {
+                    gone.set(true);
+                    LOG.warn("rebuild: the marker is gone, the rebuild stops at its next check");
+                }
+            } catch (RuntimeException e) {
+                LOG.warn("rebuild: could not renew the marker ({}); trying again in {} ms", e.toString(), period);
+            }
+        }, period, period, TimeUnit.MILLISECONDS);
+    }
+
     private void renew(Coordination cluster, long token) {
-        if (!cluster.renewRebuild(token, MARKER_TTL)) {
+        if (!cluster.renewRebuild(token, markerTtl)) {
             throw new RebuildAbortedException("the rebuild marker expired, the index writers may be writing again");
         }
     }
