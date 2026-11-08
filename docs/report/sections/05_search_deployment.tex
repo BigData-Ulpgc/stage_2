@@ -73,7 +73,7 @@ Maven module as an argument.
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\linewidth}{@{}L{2.5cm}L{1.3cm}L{3.1cm}L{1.9cm}X@{}}
+\begin{tabularx}{\linewidth}{@{}L{2.5cm}L{1.5cm}L{2.9cm}L{1.9cm}X@{}}
 \toprule
 \textbf{Service} & \textbf{Replicas} & \textbf{Published on the host} & \textbf{Datalake} & \textbf{Limits} \\
 \midrule
@@ -90,9 +90,9 @@ Maven module as an argument.
 \end{table}
 
 \begin{itemize}
-  \item \textbf{Replicas.} \code{docker compose up -d -{}-scale search=3} is enough: nginx
-        (\code{scripts/nginx.conf}) does round-robin over the replicas, which it finds with the DNS of Docker and
-        looks up again while running.
+  \item \textbf{Replicas.} nginx (\code{scripts/nginx.conf}) does round-robin over the replicas of Search, which it
+        finds with the DNS of Docker and looks up again while running, so three replicas only need
+        \code{docker compose up -d -{}-scale search=3}.
   \item \textbf{Replicas of Indexing.} Only the replica that holds the Hazelcast lock \code{index-writer} writes; the
         others wait and take over if it stops or dies. Two replicas therefore give availability, not more indexing.
   \item \textbf{Failures.} The public API is read-only, so nginx can safely repeat a request on another replica if
