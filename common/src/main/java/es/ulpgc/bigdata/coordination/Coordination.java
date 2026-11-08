@@ -148,6 +148,56 @@ public final class Coordination implements AutoCloseable {
     }
 
     /**
+     * Recovery after the cluster lost its state (contract §7, CF-10): puts these books back in
+     * {@code state} (DOWNLOADED, INDEXED or PUBLISHED), from the evidence of the persistent
+     * storage. A DOWNLOADED book is offered to index-queue again, in the same transaction.
+     *
+     * An id the cluster does not know is restored; one that is PENDING is moved forward too (it
+     * was seeded while the recovery ran, and the worker that polls its old id from ingest-queue
+     * drops it). Any other state is left as it is: that book is already moving again. Runs in
+     * transactions of {@link #SEED_BATCH} books, like seed.
+     *
+     * @return how many books were restored or moved forward
+     * @throws IllegalArgumentException if the state is not one of the three, or an id is not a
+     *                                  valid book id (nothing is restored)
+     */
+    public int restore(Collection<Integer> ids, BookState state) {
+        if (state != BookState.DOWNLOADED && state != BookState.INDEXED && state != BookState.PUBLISHED) {
+            throw new IllegalArgumentException("only DOWNLOADED, INDEXED or PUBLISHED can be restored, not " + state);
+        }
+        List<Integer> distinct = new ArrayList<>(new LinkedHashSet<>(ids));
+        for (int id : distinct) {
+            if (!BookIds.isValid(id)) {
+                throw new IllegalArgumentException("invalid book id: " + id);
+            }
+        }
+        int restored = 0;
+        for (int from = 0; from < distinct.size(); from += SEED_BATCH) {
+            List<Integer> batch = distinct.subList(from, Math.min(from + SEED_BATCH, distinct.size()));
+            long now = now();
+            restored += inTransaction(tx -> {
+                TransactionalMap<Integer, BookTask> map = tx.getMap(CoordinationNames.BOOK_STATE);
+                TransactionalQueue<Integer> queue = tx.getQueue(CoordinationNames.INDEX_QUEUE);
+                int n = 0;
+                for (int id : batch) {
+                    BookTask next = BookTask.restored(id, state, now);
+                    BookTask existing = map.putIfAbsent(id, next);
+                    if (existing != null && (existing.bookState() != BookState.PENDING
+                            || !map.replace(id, existing, next))) {
+                        continue;
+                    }
+                    if (state == BookState.DOWNLOADED) {
+                        queue.offer(id);
+                    }
+                    n++;
+                }
+                return n;
+            });
+        }
+        return restored;
+    }
+
+    /**
      * The expired-lease check of the Control (contract §4.2), every LEASE_CHECK_SECONDS:
      * books INGESTING or INDEXING whose lease has expired go back to their queue (T4, T8) or,
      * with no attempts left, to FAILED (T5, T9), with lastError LEASE_EXPIRED.

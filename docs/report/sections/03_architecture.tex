@@ -1,0 +1,249 @@
+\section{System architecture}
+\label{sec:architecture}
+
+The search engine of Stage 1 becomes four cooperating services, each a Maven module that builds an executable
+jar and a Docker image: \textbf{Ingestion} downloads books into the datalake, \textbf{Indexing} turns them into
+the inverted index and the metadata in MongoDB, \textbf{Search} answers the queries of the front-end, and the
+\textbf{Control Module} feeds and supervises the pipeline. They never call each other to hand over work: they
+share it through a \textbf{Hazelcast} cluster, which holds the state of every book and the queues of work. Only two
+calls go over HTTP between services: the Control asks Indexing to publish, and the administrators call the
+internal APIs directly.
+
+\subsection{Coordination mechanism}
+
+The design combines two of the mechanisms the assignment allows:
+
+\begin{itemize}
+  \item \textbf{A shared-memory region:} the Hazelcast cluster (two members, version 5.7.0). It is the only place
+    where the services meet. It holds the state of every book (\code{book-state}), the two queues of work
+    (\code{ingest-queue} and \code{index-queue}), the lock of the single index writer (\code{index-writer}), the
+    event of each new version of the index (\code{index-events}) and a marker that tells whether the cluster still
+    has its state (\code{coordination-meta}). All access goes through one library in \code{common}
+    (\code{Coordination}), so no service builds a key, a value or a transaction by hand.
+  \item \textbf{A scheduler:} the Control Module. It seeds the books, reviews the leases every
+    \code{LEASE\_CHECK\_SECONDS} and decides when a new version of the index is published. It is not in the path of
+    any book: the workers take their work from the queues, and keep doing so while the Control is down.
+\end{itemize}
+
+There is no message broker. Hazelcast's queues have no acknowledgements, so a book taken by a worker that dies would
+be lost from the queue; the leases in \code{book-state} recover it (Section~\ref{sec:ownership}). The persistent
+truth is not in Hazelcast but in the datalake and MongoDB: Hazelcast only says who does what, and a book changes state
+only after its evidence is on disk. If the whole cluster is lost, the Control rebuilds it from that evidence.
+
+\subsection{Deployment on one host}
+
+Every process runs on one machine, started by Docker Compose from \code{docker-compose.yml} and \code{.env}
+(Figure~\ref{fig:deployment}). Each container has fixed \code{cpus} and \code{mem\_limit}, so the experiments are
+reproducible. The only entry from outside is nginx: it is the \textbf{front-end API boundary}, and everything to its
+right in the figure is internal.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\footnotesize, x=0.92cm,
+    box/.style={draw=ink, rounded corners=2pt, align=center, fill=white, minimum height=9mm, inner sep=3pt},
+    svc/.style={box, fill=accent!8, minimum width=29mm},
+    rep/.style={svc, double copy shadow={shadow xshift=2pt, shadow yshift=-2pt}},
+    store/.style={box, fill=black!5, minimum width=29mm},
+    hz/.style={box, fill=orange!12, minimum width=15mm, minimum height=7mm},
+    arr/.style={-{Stealth[length=2mm]}, draw=ink},
+    hzl/.style={{Stealth[length=2mm]}-{Stealth[length=2mm]}, draw=orange!70!black, thick},
+    lab/.style={font=\scriptsize, fill=white, inner sep=1.5pt, align=center},
+  ]
+  % Hazelcast in the middle: every service meets there
+  \node[hz] (hz1) at (-0.35,0) {hz-1};
+  \node[hz] (hz2) at (1.55,0) {hz-2};
+  \node[draw=orange!70!black, dashed, rounded corners=3pt, fit=(hz1)(hz2), inner xsep=5pt, inner ysep=12pt] (hz) {};
+  \node[font=\scriptsize, text=orange!50!black, anchor=south west] at (hz.south west) {Hazelcast: shared memory};
+
+  % Services around it
+  \node[rep] (search) at (0.6,2.9) {Search $\times$1--4\\Jetty pool (250)};
+  \node[rep] (ingestion) at (-4.0,0) {Ingestion $\times$1--4\\K workers + Jetty};
+  \node[svc] (control) at (5.2,0) {Control Module $\times$1\\2 scheduled tasks};
+  \node[svc] (indexing) at (0.6,-2.9) {Indexing $\times$1\\N parsers + 1 writer};
+  \node[svc, fill=accent!25] (nginx) at (-4.0,2.9) {nginx :8080\\round-robin};
+
+  % Shared storage
+  \node[store] (datalake) at (-4.0,-2.9) {Datalake (volume)\\range folders, \_READY};
+  \node[store] (mongo) at (5.2,-2.9) {MongoDB\\index, metadata, \code{CURRENT}};
+
+  % Outside the host
+  \node[box, minimum width=20mm] (client) at (-8.0,2.9) {Front-end\\(browser)};
+  \node[box, minimum width=20mm] (gutenberg) at (-8.0,0) {Project\\Gutenberg};
+
+  % The host
+  \begin{scope}[on background layer]
+    \node[draw=muted, rounded corners=4pt, fit=(nginx)(search)(control)(mongo)(datalake), inner xsep=8pt, inner ysep=10pt]
+      (host) {};
+  \end{scope}
+  \node[font=\scriptsize\bfseries, anchor=south west] at (host.north west) {Stage 2 host (Docker Compose)};
+  \draw[densely dashed, accent, thick] ($(host.north west)+(-0.6,0.3)$) -- ($(host.north west)+(-0.6,-1.9)$)
+    node[below, font=\scriptsize, text=accent, align=center] {public API\\boundary};
+
+  % Hazelcast clients
+  \draw[hzl] (ingestion) -- (hz);
+  \draw[hzl] (control) -- (hz);
+  \draw[hzl] (indexing.north -| hz2) -- node[lab, left] {claims, events} (hz.south -| hz2);
+  \draw[-{Stealth[length=2mm]}, draw=orange!70!black, thick] (hz.north -| hz2) -- node[lab, right] {index-events} (search.south -| hz2);
+
+  % HTTP
+  \draw[arr] (client) -- node[lab, above] {HTTP} (nginx);
+  \draw[arr] (nginx) -- node[lab, above] {/search} (search);
+  \draw[arr] (control.south west) -- node[lab, right, pos=0.45] {POST\\/index/publish} (indexing.north east);
+  \draw[arr] (ingestion) -- node[lab, above] {HTTPS} (gutenberg);
+
+  % Storage
+  \draw[arr] (ingestion) -- node[lab, left] {write} (datalake);
+  \draw[arr, densely dotted] (datalake) -- node[lab, above] {read} (indexing);
+  \draw[arr] (indexing) -- node[lab, above] {write} (mongo);
+  \draw[arr, densely dotted] (search.east) -| node[lab, pos=0.75, right] {read} ($(mongo.north east)+(0.4,0)$)
+    -- (mongo.north east);
+\end{tikzpicture}
+\caption{The deployment on the single Stage 2 host. Only nginx is reachable from other machines; the Control
+(\code{127.0.0.1:7000}), Hazelcast and MongoDB are published on the loopback interface for the administrator and
+the tests. Orange: Hazelcast clients (a client reaches both members). Dotted: read-only access to shared storage.
+A shadow marks a service that can run several replicas.}
+\label{fig:deployment}
+\end{figure}
+
+\textbf{Shared storage.} Two stores are shared, each with a single writer:
+\begin{itemize}
+  \item The \textbf{datalake} is a bind-mounted folder. Ingestion writes it; Indexing and the Control only read it
+    (read-only mounts). Books are grouped in folders of 1,000 ids (\code{01000-01999}), each with
+    \code{<id>.header.txt}, \code{<id>.body.txt} and, written last, \code{<id>.\_READY}: a book exists only with
+    its marker (Section~\ref{sec:readiness}).
+  \item \textbf{MongoDB} holds the inverted index, the metadata of the books, the log of indexed books
+    (\code{index\_log}), the books of each published version (\code{index\_books}) and the pointer \code{CURRENT}.
+    Indexing writes; Search reads; the Control reads it only to recover.
+\end{itemize}
+
+\textbf{Replicas and threads.} Table~\ref{tab:replicas} separates the three kinds of concurrency of the system:
+process replicas, threads inside a process, and client concurrency, which only exists in front of Search.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{2.2cm}L{1.8cm}L{3.9cm}X@{}}
+\toprule
+\textbf{Process} & \textbf{Replicas} & \textbf{Threads} & \textbf{How work is shared} \\
+\midrule
+Ingestion & 1--4 (\code{--scale}) & \code{INGESTION\_WORKERS} (4) workers; Jetty pool & Every worker of every replica
+  claims from the same \code{ingest-queue}: Hazelcast distributes the books, and nobody knows the address of a replica \\
+Indexing & 1 & \code{INDEXING\_THREADS} (4) parsers; one writer & Only the replica that holds \code{index-writer}
+  claims from \code{index-queue} and writes the index; another one would wait as a standby \\
+Search & 1--4 (\code{--scale}) & Jetty pool, \code{SEARCH\_HTTP\_THREADS} (250) & nginx sends each request to the
+  next replica (round-robin); each one reads an immutable snapshot \\
+Control & 1 & 2 scheduled tasks; Jetty pool & Not in the path of a book: lease check and publication \\
+Hazelcast & 2 members & managed by Hazelcast & 271 partitions spread over both, each with one backup on the other \\
+MongoDB & 1 & managed by MongoDB & Shared by Indexing (writes) and every Search replica (reads) \\
+\bottomrule
+\end{tabularx}
+\caption{Replicas and threads of each process. The Jetty pool of every service is explicit: Javalin 6.1.3 creates a
+\code{QueuedThreadPool} with at most 250 threads, at least 8 and 60~s of idle time, and
+\code{<SERVICE>\_HTTP\_THREADS} changes the maximum.}
+\label{tab:replicas}
+\end{table}
+
+\subsection{The life of a book}
+
+\code{book-state} keeps one entry per book with its state, its owner and its lease, and the transitions are the
+only way to change it (Figure~\ref{fig:states}). Each transition is a compare-and-set, \code{replace(id, expected,
+next)}, which succeeds only if nobody changed the entry since it was read; one that also moves the id to or from a
+queue runs in one Hazelcast transaction with that queue operation, so a crash never does one without the other.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\footnotesize, node distance=6mm and 9mm,
+    st/.style={draw=ink, rounded corners=6pt, fill=accent!8, minimum width=19mm, minimum height=7mm},
+    arr/.style={-{Stealth[length=2mm]}, draw=ink},
+    lab/.style={font=\scriptsize, fill=white, inner sep=1pt},
+  ]
+  \node[st] (pending) {PENDING};
+  \node[st, right=of pending] (ingesting) {INGESTING};
+  \node[st, right=of ingesting] (downloaded) {DOWNLOADED};
+  \node[st, right=of downloaded] (indexing) {INDEXING};
+  \node[st, below=12mm of indexing] (indexed) {INDEXED};
+  \node[st, left=of indexed] (published) {PUBLISHED};
+  \node[st, fill=red!8, below=12mm of ingesting] (failed) {FAILED};
+
+  \draw[arr] ($(pending.west)+(-8mm,0)$) -- node[lab, above] {T1} (pending);
+  \draw[arr] (pending) -- node[lab, above] {T2} (ingesting);
+  \draw[arr] (ingesting) -- node[lab, above] {T3} (downloaded);
+  \draw[arr] (downloaded) -- node[lab, above] {T6} (indexing);
+  \draw[arr] (indexing) -- node[lab, right] {T7} (indexed);
+  \draw[arr] (indexed) -- node[lab, above] {T10} (published);
+  \draw[arr, bend left=35] (ingesting) to node[lab, below] {T4} (pending);
+  \draw[arr, bend left=35] (indexing) to node[lab, below] {T8} (downloaded);
+  \draw[arr] (ingesting) -- node[lab, right] {T5} (failed);
+  \draw[arr] (indexing.south west) -- node[lab, pos=0.3, above] {T9} (failed.east);
+  \draw[arr, dashed] (failed.west) -| node[lab, pos=0.3, below] {T11} (pending.south);
+\end{tikzpicture}
+\caption{The states of a book (coordination contract §4). T2/T6 claim the book with a lease; T3/T7 complete the
+stage once its evidence is persistent; T4/T8 requeue it after a transient failure or an expired lease; T5/T9 send it
+to \code{FAILED} after a permanent error or the last attempt; T10 marks it visible; T11 is
+\code{POST /control/retry-failed}. The recovery (row R, Section~\ref{sec:recovery}) may also create an entry directly
+as \code{DOWNLOADED}, \code{INDEXED} or \code{PUBLISHED}.}
+\label{fig:states}
+\end{figure}
+
+Figure~\ref{fig:sequence} follows one book through the whole system. The order matters: each step writes its
+evidence before the state that announces it, so a crash between both leaves a book that is either redone or
+recovered, never one that is announced but missing.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\scriptsize, x=1cm, y=-0.62cm,
+    head/.style={draw=ink, rounded corners=2pt, fill=accent!8, minimum width=16mm, minimum height=6mm, font=\footnotesize},
+    msg/.style={-{Stealth[length=1.8mm]}, draw=ink},
+    note/.style={font=\scriptsize, fill=white, inner sep=1pt},
+  ]
+  \foreach \x/\n/\t in {0/C/Control, 2.3/H/Hazelcast, 4.6/I/Ingestion, 6.9/D/Datalake, 9.2/X/Indexing,
+                         11.5/M/MongoDB, 13.8/S/Search} {
+    \node[head] (\n) at (\x,0) {\t};
+    \draw[muted, densely dotted] (\x,0.6) -- (\x,17.6);
+  }
+  \draw[msg] (0,1.4) -- node[note, above] {T1 seed: PENDING + offer} (2.3,1.4);
+  \draw[msg] (4.6,2.6) -- node[note, above] {T2 claim (lease)} (2.3,2.6);
+  \draw[msg] (4.6,3.8) -- node[note, above] {header, body, \_READY} (6.9,3.8);
+  \draw[msg] (4.6,5.0) -- node[note, above] {T3 DOWNLOADED + offer} (2.3,5.0);
+  \draw[msg] (9.2,6.4) -- node[note, above, pos=0.6] {T6 claim (holds index-writer)} (2.3,6.4);
+  \draw[msg, densely dashed] (6.9,7.6) -- node[note, above] {read the book} (9.2,7.6);
+  \draw[msg] (9.2,8.8) -- node[note, above] {posting lists, metadata} (11.5,8.8);
+  \draw[msg] (9.2,10.0) -- node[note, above] {\code{index\_log}} (11.5,10.0);
+  \draw[msg] (9.2,11.2) -- node[note, above, pos=0.6] {T7 INDEXED} (2.3,11.2);
+  \draw[msg] (0,12.6) -- node[note, above, pos=0.62] {POST /index/publish (batch full or interval over)} (9.2,12.6);
+  \draw[msg] (9.2,13.8) -- node[note, above] {\code{index\_books} V+1, then \code{CURRENT} = V+1} (11.5,13.8);
+  \draw[msg] (9.2,15.0) -- node[note, above, pos=0.6] {IndexPublished(V+1), T10 PUBLISHED} (2.3,15.0);
+  \draw[msg] (2.3,16.2) -- node[note, above, pos=0.88] {index-events} (13.8,16.2);
+  \draw[msg, densely dashed] (13.8,17.2) -- node[note, above] {read \code{CURRENT}, books $\le$ V+1} (11.5,17.2);
+\end{tikzpicture}
+\caption{The flow of one book. Dashed: reads. Every arrow towards Hazelcast is a transition of
+Figure~\ref{fig:states}; each one comes after the evidence it announces (\code{\_READY}, \code{index\_log},
+\code{CURRENT}).}
+\label{fig:sequence}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Seed.} \code{POST /control/jobs} (or \code{CONTROL\_SEED\_FILE}) puts every unknown id as
+    \code{PENDING} and offers it to \code{ingest-queue}. A known id is left as it is, so seeding twice duplicates
+    nothing.
+  \item \textbf{Ingestion.} A worker claims the id: one transaction polls the queue and writes \code{INGESTING} with
+    its name and a lease of \code{LEASE\_SECONDS}. It downloads the book, splits header and body, writes both files
+    and then the \code{\_READY} marker, and completes: \code{DOWNLOADED} and an offer to \code{index-queue}, again in
+    one transaction.
+  \item \textbf{Indexing.} The replica that holds \code{index-writer} claims from \code{index-queue}, parses and
+    tokenizes the books in parallel, writes the posting lists and the metadata to MongoDB in batches, records each book
+    in \code{index\_log} and marks it \code{INDEXED}. The book is in the index, but Search does not show it yet.
+  \item \textbf{Publication.} When \code{PUBLISH\_BATCH} books (100) are \code{INDEXED}, or \code{PUBLISH\_INTERVAL\_S}
+    (30~s) have passed with at least one, the Control calls \code{POST /index/publish}. Indexing records the new books in
+    \code{index\_books} with version V+1 and moves \code{CURRENT} to V+1 in one atomic update; the index itself is not
+    copied. Right after answering, it announces \code{IndexPublished} and marks the books \code{PUBLISHED}.
+  \item \textbf{Reload.} Every Search replica receives the event, reads \code{CURRENT} and the books up to it, and
+    swaps its immutable snapshot. A lost event is covered by its periodic check of \code{CURRENT}.
+\end{enumerate}
+
+\textbf{Operational endpoints.} Every service answers \code{GET /status} without touching Hazelcast or MongoDB, so a
+healthcheck never fails because a dependency is down; the Docker healthchecks and \code{depends\_on} use it. The
+Control adds \code{GET /control/status} with the books per state and the size of each queue, the observation point of
+the whole pipeline (Section~\ref{sec:api}).

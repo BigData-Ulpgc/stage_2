@@ -1,0 +1,18 @@
+# Internal API of the Ingestion Service. Needs docker-compose.validation.yml, which publishes the
+# port. How to run: http/README.md.
+
+### Status of the service
+# Expected: 200, ingestion-service
+GET {{ingestion}}/status
+
+### Ingest: invalid id
+# Expected: 400 INVALID_PARAMETER, field book_id
+POST {{ingestion}}/ingest/0084
+
+### Status of a book that is not stored
+# Expected: 200, not_available, path null
+GET {{ingestion}}/ingest/status/999999
+
+### Stored books
+# Expected: 200, count and books
+GET {{ingestion}}/ingest/list

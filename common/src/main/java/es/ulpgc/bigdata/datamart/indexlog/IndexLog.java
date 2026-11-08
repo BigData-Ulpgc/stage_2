@@ -3,6 +3,7 @@ package es.ulpgc.bigdata.datamart.indexlog;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The indexing log (plan §6.5, DR-07): the persistent evidence that a book is COMPLETE in the
@@ -42,4 +43,10 @@ public interface IndexLog {
 
     /** The most recent indexed_at of the log; empty if the log is empty. */
     Optional<Instant> lastIndexedAt();
+
+    /**
+     * Every book of the log. The Control reads it when it rebuilds the Hazelcast state after the
+     * cluster is lost (CF-10, coordination contract §7): a book in the log is INDEXED again.
+     */
+    Set<Integer> indexedIds();
 }
