@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *  - failSwitch / failHistory: make that step fail like a MongoDB that stops answering (a
  *    publication that dies halfway).
  */
-class InMemoryPublicationRepository implements PublicationRepository {
+public class InMemoryPublicationRepository implements PublicationRepository {
 
     private final InMemoryIndexLog indexLog;
     private final AtomicReference<Publication> current = new AtomicReference<>();
@@ -43,7 +43,7 @@ class InMemoryPublicationRepository implements PublicationRepository {
         this(new InMemoryIndexLog());
     }
 
-    InMemoryPublicationRepository(InMemoryIndexLog indexLog) {
+    public InMemoryPublicationRepository(InMemoryIndexLog indexLog) {
         this.indexLog = Objects.requireNonNull(indexLog, "indexLog");
     }
 

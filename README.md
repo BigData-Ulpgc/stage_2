@@ -111,6 +111,9 @@ mvn -B verify
 docker stop mongo-test
 ```
 
+What each failure of indexing and publication must do, and the test that proves it:
+[`docs/robustness.md`](docs/robustness.md).
+
 ## Run a service without Docker
 
 Each jar is self-contained (fat jar) and is configured with environment variables:
