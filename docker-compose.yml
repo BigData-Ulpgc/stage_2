@@ -120,9 +120,12 @@ services:
       PUBLISH_INTERVAL_S: ${PUBLISH_INTERVAL_S}
       INDEXING_URL: http://indexing:7002
       DATA_DIR: /data
+      # Optional list of books to seed once connected, e.g. /shared/book_ids.txt (.env).
+      CONTROL_SEED_FILE: ${CONTROL_SEED_FILE:-}
     # Read-only: its recovery only looks at the <id>._READY markers (coordination contract §7).
     volumes:
       - ${DATALAKE_HOST_DIR}:/data/datalake:ro
+      - ./shared:/shared:ro
     ports:
       - "127.0.0.1:${CONTROL_HOST_PORT}:7000"
     healthcheck:
@@ -176,6 +179,8 @@ services:
       dockerfile: docker/service.Dockerfile
       args: { MODULE: indexing-service }
     image: stage2/indexing-service
+    # docker compose stop waits this long before SIGKILL: the index writer finishes its batch.
+    stop_grace_period: 15s
     cpus: ${INDEXING_CPUS}
     mem_limit: ${INDEXING_MEM_LIMIT}
     environment:
