@@ -32,6 +32,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -160,6 +161,23 @@ class IndexingWriterTest {
         assertEquals(IndexingWriter.Role.ACTIVE, writer.role());
         assertEquals(2L, writer.status().get("indexed"));
         assertNull(task(1).owner(), "T7 libera el lease");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void elEstadoMuestraLoQueCuestaCoordinarCadaLibro() throws Exception {
+        inDatalake(1, 2, 3);
+        downloaded(1, 2, 3);
+
+        IndexingWriter writer = start(coordination, "w-a");
+
+        await("los 3 INDEXED", () -> writer.status().get("indexed").equals(3L));
+        Map<String, Object> cost = (Map<String, Object>) writer.status().get("coordination_cost");
+        for (String part : List.of("queue_wait", "claim", "work", "complete")) {
+            Map<String, Object> latency = (Map<String, Object>) cost.get(part);
+            assertEquals(3L, latency.get("count"), part + ": una muestra por libro");
+        }
+        assertTrue((Double) ((Map<String, Object>) cost.get("work")).get("max_ms") > 0, "el trabajo lleva tiempo");
     }
 
     // ---- a rebuild stops the writer (DR-10) ----
@@ -695,7 +713,8 @@ class IndexingWriterTest {
         IndexingWriter writer = new IndexingWriter(coordination, service, "w-a", d -> { }, 100);
 
         assertEquals(List.of("role", "indexed", "requeued", "failed", "lease_lost", "outage_pauses",
-                "last_batch", "invalid_ids_dropped", "ids_skipped"), List.copyOf(writer.status().keySet()));
+                "last_batch", "invalid_ids_dropped", "ids_skipped", "coordination_cost"),
+                List.copyOf(writer.status().keySet()));
         assertEquals(0, writer.status().get("last_batch"));
         assertEquals("standby", writer.status().get("role"));
     }
