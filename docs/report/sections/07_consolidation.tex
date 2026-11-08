@@ -26,7 +26,9 @@ Power & Plugged in, balanced energy profile \\
 
 The deployment limits each container (\code{.env}): MongoDB 2 CPUs and 1~GB with a 0.25~GB cache; Indexing 2 CPUs and
 1~GB; Search 2 CPUs per replica; Ingestion 1 CPU and 512~MB; each Hazelcast member 1 CPU and 768~MB; the Control and
-nginx 0.5 CPUs. All the limits together exceed the 12 CPUs of the host only in the Search experiments with 4 replicas.
+nginx 0.5 CPUs. The load experiments of Search give nginx 2 CPUs, so that it does not hide the rest, and measure its
+0.5 CPUs apart. The limits together exceed the 12 CPUs of the host only in the Search experiments with 4 replicas
+(14 CPUs), where the replicas compete for the same cores.
 
 \subsection{What was measured}
 
@@ -42,8 +44,8 @@ Search JMH & component, host & -- & 1, 2, 4, 8 threads \\
 Indexing, threads & Indexing + MongoDB + Hazelcast, Docker & 1 Indexing & 1, 2, 4, 8 parser threads; 2,000 books \\
 Indexing, scale & same & 1 Indexing & 4 threads; 200, 10,000, 30,000 books \\
 Indexing, publication & same & 1 Indexing & 1, 10, 50 new books on 10,000 \\
-Search, load & Search + MongoDB + nginx, Docker & 1, 2, 4 Search & 1 to 256 closed-loop clients; 250 Jetty threads; pool of 50;
-  index of 15, 197 and 10,000 books \\
+Search, load & Search + MongoDB + nginx, Docker & 1, 2, 4 Search & 1 to 256 closed-loop clients; 250 Jetty threads
+  (also 16 and 64); pool of 50 (also 10 and 100); nginx with 2 CPUs (also 0.5); index of 15, 197 and 10,000 books \\
 Search with the pipeline & complete pipeline, Docker & 1 of each & 32 and 128 clients on 2,000 books while the
   pipeline processes new ones \\
 \bottomrule
@@ -67,13 +69,14 @@ Ingestion & 473 $\mu$s per book with 1 worker, 155 with 8 (local source, JMH) &
 Indexing & 15 books/s on 2,000 books; 5.5 on 10,000; 2.0 on 30,000 &
   MongoDB: the cost of \code{\$addToSet} grows with each posting list, and one writer sends one stream of writes.
   Threads and replicas of Indexing do not change it (Section~\ref{sec:benchmarks-indexing}). \\
-Search & about 7,500 req/s on 15 books; 950 on 10,000 books with 1 replica, 2,600 with 4 &
-  On a small index the throughput is flat from 8 clients whatever the replicas, so the limit is outside Search: the
-  generator and nginx share the CPUs of the host. On 10,000 books each query reads long posting lists, and replicas
-  help: 4 give 2.7 times the throughput of one, so the work of Search itself limits it (Section~\ref{sec:benchmarks}). \\
+Search & About 7,500 req/s on 15 books whatever the replicas; on 10,000 books 1,036 req/s with 1 replica and
+  2,612 with 4 &
+  On a small index MongoDB is the limit: it reaches its 2 CPUs while the replicas of Search have CPU to spare. On
+  10,000 books each query matches most of the index, the CPU of Search is the limit, and replicas help: 4 give 2.5
+  times the peak of one, less than 4 because the host runs out of CPU (Section~\ref{sec:benchmarks}). \\
 The whole system & with the pipeline running, Search 2,600 req/s and Indexing 0.91 books/s at the same time &
-  MongoDB and the CPUs of the host are shared: indexing drops from 2.42 to 0.91 books/s while Search is under load,
-  and the p95 of Search with 128 clients rises from 109 to 160~ms. \\
+  MongoDB is shared: the writes of Indexing take it from 80 to 191~\% of its 2 CPUs. Indexing drops from 2.42 to
+  0.91 books/s while Search is under load, and the p95 of Search with 128 clients rises from 109 to 160~ms. \\
 \bottomrule
 \end{tabularx}
 \caption{Where each part of the system saturates on the reference machine.}
@@ -82,7 +85,8 @@ The whole system & with the pipeline running, Search 2,600 req/s and Indexing 0.
 
 \textbf{Threads and replicas.} Threads help where the work is CPU inside one process: the workers of Ingestion and the
 parsers of Indexing in JMH, and the replicas of Search when queries are long. They do not help where the limit is a shared
-resource: the queue of Hazelcast for Ingestion with small books, and MongoDB for Indexing. Indexing replicas are
+resource: the queue of Hazelcast for Ingestion with small books, MongoDB for Indexing, and MongoDB again for Search
+on a small index. Indexing replicas are
 standbys by design, so their effect is failover, not throughput.
 
 \textbf{What was not measured.} The full pipeline with several Ingestion replicas and Project Gutenberg as the source
