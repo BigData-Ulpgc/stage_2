@@ -6,3 +6,4 @@
 *.out
 *.toc
 /*.pdf
+!/Stage2_SOA_BigData-Ulpgc.pdf

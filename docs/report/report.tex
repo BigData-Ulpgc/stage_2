@@ -4,7 +4,7 @@
 %   3, Ingestion and Control of 5, coordination of 6, 8 ... Carlos Falcon (coordination_part.tex, CF-14)
 %   Indexing of 5, storage of 6, Indexing of 7, consolidation of 7 ... Daniel Rodriguez (indexing_part.tex, DR-15)
 %
-% Build from docs/report/:  pdflatex report.tex && pdflatex report.tex   (twice, for the contents and references)
+% Build from docs/report/:  pdflatex report.tex, three times (from clean, the contents need three passes to settle)
 % The figures of Indexing come from: python3 benchmarks/plot.py --format pdf --out docs/report/figures
 % \pending{...} marks what still depends on the measures: it must not reach the final PDF.
 \documentclass[11pt,a4paper]{article}
@@ -36,6 +36,11 @@
 \definecolor{pendingink}{HTML}{b3261e}
 
 \hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,citecolor=accent}
+\hypersetup{
+  pdftitle={Search Engine Project. Stage 2: Service-Oriented Architecture},
+  pdfauthor={Daniel Rodríguez Alonso (79072763M), Daniel Perdomo Medina (54173402F), Carlos Falcón Brito (54149163X)},
+  pdfsubject={Big Data, ULPGC. Group BigData-Ulpgc},
+}
 
 \titleformat{\section}{\Large\bfseries\color{ink}}{\thesection.}{0.6em}{}
 \titleformat{\subsection}{\large\bfseries\color{ink}}{\thesubsection}{0.6em}{}

@@ -126,11 +126,11 @@ process replicas, threads inside a process, and client concurrency, which only e
 \toprule
 \textbf{Process} & \textbf{Replicas} & \textbf{Threads} & \textbf{How work is shared} \\
 \midrule
-Ingestion & 1--4 (\code{--scale}) & \code{INGESTION\_WORKERS} (4) workers; Jetty pool & Every worker of every replica
+Ingestion & 1--4 (\code{-{}-scale}) & \code{INGESTION\_WORKERS} (4) workers; Jetty pool & Every worker of every replica
   claims from the same \code{ingest-queue}: Hazelcast distributes the books, and nobody knows the address of a replica \\
-Indexing & 1 & \code{INDEXING\_THREADS} (4) parsers; one writer & Only the replica that holds \code{index-writer}
+Indexing & 1--2 & \code{INDEXING\_THREADS} (4) parsers; one writer & Only the replica that holds \code{index-writer}
   claims from \code{index-queue} and writes the index; another one would wait as a standby \\
-Search & 1--4 (\code{--scale}) & Jetty pool, \code{SEARCH\_HTTP\_THREADS} (250) & nginx sends each request to the
+Search & 1--4 (\code{-{}-scale}) & Jetty pool, \code{SEARCH\_HTTP\_THREADS} (250) & nginx sends each request to the
   next replica (round-robin); each one reads an immutable snapshot \\
 Control & 1 & 2 scheduled tasks; Jetty pool & Not in the path of a book: lease check and publication \\
 Hazelcast & 2 members & managed by Hazelcast & 271 partitions spread over both, each with one backup on the other \\
