@@ -283,9 +283,15 @@ mvn -B clean verify                         # every module
 | JMH of Search, on the host: intersection, filters, pagination, threads | [`benchmarks/search/`](benchmarks/search/README.md) | `bash benchmarks/search/run-jmh.sh` |
 | Load through nginx: clients, replicas, Jetty threads, MongoDB connections, nginx | [`benchmarks/search/`](benchmarks/search/README.md) | `bash benchmarks/search/run-load.sh` |
 | Tables, figures and the common CSV | [`benchmarks/search/`](benchmarks/search/README.md) | `python benchmarks/search/analyze.py` |
+| JMH of Indexing, on the host: tokenizing, parsing, the posting lists, a batch with 1 to 8 threads | [`benchmarks/indexing/`](benchmarks/indexing/README.md) | `bash benchmarks/indexing/run-jmh.sh` (about 7 min) |
+| Indexing with the real services: threads, 200 to 30,000 books, publication, the cost of `$addToSet` | [`benchmarks/indexing/`](benchmarks/indexing/README.md) | `bash benchmarks/indexing/run-experiments.sh` (about 6 h; `--smoke` to check it first) |
+| Figures of Indexing for the report | [`benchmarks/indexing/`](benchmarks/indexing/README.md#figures-for-the-report-dr-14) | `python3 benchmarks/plot.py` (`--format pdf` for the report) |
 | CPU and memory of each container | [`scripts/monitor.sh`](scripts/monitor.sh) | `bash scripts/monitor.sh -l name -d 120` |
 
 All the valid measures must come from one idle machine, with the limits of `.env` recorded in `host.txt`.
+
+The report is in [`docs/report/`](docs/report/): `cd docs/report && pdflatex report.tex`, run twice so that the
+contents and the references are complete.
 
 ## Repository layout
 
