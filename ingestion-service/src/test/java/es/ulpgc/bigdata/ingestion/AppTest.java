@@ -27,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The real App: start order, GET /status while connecting, and one book end to end. */
@@ -90,12 +91,26 @@ class AppTest {
         try (App.RunningService service = App.start(Env.of(env))) {
             waitForCoordination(service, "connected");
             assertEquals(1, status(service).getAsJsonObject("workers").get("workers").getAsInt());
+            assertFalse(status(service).has("coordination_error"), "nothing failed");
             member.shutdown();
             waitForCoordination(service, "disconnected");
             member = HazelcastTestCluster.startStandaloneMember(name, port);
             waitForCoordination(service, "connected");
         } finally {
             member.shutdown();
+        }
+    }
+
+    /** A connection that cannot even be attempted says why in /status (review of #44): failed + coordination_error. */
+    @Test
+    void aFailedConnectionShowsItsCauseInStatus() throws Exception {
+        try (App.RunningService service = App.start(Env.of(env(2)),
+                settings -> () -> { throw new IllegalStateException("no usable member address"); })) {
+            waitForCoordination(service, "failed");
+            JsonObject status = status(service);
+            assertTrue(status.get("coordination_error").getAsString().contains("no usable member address"),
+                    status.toString());
+            assertFalse(status.has("workers"), "no worker started");
         }
     }
 
