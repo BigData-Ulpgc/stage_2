@@ -20,6 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
@@ -239,6 +240,12 @@ class IngestionWorkerTest {
             assertEquals(books, source.fetches.get());                 // nobody downloaded a book twice
             assertEquals(4, pool.status().get("workers"));
             assertEquals((long) books, pool.status().get("downloaded"));
+            // CF-12: the coordination cost of this replica, one sample per book
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> cost = (Map<String, Map<String, Object>>) pool.status().get("coordination_cost");
+            assertEquals(List.of("queue_wait", "claim", "work", "complete"), List.copyOf(cost.keySet()));
+            assertEquals((long) books, cost.get("claim").get("count"));
+            assertEquals((long) books, cost.get("complete").get("count"));
         }
     }
 

@@ -243,6 +243,56 @@ class CoordinationTest {
         assertEquals(BookTask.MAX_ERROR_LENGTH, coordination.task(5).orElseThrow().lastError().length());
     }
 
+    // --- Metrics (CF-12) ------------------------------------------------------------------
+
+    @Test
+    void theMetricsMeasureTheWaitInTheQueueAndTheWorkOfEachStage() throws Exception {
+        coordination.seed(List.of(7));
+        clock.advance(Duration.ofSeconds(5));                  // waits 5 s in ingest-queue
+        Claim ingesting = claim(Stage.INGESTION);
+        clock.advance(Duration.ofSeconds(2));                  // 2 s downloading
+        assertTrue(coordination.complete(ingesting));
+        clock.advance(Duration.ofSeconds(3));                  // 3 s in index-queue
+        Claim indexing = claim(Stage.INDEXING);
+        clock.advance(Duration.ofMillis(400));
+        assertTrue(coordination.complete(indexing));
+
+        CoordinationMetrics metrics = coordination.metrics();
+        assertMillis(5_000, metrics.queueWait(Stage.INGESTION));
+        assertMillis(2_000, metrics.work(Stage.INGESTION));
+        assertMillis(3_000, metrics.queueWait(Stage.INDEXING));
+        assertMillis(400, metrics.work(Stage.INDEXING));
+        for (Stage stage : Stage.values()) {
+            // Measured with System.nanoTime: real, small, and one of each
+            assertEquals(1, metrics.claim(stage).count());
+            assertEquals(1, metrics.complete(stage).count());
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> work = (Map<String, Object>) ((Map<String, Object>) metrics.summary().get("ingestion")).get("work");
+        assertEquals(1L, work.get("count"));
+        assertEquals(2000.0, work.get("mean_ms"));
+    }
+
+    @Test
+    void onlyTheTransitionsThatHappenedAreMeasured() throws Exception {
+        assertTrue(coordination.claim(Stage.INGESTION, "ingestion-test/w0", SHORT).isEmpty());
+        coordination.seed(List.of(8));
+        Claim lost = claim(Stage.INGESTION);
+        clock.advance(Duration.ofSeconds(61));
+        coordination.requeueExpiredLeases();
+        assertFalse(coordination.complete(lost));
+
+        CoordinationMetrics metrics = coordination.metrics();
+        assertEquals(1, metrics.claim(Stage.INGESTION).count(), "the empty claim is not one");
+        assertEquals(0, metrics.work(Stage.INGESTION).count(), "the lost book was not completed");
+        assertEquals(0, metrics.complete(Stage.INGESTION).count());
+    }
+
+    private static void assertMillis(long expected, LatencyHistogram histogram) {
+        assertEquals(1, histogram.count());
+        assertEquals(expected * 1_000, histogram.percentile(1.0), expected * 1_000 / 32.0);
+    }
+
     // --- Leases --------------------------------------------------------------------------
 
     @Test
