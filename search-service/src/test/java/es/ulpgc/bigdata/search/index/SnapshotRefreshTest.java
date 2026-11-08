@@ -153,6 +153,42 @@ class SnapshotRefreshTest {
         }
     }
 
+    @Test
+    void anEventLoadsTheNewVersionWithoutWaitingForThePeriod() throws Exception {
+        holder.reload();
+        try (SnapshotRefresher refresher = new SnapshotRefresher(holder, Duration.ofHours(1))) {
+            refresher.start();
+
+            switchCurrent(3, "inverted_index");
+            refresher.wakeUp();
+
+            long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+            while (holder.current().orElseThrow().version() != 3 && System.nanoTime() < deadline) {
+                Thread.sleep(20);
+            }
+            assertEquals(3, holder.current().orElseThrow().version());
+        }
+    }
+
+    @Test
+    void aWakeUpWhileStoppingIsIgnored() {
+        SnapshotRefresher refresher = new SnapshotRefresher(holder, Duration.ofHours(1));
+        refresher.close();
+
+        refresher.wakeUp();     // must not throw
+    }
+
+    @Test
+    void aBookPublishedWithoutMetadataGetsItWhenItArrives() {
+        db.getCollection("books").deleteOne(Filters.eq("_id", ALREADY_PUBLISHED));
+        assertEquals(null, holder.reload().orElseThrow().book(ALREADY_PUBLISHED).orElseThrow().title());
+
+        db.getCollection("books").insertOne(new Document("_id", ALREADY_PUBLISHED).append("title", "Arrived later"));
+        switchCurrent(3, "inverted_index");
+
+        assertEquals("Arrived later", holder.reload().orElseThrow().book(ALREADY_PUBLISHED).orElseThrow().title());
+    }
+
     private void switchCurrent(int version, String collection) {
         db.getCollection(IndexSnapshotLoader.INDEX_META).updateOne(
                 Filters.eq("_id", IndexSnapshotLoader.CURRENT),
