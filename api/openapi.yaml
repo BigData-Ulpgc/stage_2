@@ -28,8 +28,9 @@ info:
       `STORAGE_UNAVAILABLE` (503, MongoDB does not answer; retry later), `INTERNAL_ERROR` (500).
     - All endpoints are read-only (`GET`): they are safe and idempotent, and a client may
       retry them freely.
-    - **CORS:** the allowed browser origins are configured with the `CORS_ORIGINS`
-      environment variable of the Search Service.
+    - **Browsers (CORS):** the origins allowed to call this API from a web page are set with
+      the variable `CORS_ORIGINS` of the Search Service; other origins do not get the
+      `Access-Control-Allow-Origin` header.
   contact:
     name: Daniel Perdomo (Search Service, API contract)
 
@@ -191,7 +192,8 @@ paths:
 
         Only books contained in the published index version are visible; a book that has
         been ingested or indexed but not yet published returns 404. A `book_id` that is not a
-        non-negative integer returns 400 before the index is looked at.
+        positive integer in canonical form (1 to 999999999, digits only, no sign or leading
+        zeros) returns 400 before the index is looked at.
       parameters:
         - name: book_id
           in: path
@@ -199,7 +201,8 @@ paths:
           description: Project Gutenberg book id.
           schema:
             type: integer
-            minimum: 0
+            minimum: 1
+            maximum: 999999999
           example: 1342
       responses:
         '200':

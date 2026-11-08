@@ -232,6 +232,16 @@ public final class HazelcastPublicationNotifier implements PublicationNotifier, 
         keepNewest(result);
         LOG.warn("Hazelcast is not connected: version {} is not announced now; the last version "
                 + "skipped is announced, and the states marked, when it connects", result.version());
+        // The connection may have come back between the check and keepNewest, after
+        // connectionChanged(true) took unannounced: then nobody else would announce it.
+        // up and unannounced are volatile, so either that thread sees the version kept here or
+        // this check sees up = true (review of #43).
+        if (connectedNow().isPresent()) {
+            PublishResult pending = unannounced.getAndSet(null);
+            if (pending != null) {
+                submit(() -> announce(pending));
+            }
+        }
     }
 
     private void keepNewest(PublishResult result) {

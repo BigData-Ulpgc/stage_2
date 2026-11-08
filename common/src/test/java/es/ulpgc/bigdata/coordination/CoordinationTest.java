@@ -398,6 +398,65 @@ class CoordinationTest {
         assertTrue(coordination.isInitialized());
     }
 
+    // --- Recovery (contract §7, CF-10) ----------------------------------------------------
+
+    @Test
+    void restoreRebuildsTheStateOfAnEmptyCluster() throws Exception {
+        assertEquals(1, coordination.restore(List.of(1), BookState.PUBLISHED));
+        assertEquals(2, coordination.restore(List.of(2, 3, 3), BookState.INDEXED));
+        assertEquals(1, coordination.restore(List.of(4), BookState.DOWNLOADED));
+
+        assertEquals(BookState.PUBLISHED, state(1));
+        assertEquals(BookState.INDEXED, state(3));
+        BookTask downloaded = coordination.task(4).orElseThrow();
+        assertEquals(BookState.DOWNLOADED, downloaded.bookState());
+        assertEquals(clock.millis(), downloaded.enqueuedAt());
+        assertNull(downloaded.owner());
+        assertEquals(0, downloaded.attempts());
+        // Only the DOWNLOADED book waits in a queue: the index-queue, where Indexing takes it
+        assertEquals(0, coordination.queueSize(Stage.INGESTION));
+        assertEquals(1, coordination.queueSize(Stage.INDEXING));
+        assertEquals(4, claim(Stage.INDEXING).bookId());
+    }
+
+    @Test
+    void restoreMovesAPendingBookForwardAndItsOldIdIsDropped() throws Exception {
+        coordination.seed(List.of(7));                                 // seeded while recovering
+        assertEquals(1, coordination.restore(List.of(7), BookState.INDEXED));
+        assertEquals(BookState.INDEXED, state(7));
+        assertTrue(coordination.claim(Stage.INGESTION, "ingestion-test/w0", SHORT).isEmpty(),
+                "the id left in ingest-queue is not PENDING any more");
+    }
+
+    @Test
+    void restoreLeavesABookThatIsMovingAsItIs() throws Exception {
+        coordination.seed(List.of(8));
+        claim(Stage.INGESTION);                                        // INGESTING
+        assertEquals(0, coordination.restore(List.of(8), BookState.DOWNLOADED));
+        assertEquals(BookState.INGESTING, state(8));
+        assertEquals(0, coordination.queueSize(Stage.INDEXING));
+        coordination.restore(List.of(9), BookState.PUBLISHED);
+        assertEquals(0, coordination.restore(List.of(9), BookState.DOWNLOADED), "never backwards");
+        assertEquals(BookState.PUBLISHED, state(9));
+    }
+
+    @Test
+    void restoreRejectsAStateWithoutEvidenceOrAnInvalidId() {
+        for (BookState state : List.of(BookState.PENDING, BookState.INGESTING, BookState.INDEXING, BookState.FAILED)) {
+            assertThrows(IllegalArgumentException.class, () -> coordination.restore(List.of(1), state));
+        }
+        assertThrows(IllegalArgumentException.class, () -> coordination.restore(List.of(1, 0), BookState.INDEXED));
+        assertTrue(coordination.task(1).isEmpty());
+    }
+
+    @Test
+    void aLargeRestoreIsSplitInTransactions() {
+        List<Integer> ids = IntStream.rangeClosed(1, Coordination.SEED_BATCH * 2 + 7).boxed().toList();
+        assertEquals(ids.size(), coordination.restore(ids, BookState.DOWNLOADED));
+        assertEquals(ids.size(), coordination.queueSize(Stage.INDEXING));
+        assertEquals(ids.size(), coordination.count(BookState.DOWNLOADED));
+    }
+
     // --- Concurrency and crashes ----------------------------------------------------------
 
     @Test
