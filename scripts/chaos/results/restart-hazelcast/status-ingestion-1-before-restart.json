@@ -1,0 +1,54 @@
+{
+  "service": "ingestion-service",
+  "status": "running",
+  "source": "local /books",
+  "coordination": "connected",
+  "workers": {
+    "claimed": 429,
+    "downloaded": 428,
+    "already_available": 0,
+    "requeued": 0,
+    "failed": 0,
+    "lease_lost": 0,
+    "fetch_retries": 0,
+    "workers": 1,
+    "throttle_pauses": 0,
+    "paused_seconds": 0,
+    "invalid_ids_dropped": 0,
+    "ids_skipped": 0,
+    "coordination_cost": {
+      "queue_wait": {
+        "count": 429,
+        "mean_ms": 4814.177,
+        "p50_ms": 4587.52,
+        "p95_ms": 8257.536,
+        "p99_ms": 8545.0,
+        "max_ms": 8545.0
+      },
+      "claim": {
+        "count": 429,
+        "mean_ms": 8.251,
+        "p50_ms": 3.904,
+        "p95_ms": 44.032,
+        "p99_ms": 67.584,
+        "max_ms": 264.443
+      },
+      "work": {
+        "count": 428,
+        "mean_ms": 6.561,
+        "p50_ms": 4.032,
+        "p95_ms": 24.064,
+        "p99_ms": 64.512,
+        "max_ms": 99.0
+      },
+      "complete": {
+        "count": 428,
+        "mean_ms": 9.043,
+        "p50_ms": 3.776,
+        "p95_ms": 56.32,
+        "p99_ms": 67.584,
+        "max_ms": 87.539
+      }
+    }
+  }
+}

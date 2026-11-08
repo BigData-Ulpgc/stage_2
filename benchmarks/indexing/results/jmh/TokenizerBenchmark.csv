@@ -1,0 +1,4 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: book"
+"es.ulpgc.bigdata.indexing.benchmark.TokenizerBenchmark.uniqueTerms","avgt",1,20,114.235158,7.826718,"us/op",short
+"es.ulpgc.bigdata.indexing.benchmark.TokenizerBenchmark.uniqueTerms","avgt",1,20,844.385444,66.428954,"us/op",median
+"es.ulpgc.bigdata.indexing.benchmark.TokenizerBenchmark.uniqueTerms","avgt",1,20,5137.008457,309.813583,"us/op",long

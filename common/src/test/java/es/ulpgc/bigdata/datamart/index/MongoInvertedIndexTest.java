@@ -1,8 +1,14 @@
 package es.ulpgc.bigdata.datamart.index;
 
+import es.ulpgc.bigdata.testsupport.MongoTestSupport;
+import com.mongodb.ConnectionString;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.event.CommandListener;
+import com.mongodb.event.CommandStartedEvent;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -183,5 +190,101 @@ class MongoInvertedIndexTest {
         raw.insertOne(new Document("term", "boat").append("postings", List.of(20L, 10L, 20L)));
 
         assertEquals(List.of(10, 20), index.postings("boat"));
+    }
+
+    // --- Who owns the client: "who creates, closes" (DR-05) ----------------------
+
+    @Test
+    void conClientePropioCloseCierraSuCliente() {
+        index.close();
+
+        // The driver refuses to work with a closed client.
+        assertThrows(IllegalStateException.class, () -> index.postings("boat"));
+
+        index = open();                                       // so that tearDown can clean up
+    }
+
+    @Test
+    void conClienteCompartidoCloseNoCierraElCliente() {
+        // rawClient plays the client of the service: it is created outside the index.
+        MongoInvertedIndex onShared = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName);
+        onShared.addDocument(10, Set.of("boat"));
+        onShared.flush();
+
+        onShared.close();
+
+        // The client keeps working for the rest of the service...
+        assertEquals(1, raw.countDocuments());
+        // ...and a new index on the same client sees what the first one saved.
+        try (MongoInvertedIndex again = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName)) {
+            assertEquals(List.of(10), again.postings("boat"));
+        }
+    }
+
+    @Test
+    void variosIndicesSobreElMismoClienteNoSeMezclan() {
+        String otherName = MongoTestSupport.newCollectionName("test");
+        try (MongoInvertedIndex first = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName);
+             MongoInvertedIndex second = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), otherName)) {
+            first.addDocument(10, Set.of("boat"));
+            second.addDocument(20, Set.of("boat"));
+            first.flush();
+            second.flush();
+
+            assertEquals(List.of(10), first.postings("boat"));
+            assertEquals(List.of(20), second.postings("boat"));
+        } finally {
+            rawClient.getDatabase(TEST_DB).getCollection(otherName).drop();
+        }
+    }
+
+    @Test
+    void conClienteCompartidoElIndiceUnicoSeCreaEnElPrimerFlush() {
+        index.clear();                                        // the collection does not exist now
+
+        try (MongoInvertedIndex onShared = new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), collectionName)) {
+            assertFalse(hasUniqueIndexOnTerm(), "el constructor no debe hablar con Mongo");
+
+            onShared.addDocument(10, Set.of("boat"));
+            assertFalse(hasUniqueIndexOnTerm(), "addDocument tampoco: solo acumula en memoria");
+
+            onShared.flush();
+            assertTrue(hasUniqueIndexOnTerm(), "el primer flush lo crea antes de escribir");
+            assertEquals(List.of(10), onShared.postings("boat"));
+        }
+    }
+
+    @Test
+    void conClienteCompartidoDiskUsageNoLanzaFsync() {
+        // A "spy" on the shared client: it writes down the name of every command sent to Mongo.
+        List<String> commands = new CopyOnWriteArrayList<>();
+        CommandListener spy = new CommandListener() {
+            @Override
+            public void commandStarted(CommandStartedEvent event) {
+                commands.add(event.getCommandName());
+            }
+        };
+        MongoClientSettings settings = MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(URI))
+                .addCommandListener(spy)
+                .build();
+        try (MongoClient shared = MongoClients.create(settings);
+             MongoInvertedIndex onShared = new MongoInvertedIndex(shared.getDatabase(TEST_DB), collectionName)) {
+            addPaperBooks(onShared);
+            onShared.flush();
+            commands.clear();
+
+            assertTrue(onShared.diskUsageBytes() > 0);
+
+            assertTrue(commands.contains("aggregate"), "mide con $collStats: " + commands);
+            assertFalse(commands.contains("fsync"), "no debe forzar un checkpoint: " + commands);
+        }
+    }
+
+    @Test
+    void elConstructorConClienteCompartidoRechazaNulos() {
+        assertThrows(NullPointerException.class, () -> new MongoInvertedIndex((MongoDatabase) null));
+        assertThrows(NullPointerException.class,
+                () -> new MongoInvertedIndex(rawClient.getDatabase(TEST_DB), null));
     }
 }

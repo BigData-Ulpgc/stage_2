@@ -1,6 +1,11 @@
 package es.ulpgc.bigdata.datamart.index;
 
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import es.ulpgc.bigdata.testsupport.MongoTestSupport;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -28,22 +33,49 @@ class InvertedIndexContractTest {
      * Implementations to test: expected name + recipe to create an empty one.
      * The recipe receives a temporary folder for the indexes that use disk.
      * Stage 2 keeps memory (reference, no external service) and mongo (the index Indexing
-     * writes and Search reads). The mongo runs are skipped if MongoDB is not available.
+     * writes and Search reads). Mongo runs twice: with its own client (tests, benchmarks) and
+     * on a client shared with the rest of the service (Indexing). The mongo runs are skipped
+     * if MongoDB is not available.
      */
     static Stream<Arguments> indexes() {
         return Stream.of(
-                Arguments.of("memory", (Function<Path, InvertedIndex>) dir -> new InMemoryInvertedIndex()),
-                Arguments.of("mongo", (Function<Path, InvertedIndex>) dir -> openMongo()));
+                Arguments.of("memory", Named.of("in memory",
+                        (Function<Path, InvertedIndex>) dir -> new InMemoryInvertedIndex())),
+                Arguments.of("mongo", Named.of("own client",
+                        (Function<Path, InvertedIndex>) dir -> openMongo())),
+                Arguments.of("mongo", Named.of("shared client",
+                        (Function<Path, InvertedIndex>) dir -> openMongoOnSharedClient())));
     }
 
     /** Mongo collections created by the current test, dropped after it. */
     private static final List<String> mongoCollections = new ArrayList<>();
+
+    /** The "service" client of the shared runs: opened once, closed after all the tests. */
+    private static MongoClient sharedClient;
 
     private static InvertedIndex openMongo() {
         assumeTrue(MongoTestSupport.available(), "MongoDB no está disponible en " + MongoTestSupport.URI);
         String collection = MongoTestSupport.newCollectionName("contract");
         mongoCollections.add(collection);
         return new MongoInvertedIndex(MongoTestSupport.URI, MongoTestSupport.TEST_DB, collection);
+    }
+
+    private static InvertedIndex openMongoOnSharedClient() {
+        assumeTrue(MongoTestSupport.available(), "MongoDB no está disponible en " + MongoTestSupport.URI);
+        if (sharedClient == null) {
+            sharedClient = MongoClients.create(MongoTestSupport.URI);
+        }
+        String collection = MongoTestSupport.newCollectionName("contract");
+        mongoCollections.add(collection);
+        return new MongoInvertedIndex(sharedClient.getDatabase(MongoTestSupport.TEST_DB), collection);
+    }
+
+    @AfterAll
+    static void closeSharedClient() {
+        if (sharedClient != null) {
+            sharedClient.close();
+            sharedClient = null;
+        }
     }
 
     @AfterEach
@@ -79,7 +111,7 @@ class InvertedIndexContractTest {
 
     // --- Identity -----------------------------------------------------------
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void tieneElNombreDeSuEstructura(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -89,7 +121,7 @@ class InvertedIndexContractTest {
 
     // --- addDocument and postings ------------------------------------------
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void postingsOrdenadasSinRepetir(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -101,7 +133,7 @@ class InvertedIndexContractTest {
         }
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void terminoInexistenteDaListaVacia(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -111,7 +143,7 @@ class InvertedIndexContractTest {
         }
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void postingsNoSePuedeModificarDesdeFuera(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -121,7 +153,7 @@ class InvertedIndexContractTest {
         }
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void seVeLoAnadidoAntesDelFlush(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -132,7 +164,7 @@ class InvertedIndexContractTest {
 
     // --- flush --------------------------------------------------------------
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void flushNoCambiaLoQueSeConsulta(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -146,7 +178,7 @@ class InvertedIndexContractTest {
         }
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void anadirTrasUnFlushNoPierdeLoAnterior(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -163,7 +195,7 @@ class InvertedIndexContractTest {
 
     // --- clear --------------------------------------------------------------
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void clearDejaElIndiceVacioYReutilizable(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -179,7 +211,7 @@ class InvertedIndexContractTest {
         }
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void clearPermiteRepetirUnaMedidaConElMismoResultado(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -199,7 +231,7 @@ class InvertedIndexContractTest {
 
     // --- diskUsageBytes -----------------------------------------------------
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void diskUsageNuncaEsNegativo(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {
@@ -212,7 +244,7 @@ class InvertedIndexContractTest {
 
     // --- Search that only knows the interface -------------------------------
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} ({1})")
     @MethodSource("indexes")
     void lasConsultasDelEjercicioFuncionanSoloConLaInterfaz(String name, Function<Path, InvertedIndex> factory) {
         try (InvertedIndex index = create(factory)) {

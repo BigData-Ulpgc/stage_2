@@ -2,13 +2,24 @@ package es.ulpgc.bigdata.http;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import io.javalin.Javalin;
+import io.javalin.config.JavalinConfig;
+import io.javalin.http.Context;
+import io.javalin.http.HttpResponseException;
 import io.javalin.json.JavalinGson;
+import io.javalin.router.EndpointNotFound;
+import io.javalin.validation.ValidationError;
+import io.javalin.validation.ValidationException;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -18,9 +29,28 @@ import java.util.function.Supplier;
  *    fields written as null instead of omitted, so a response always has the same fields;
  *  - an EXPLICIT Jetty thread pool, so the number of request threads of each process is a
  *    documented configuration value and not a hidden framework default;
- *  - GET /status, the health endpoint used by Docker healthchecks and the Control Module.
+ *  - GET /status, the health endpoint used by Docker healthchecks and the Control Module;
+ *  - the common ERROR FORMAT {"error": {code, message, field}} for what every service shares:
+ *      ApiException            its own status and code (400 INVALID_PARAMETER...);
+ *      a route that does not   404 NOT_FOUND (also a method the route does not have), instead
+ *      exist                   of Javalin's plain-text "Endpoint GET /x not found";
+ *      Javalin's errors        an HttpResponseException (BadRequestResponse...) with its own
+ *                              status; a ValidationException of pathParamAsClass... and a body
+ *                              that is not valid JSON (bodyAsClass): 400 INVALID_PARAMETER.
+ *                              Without these, the first kept Javalin's body and the other two
+ *                              became a 500, an error of the client reported as ours;
+ *      any other exception     500 INTERNAL_ERROR: a bug of ours, the details go to the log
+ *                              and never to the client.
  *
- * The caller adds its own routes and calls start(port).
+ * The caller adds its own routes, the handlers of its own exceptions (e.g. MongoDB down -> 503,
+ * writing the body with writeError) and calls start(port). Javalin picks the handler of the
+ * most specific class of the exception, so a service handler always wins over the 500 one,
+ * whatever the order in which they are registered.
+ *
+ * Why not app.error(404, ...): Javalin runs that handler for EVERY 404 response, also the ones
+ * a route answers on purpose ("book 84 is not in the published index"), and it would replace
+ * their body. Javalin throws EndpointNotFound only when no route matches, so handling that
+ * exception touches nothing else. (Javalin 6.1.3; verified in ServiceServerTest.)
  *
  * Threads: Jetty runs each HTTP request in one thread of this pool, so requests to the same
  * process run concurrently and share its memory. Javalin 6.1.3 would create
@@ -40,6 +70,8 @@ public final class ServiceServer {
 
     private static final int IDLE_TIMEOUT_MS = 60_000;
 
+    private static final Logger LOG = LoggerFactory.getLogger(ServiceServer.class);
+
     private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
     private ServiceServer() {
@@ -58,8 +90,19 @@ public final class ServiceServer {
      */
     public static Javalin create(String serviceName, int maxThreads,
                                  Supplier<Map<String, Object>> extraStatus) {
+        return create(serviceName, maxThreads, extraStatus, config -> { });
+    }
+
+    /**
+     * @param extraConfig what only this service needs in the server configuration, e.g. the CORS
+     *                    rules of the Search Service
+     */
+    public static Javalin create(String serviceName, int maxThreads,
+                                 Supplier<Map<String, Object>> extraStatus,
+                                 Consumer<JavalinConfig> extraConfig) {
         Objects.requireNonNull(serviceName, "serviceName");
         Objects.requireNonNull(extraStatus, "extraStatus");
+        Objects.requireNonNull(extraConfig, "extraConfig");
         if (maxThreads < MIN_THREADS) {
             throw new IllegalArgumentException("maxThreads must be >= " + MIN_THREADS + ", got " + maxThreads);
         }
@@ -71,6 +114,7 @@ public final class ServiceServer {
             QueuedThreadPool pool = new QueuedThreadPool(maxThreads, MIN_THREADS, IDLE_TIMEOUT_MS);
             pool.setName(serviceName + "-http");
             config.jetty.threadPool = pool;
+            extraConfig.accept(config);
         });
 
         app.get("/status", ctx -> {
@@ -80,6 +124,51 @@ public final class ServiceServer {
             status.putAll(extraStatus.get());
             ctx.json(status);
         });
+
+        app.exception(ApiException.class, (e, ctx) -> writeError(ctx, e.status(), e.code(), e.getMessage(), e.field()));
+        app.exception(EndpointNotFound.class, (e, ctx) -> writeError(ctx, 404, "NOT_FOUND",
+                "no route " + ctx.method() + " " + ctx.path(), null));
+        // Javalin's own errors, which kept Javalin's body or became a 500 (review of #16, CF-09):
+        // its HTTP responses (BadRequestResponse...) with their status...
+        app.exception(HttpResponseException.class, (e, ctx) -> writeError(ctx, e.getStatus(),
+                codeOf(e.getStatus()), e.getMessage(), null));
+        // ...a parameter of pathParamAsClass / queryParamAsClass / a body validator...
+        app.exception(ValidationException.class, (e, ctx) -> {
+            Map.Entry<String, List<ValidationError<Object>>> first = e.getErrors().entrySet().iterator().next();
+            writeError(ctx, 400, "INVALID_PARAMETER",
+                    first.getKey() + " is not valid: " + first.getValue().get(0).getMessage(), first.getKey());
+        });
+        // ...and a request body that is not valid JSON, or not of the expected shape (bodyAsClass).
+        // JsonSyntaxException and not JsonParseException: the latter also covers WRITING JSON,
+        // which would be our bug, a 500.
+        app.exception(JsonSyntaxException.class, (e, ctx) -> writeError(ctx, 400, "INVALID_PARAMETER",
+                "the request body is not valid JSON of the expected shape", "body"));
+        app.exception(Exception.class, (e, ctx) -> {
+            LOG.error("Unexpected error on {} {}", ctx.method(), ctx.path(), e);
+            writeError(ctx, 500, "INTERNAL_ERROR", "internal error", null);
+        });
         return app;
+    }
+
+    /**
+     * Writes the common error body with the given status. For the handlers that each service
+     * adds for its own exceptions, so every error of every service has the same shape.
+     *
+     * @param field request parameter that caused the error, or null (written as null, not omitted)
+     */
+    /** The code of the common format for a status Javalin answers by itself. */
+    static String codeOf(int status) {
+        if (status == 404) {
+            return "NOT_FOUND";
+        }
+        return status < 500 ? "INVALID_PARAMETER" : "INTERNAL_ERROR";
+    }
+
+    public static void writeError(Context ctx, int status, String code, String message, String field) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("code", code);
+        error.put("message", message);
+        error.put("field", field);
+        ctx.status(status).json(Map.of("error", error));
     }
 }

@@ -1,0 +1,78 @@
+indexing-1  | 2026-11-08T18:13:55.807971859Z [main] INFO org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync", "version": "5.13.0"}, "os": {"type": "Linux", "name": "Linux", "architecture": "amd64", "version": "7.0.0-42-generic"}, "platform": "Java/Eclipse Adoptium/17.0.21+9", "env": {"container": {"runtime": "docker"}}} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, maxAdaptiveRetries=null, enableOverloadRetargeting=false, readConcern=ReadConcern{level=null}, credential=null, transportSettings=null, commandListeners=[], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@525f1e4e, com.mongodb.Jep395RecordCodecProvider@75f9eccc, com.mongodb.KotlinCodecProvider@52aa2946, EnumCodecProvider{}]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[mongo:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='3000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=<hidden>, password=<hidden>}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=<hidden>, password=<hidden>}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=UNSPECIFIED, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+indexing-1  | 2026-11-08T18:13:55.836386311Z [cluster-6af0bbe3d03129df7caff6f7-mongo:27017] INFO org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=mongo:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=27, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=25444444, minRoundTripTimeNanos=0}
+indexing-1  | 2026-11-08T18:13:56.151049186Z [main] INFO io.javalin.Javalin - Starting Javalin ...
+indexing-1  | 2026-11-08T18:13:56.153405099Z [main] INFO org.eclipse.jetty.server.Server - jetty-11.0.20; built: 2024-01-29T21:04:22.394Z; git: 922f8dc188f7011e60d0361de585fd4ac4d63064; jvm 17.0.21+9
+indexing-1  | 2026-11-08T18:13:56.204387132Z [main] INFO org.eclipse.jetty.server.session.DefaultSessionIdManager - Session workerName=node0
+indexing-1  | 2026-11-08T18:13:56.213830673Z [main] INFO org.eclipse.jetty.server.handler.ContextHandler - Started o.e.j.s.ServletContextHandler@6c2c1385{/,null,AVAILABLE}
+indexing-1  | 2026-11-08T18:13:56.219652108Z [main] INFO org.eclipse.jetty.server.AbstractConnector - Started ServerConnector@456d6c1e{HTTP/1.1, (http/1.1)}{0.0.0.0:7002}
+indexing-1  | 2026-11-08T18:13:56.227947978Z [main] INFO org.eclipse.jetty.server.Server - Started Server@4fa1c212{STARTING}[11.0.20,sto=0] @736ms
+indexing-1  | 2026-11-08T18:13:56.229842390Z [main] INFO io.javalin.Javalin - Javalin started in 205ms \o/
+indexing-1  | 2026-11-08T18:13:56.237572962Z [main] INFO io.javalin.Javalin - Listening on http://localhost:7002/
+indexing-1  | 2026-11-08T18:13:56.257514844Z [main] INFO io.javalin.Javalin - You are running Javalin 6.1.3 (released March 2, 2024. Your Javalin version is 981 days old. Consider checking for a newer version.).
+indexing-1  | 2026-11-08T18:13:56.257740894Z [main] INFO es.ulpgc.bigdata.indexing.App - indexing-service on port 7002 · datalake /data/datalake/range · MongoDB [mongo:27017] db=chaos_test index=inverted_index
+indexing-1  | 2026-11-08T18:13:56.772670671Z Nov 08, 2026 6:13:56 PM com.hazelcast.client.impl.spi.ClientInvocationService
+indexing-1  | 2026-11-08T18:13:56.772704538Z INFO: hz.client_1 [search-engine] [5.7.0] Running with 2 response threads, dynamic=true
+indexing-1  | 2026-11-08T18:13:56.819265667Z Nov 08, 2026 6:13:56 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:13:56.819289433Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTING
+indexing-1  | 2026-11-08T18:13:56.820016722Z Nov 08, 2026 6:13:56 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:13:56.820028447Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTED
+indexing-1  | 2026-11-08T18:13:56.859727447Z Nov 08, 2026 6:13:56 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:13:56.859757330Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to cluster: search-engine
+indexing-1  | 2026-11-08T18:13:56.864524159Z Nov 08, 2026 6:13:56 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:13:56.864560560Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-2]:5701
+indexing-1  | 2026-11-08T18:13:56.912718744Z Nov 08, 2026 6:13:56 PM com.hazelcast.client.impl.spi.ClientClusterService
+indexing-1  | 2026-11-08T18:13:56.912737799Z INFO: hz.client_1 [search-engine] [5.7.0] Members [2] {
+indexing-1  | 2026-11-08T18:13:56.912741038Z 	Member [hz-1]:5701 - bf00f292-b60d-4bca-88b6-ac10bcccbd31
+indexing-1  | 2026-11-08T18:13:56.912743763Z 	Member [hz-2]:5701 - 75d858a1-cd94-4ee9-a45a-f6716440ec9e
+indexing-1  | 2026-11-08T18:13:56.912746275Z }
+indexing-1  | 2026-11-08T18:13:56.912748542Z 
+indexing-1  | 2026-11-08T18:13:56.915277177Z Nov 08, 2026 6:13:56 PM com.hazelcast.core.LifecycleService
+indexing-1  | 2026-11-08T18:13:56.915300247Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_CONNECTED
+indexing-1  | 2026-11-08T18:13:56.915891920Z Nov 08, 2026 6:13:56 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+indexing-1  | 2026-11-08T18:13:56.915903488Z INFO: hz.client_1 [search-engine] [5.7.0] Authenticated with server [hz-2]:5701:75d858a1-cd94-4ee9-a45a-f6716440ec9e, server version: 5.7.0, local address: /172.18.0.7:57813
+indexing-1  | 2026-11-08T18:13:56.917118563Z Nov 08, 2026 6:13:56 PM com.hazelcast.internal.diagnostics.Diagnostics
+indexing-1  | 2026-11-08T18:13:56.917135531Z INFO: hz.client_1 [search-engine] [5.7.0] Diagnostics service is disabled. You can enable it over Management Center or Operator dynamically.
+indexing-1  | 2026-11-08T18:13:57.010484454Z Nov 08, 2026 6:13:57 PM com.hazelcast.client.impl.statistics.ClientStatisticsService
+indexing-1  | 2026-11-08T18:13:57.010501914Z INFO: Client statistics is enabled with period 5 seconds.
+indexing-1  | 2026-11-08T18:13:57.378501865Z [hazelcast-connect] INFO es.ulpgc.bigdata.indexing.App - connected to Hazelcast [hz-1:5701, hz-2:5701]
+indexing-1  | 2026-11-08T18:13:57.413727786Z [indexing-service-writer] INFO es.ulpgc.bigdata.indexing.IndexingWriter - indexing-e2b80cce4abe/w0: holds index-writer, consuming index-queue
+indexing-1  | 2026-11-08T18:14:06.918171292Z Nov 08, 2026 6:14:06 PM com.hazelcast.client.util.ClientConnectivityLogger
+indexing-1  | 2026-11-08T18:14:06.918189494Z INFO: hz.client_1 [search-engine] [5.7.0] 
+indexing-1  | 2026-11-08T18:14:06.918191585Z 
+indexing-1  | 2026-11-08T18:14:06.918193150Z Client Connectivity [2] {
+indexing-1  | 2026-11-08T18:14:06.918194812Z 	Member [hz-1]:5701 - bf00f292-b60d-4bca-88b6-ac10bcccbd31 - disconnected
+indexing-1  | 2026-11-08T18:14:06.918196866Z 	Member [hz-2]:5701 - 75d858a1-cd94-4ee9-a45a-f6716440ec9e - connected
+indexing-1  | 2026-11-08T18:14:06.918198514Z }
+indexing-1  | 2026-11-08T18:14:06.918200018Z 
+indexing-1  | 2026-11-08T18:14:16.499264775Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 1: 100 new books, 100 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:14:17.372154206Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 1)
+indexing-1  | 2026-11-08T18:14:50.050288248Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 2: 500 new books, 600 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:14:50.404842036Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 500 books PUBLISHED in book-state (version 2)
+indexing-1  | 2026-11-08T18:14:51.219787687Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 3: 100 new books, 700 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:14:51.274499973Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 3)
+indexing-1  | 2026-11-08T18:14:58.278980546Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 4: 100 new books, 800 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:14:58.316021634Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 4)
+indexing-1  | 2026-11-08T18:15:04.310867585Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 5: 100 new books, 900 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:04.360563004Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 5)
+indexing-1  | 2026-11-08T18:15:11.350779321Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 6: 100 new books, 1000 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:11.392587146Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 6)
+indexing-1  | 2026-11-08T18:15:20.577785009Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 7: 100 new books, 1100 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:20.670417133Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 7)
+indexing-1  | 2026-11-08T18:15:28.635963317Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 8: 100 new books, 1200 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:28.680270489Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 8)
+indexing-1  | 2026-11-08T18:15:37.671931571Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 9: 100 new books, 1300 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:37.792287772Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 9)
+indexing-1  | 2026-11-08T18:15:45.884506691Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 10: 100 new books, 1400 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:45.993230188Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 10)
+indexing-1  | 2026-11-08T18:15:54.974587271Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 11: 100 new books, 1500 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:15:55.095288219Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 11)
+indexing-1  | 2026-11-08T18:16:04.145427971Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 12: 100 new books, 1600 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:16:04.222194497Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 12)
+indexing-1  | 2026-11-08T18:16:13.279764617Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 13: 100 new books, 1700 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:16:13.368569405Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 13)
+indexing-1  | 2026-11-08T18:16:22.344408098Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 14: 100 new books, 1800 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:16:22.483312068Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 14)
+indexing-1  | 2026-11-08T18:16:32.384149689Z [indexing-service-http-20] INFO es.ulpgc.bigdata.indexing.Publisher - published version 15: 100 new books, 1900 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:16:32.438247894Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 15)
+indexing-1  | 2026-11-08T18:16:43.422171524Z [indexing-service-http-24] INFO es.ulpgc.bigdata.indexing.Publisher - published version 16: 100 new books, 2000 visible, collection inverted_index
+indexing-1  | 2026-11-08T18:16:43.461142629Z [indexing-service-notifier] INFO es.ulpgc.bigdata.indexing.HazelcastPublicationNotifier - 100 books PUBLISHED in book-state (version 16)

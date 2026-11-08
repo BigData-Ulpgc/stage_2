@@ -1,0 +1,48 @@
+control-1  | 2026-11-08T18:11:29.692923176Z [main] INFO org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync", "version": "5.13.0"}, "os": {"type": "Linux", "name": "Linux", "architecture": "amd64", "version": "7.0.0-42-generic"}, "platform": "Java/Eclipse Adoptium/17.0.21+9", "env": {"container": {"runtime": "docker"}}} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, maxAdaptiveRetries=null, enableOverloadRetargeting=false, readConcern=ReadConcern{level=null}, credential=null, transportSettings=null, commandListeners=[], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@6ee12bac, com.mongodb.Jep395RecordCodecProvider@55040f2f, com.mongodb.KotlinCodecProvider@64c87930, EnumCodecProvider{}]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[mongo:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='3000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=<hidden>, password=<hidden>}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=<hidden>, password=<hidden>}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=UNSPECIFIED, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+control-1  | 2026-11-08T18:11:30.083766805Z [cluster-6af0bb51948756a0440c4dbd-mongo:27017] INFO org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=mongo:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=27, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=205892384, minRoundTripTimeNanos=0}
+control-1  | 2026-11-08T18:11:31.690292044Z [main] INFO io.javalin.Javalin - Starting Javalin ...
+control-1  | 2026-11-08T18:11:31.692692381Z [main] INFO org.eclipse.jetty.server.Server - jetty-11.0.20; built: 2024-01-29T21:04:22.394Z; git: 922f8dc188f7011e60d0361de585fd4ac4d63064; jvm 17.0.21+9
+control-1  | 2026-11-08T18:11:32.091362027Z [main] INFO org.eclipse.jetty.server.session.DefaultSessionIdManager - Session workerName=node0
+control-1  | 2026-11-08T18:11:32.188662940Z [main] INFO org.eclipse.jetty.server.handler.ContextHandler - Started o.e.j.s.ServletContextHandler@5ef5c734{/,null,AVAILABLE}
+control-1  | 2026-11-08T18:11:32.282449052Z [main] INFO org.eclipse.jetty.server.AbstractConnector - Started ServerConnector@3214ee6{HTTP/1.1, (http/1.1)}{0.0.0.0:7000}
+control-1  | 2026-11-08T18:11:32.290100052Z [main] INFO org.eclipse.jetty.server.Server - Started Server@456d6c1e{STARTING}[11.0.20,sto=0] @3659ms
+control-1  | 2026-11-08T18:11:32.291286673Z [main] INFO io.javalin.Javalin - Javalin started in 1401ms \o/
+control-1  | 2026-11-08T18:11:32.382553775Z [main] INFO io.javalin.Javalin - Listening on http://localhost:7000/
+control-1  | 2026-11-08T18:11:32.481618624Z [main] INFO io.javalin.Javalin - You are running Javalin 6.1.3 (released March 2, 2024. Your Javalin version is 981 days old. Consider checking for a newer version.).
+control-1  | 2026-11-08T18:11:32.482140554Z [main] INFO es.ulpgc.bigdata.control.App - control-module on port 7000 · Hazelcast [hz-1:5701, hz-2:5701] · Indexing http://indexing:7002 · publish every 100 books or 5 s · seed none · recovery from MongoDB chaos_test and /data/datalake/range
+control-1  | 2026-11-08T18:11:32.893591358Z Nov 08, 2026 6:11:32 PM com.hazelcast.client.impl.spi.ClientInvocationService
+control-1  | 2026-11-08T18:11:32.893610278Z INFO: hz.client_1 [search-engine] [5.7.0] Running with 2 response threads, dynamic=true
+control-1  | 2026-11-08T18:11:33.088490388Z Nov 08, 2026 6:11:33 PM com.hazelcast.core.LifecycleService
+control-1  | 2026-11-08T18:11:33.088509279Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTING
+control-1  | 2026-11-08T18:11:33.089376024Z Nov 08, 2026 6:11:33 PM com.hazelcast.core.LifecycleService
+control-1  | 2026-11-08T18:11:33.089391831Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is STARTED
+control-1  | 2026-11-08T18:11:33.187951970Z Nov 08, 2026 6:11:33 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+control-1  | 2026-11-08T18:11:33.187969711Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to cluster: search-engine
+control-1  | 2026-11-08T18:11:33.191163791Z Nov 08, 2026 6:11:33 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+control-1  | 2026-11-08T18:11:33.191180233Z INFO: hz.client_1 [search-engine] [5.7.0] Trying to connect to [hz-1]:5701
+control-1  | 2026-11-08T18:11:33.288921954Z Nov 08, 2026 6:11:33 PM com.hazelcast.client.impl.spi.ClientClusterService
+control-1  | 2026-11-08T18:11:33.288943621Z INFO: hz.client_1 [search-engine] [5.7.0] Members [2] {
+control-1  | 2026-11-08T18:11:33.288946577Z 	Member [hz-1]:5701 - 089de381-0603-448c-9352-f7e92f950f5c
+control-1  | 2026-11-08T18:11:33.288949390Z 	Member [hz-2]:5701 - 3b86e5f1-1a55-43c1-be13-1de4ff739da2
+control-1  | 2026-11-08T18:11:33.288951708Z }
+control-1  | 2026-11-08T18:11:33.288953903Z 
+control-1  | 2026-11-08T18:11:33.291522130Z Nov 08, 2026 6:11:33 PM com.hazelcast.core.LifecycleService
+control-1  | 2026-11-08T18:11:33.291546120Z INFO: hz.client_1 [search-engine] [5.7.0] HazelcastClient 5.7.0 (20260512 - b9df48a) is CLIENT_CONNECTED
+control-1  | 2026-11-08T18:11:33.292100851Z Nov 08, 2026 6:11:33 PM com.hazelcast.client.impl.connection.ClientConnectionManager
+control-1  | 2026-11-08T18:11:33.292114161Z INFO: hz.client_1 [search-engine] [5.7.0] Authenticated with server [hz-1]:5701:089de381-0603-448c-9352-f7e92f950f5c, server version: 5.7.0, local address: /172.18.0.6:41665
+control-1  | 2026-11-08T18:11:33.293307045Z Nov 08, 2026 6:11:33 PM com.hazelcast.internal.diagnostics.Diagnostics
+control-1  | 2026-11-08T18:11:33.293326018Z INFO: hz.client_1 [search-engine] [5.7.0] Diagnostics service is disabled. You can enable it over Management Center or Operator dynamically.
+control-1  | 2026-11-08T18:11:33.590648927Z Nov 08, 2026 6:11:33 PM com.hazelcast.client.impl.statistics.ClientStatisticsService
+control-1  | 2026-11-08T18:11:33.590666564Z INFO: Client statistics is enabled with period 5 seconds.
+control-1  | 2026-11-08T18:11:34.882775541Z [hazelcast-connect] INFO es.ulpgc.bigdata.control.App - connected to Hazelcast [hz-1:5701, hz-2:5701] · lease check every 3 s
+control-1  | 2026-11-08T18:11:34.894845548Z [control-tasks] WARN es.ulpgc.bigdata.control.Recovery - coordination-meta has no 'initialized' marker: the cluster is new or lost its state, rebuilding book-state
+control-1  | 2026-11-08T18:11:35.181619647Z [control-tasks] INFO es.ulpgc.bigdata.control.Recovery - book-state rebuilt in 287 ms: 0 PUBLISHED, 0 INDEXED, 0 DOWNLOADED, 0 seeded PENDING
+control-1  | 2026-11-08T18:11:43.294354919Z Nov 08, 2026 6:11:43 PM com.hazelcast.client.util.ClientConnectivityLogger
+control-1  | 2026-11-08T18:11:43.294374907Z INFO: hz.client_1 [search-engine] [5.7.0] 
+control-1  | 2026-11-08T18:11:43.294378209Z 
+control-1  | 2026-11-08T18:11:43.294380805Z Client Connectivity [2] {
+control-1  | 2026-11-08T18:11:43.294383607Z 	Member [hz-1]:5701 - 089de381-0603-448c-9352-f7e92f950f5c - connected
+control-1  | 2026-11-08T18:11:43.294386760Z 	Member [hz-2]:5701 - 3b86e5f1-1a55-43c1-be13-1de4ff739da2 - disconnected
+control-1  | 2026-11-08T18:11:43.294389419Z }
+control-1  | 2026-11-08T18:11:43.294391936Z 
+control-1  | 2026-11-08T18:11:59.450400608Z [control-tasks] INFO es.ulpgc.bigdata.control.ControlTasks - lease check: 1 books with an expired lease requeued or failed

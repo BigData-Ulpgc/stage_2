@@ -1,0 +1,10 @@
+label: clients-r1-t250-p50-c128-rep1
+started: 20261107T113404Z
+host cpus: 12, host memory bytes: 16594280448, docker: 28.3.3
+
+container limits (NanoCpus: 1000000000 = 1 CPU; Memory in bytes; 0 = no limit):
+hz-1 NanoCpus=1000000000 Memory=805306368
+hz-2 NanoCpus=1000000000 Memory=805306368
+mongo NanoCpus=2000000000 Memory=1073741824
+stage_2-nginx-1 NanoCpus=2000000000 Memory=134217728
+stage_2-search-1 NanoCpus=2000000000 Memory=1073741824

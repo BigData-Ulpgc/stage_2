@@ -1,0 +1,112 @@
+hz-1  | 2026-11-08T18:16:55.090037995Z ########################################
+hz-1  | 2026-11-08T18:16:55.090066161Z # JAVA=/usr/bin/java
+hz-1  | 2026-11-08T18:16:55.090070335Z # JAVA_OPTS=--add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED -Dlog4j.shutdownHookEnabled=false -Dhazelcast.logging.shutdown=true --sun-misc-unsafe-memory-access=allow -Dhazelcast.logging.type=log4j2 -Dlog4j.configurationFile=file:/opt/hazelcast/config/log4j2.properties -Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml -Djava.net.preferIPv4Stack=true -XX:MaxRAMPercentage=80.0 -Xms512m -Xmx512m
+hz-1  | 2026-11-08T18:16:55.090074300Z # CLASSPATH=/opt/hazelcast/*:/opt/hazelcast/lib:/opt/hazelcast/lib/*:/opt/hazelcast/bin/user-lib:/opt/hazelcast/bin/user-lib/*
+hz-1  | 2026-11-08T18:16:55.090077104Z ########################################
+hz-1  | 2026-11-08T18:16:56.822397644Z 2026-11-08 18:16:56,819 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.AbstractConfigLocator[m]: Loading configuration '/opt/hazelcast/config_ext/hazelcast.yaml' from System property 'hazelcast.config'
+hz-1  | 2026-11-08T18:16:56.822612362Z 2026-11-08 18:16:56,822 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.AbstractConfigLocator[m]: Using configuration file at /opt/hazelcast/config_ext/hazelcast.yaml
+hz-1  | 2026-11-08T18:16:57.994396396Z 2026-11-08 18:16:57,994 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.o.ExternalConfigurationOverride[m]: Detected external configuration entries in environment variables: [hazelcast.network.publicaddress=hz-1:5701,hazelcast.clustername=search-engine]
+hz-1  | 2026-11-08T18:16:58.030741147Z 2026-11-08 18:16:58,030 [[33m WARN[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] You configured your member address as host name. Please be aware of that your dns can be spoofed. Make sure that your dns configurations are correct.
+hz-1  | 2026-11-08T18:16:58.030970916Z 2026-11-08 18:16:58,030 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Resolving domain name 'hz-2' to address(es): [172.18.0.3]
+hz-1  | 2026-11-08T18:16:58.031253707Z 2026-11-08 18:16:58,030 [[33m WARN[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] You configured your member address as host name. Please be aware of that your dns can be spoofed. Make sure that your dns configurations are correct.
+hz-1  | 2026-11-08T18:16:58.031333953Z 2026-11-08 18:16:58,031 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Resolving domain name 'hz-1' to address(es): [172.18.0.4]
+hz-1  | 2026-11-08T18:16:58.032239850Z 2026-11-08 18:16:58,031 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Interfaces is disabled, trying to pick one address from TCP-IP config addresses: [hz-2/172.18.0.3, hz-1/172.18.0.4]
+hz-1  | 2026-11-08T18:16:58.092217781Z 2026-11-08 18:16:58,091 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Using public address: [hz-1]:5701
+hz-1  | 2026-11-08T18:16:58.107278343Z 2026-11-08 18:16:58,106 [[32m INFO[m] [[36mmain[m] [[34mc.h.s.logo[m]: [hz-1]:5701 [search-engine] [5.7.0] 
+hz-1  | 2026-11-08T18:16:58.107309593Z     o    o     o     o---o   o--o o      o---o     o     o----o o--o--o
+hz-1  | 2026-11-08T18:16:58.107312875Z     |    |    / \       /         |     /         / \    |         |
+hz-1  | 2026-11-08T18:16:58.107315421Z     o----o       o     o   o----o |    o             o   o----o    |
+hz-1  | 2026-11-08T18:16:58.107317556Z     |    |  *     \   /           |     \       *     \       |    |
+hz-1  | 2026-11-08T18:16:58.107319797Z     o    o *       o o---o   o--o o----o o---o *       o o----o    o
+hz-1  | 2026-11-08T18:16:58.107321917Z 
+hz-1  | 2026-11-08T18:16:58.107325985Z 2026-11-08 18:16:58,107 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Copyright (c) 2008-2026, Hazelcast, Inc. All Rights Reserved.
+hz-1  | 2026-11-08T18:16:58.108337513Z 2026-11-08 18:16:58,108 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Hazelcast Platform 5.7.0 (20260512 - b9df48a) starting at [hz-1]:5701
+hz-1  | 2026-11-08T18:16:58.108411593Z 2026-11-08 18:16:58,108 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Cluster name: search-engine
+hz-1  | 2026-11-08T18:16:58.108570231Z 2026-11-08 18:16:58,108 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Integrity Checker is disabled. Fail-fast on corrupted executables will not be performed. For more information, see the documentation for Integrity Checker.
+hz-1  | 2026-11-08T18:16:58.110591545Z 2026-11-08 18:16:58,110 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] The Jet engine is disabled.
+hz-1  | 2026-11-08T18:16:58.110603930Z To enable the Jet engine on the members, do one of the following:
+hz-1  | 2026-11-08T18:16:58.110607126Z   - Change member config using Java API: config.getJetConfig().setEnabled(true)
+hz-1  | 2026-11-08T18:16:58.110609663Z   - Change XML/YAML configuration property: Set hazelcast.jet.enabled to true
+hz-1  | 2026-11-08T18:16:58.110612318Z   - Add system property: -Dhz.jet.enabled=true (for Hazelcast embedded, works only when loading config via Config.load)
+hz-1  | 2026-11-08T18:16:58.110614946Z   - Add environment variable: HZ_JET_ENABLED=true (recommended when running container image. For Hazelcast embedded, works only when loading config via Config.load)
+hz-1  | 2026-11-08T18:16:59.604867902Z 2026-11-08 18:16:59,604 [[32m INFO[m] [[36mmain[m] [[34mc.h.s.security[m]: [hz-1]:5701 [search-engine] [5.7.0] Enable DEBUG/FINE log level for log category com.hazelcast.system.security  or use -Dhazelcast.security.recommendations system property to see 🔒 security recommendations and the status of current config.
+hz-1  | 2026-11-08T18:16:59.713024022Z 2026-11-08 18:16:59,712 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.i.Node[m]: [hz-1]:5701 [search-engine] [5.7.0] Using TCP/IP discovery
+hz-1  | 2026-11-08T18:17:00.294115212Z 2026-11-08 18:17:00,293 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.d.Diagnostics[m]: [hz-1]:5701 [search-engine] [5.7.0] Diagnostics service is disabled. You can enable it over Management Center or Operator dynamically.
+hz-1  | 2026-11-08T18:17:00.300230895Z 2026-11-08 18:17:00,300 [[32m INFO[m] [[36mmain[m] [[34mc.h.c.LifecycleService[m]: [hz-1]:5701 [search-engine] [5.7.0] [hz-1]:5701 is STARTING
+hz-1  | 2026-11-08T18:17:00.394634292Z 2026-11-08 18:17:00,394 [[32m INFO[m] [[36mhz.quirky_galileo.IO.thread-in-0[m] [[34mc.h.i.s.t.TcpServerConnection[m]: [hz-1]:5701 [search-engine] [5.7.0] Initialized new cluster connection between /172.18.0.4:5701 and /172.18.0.3:43773
+hz-1  | 2026-11-08T18:17:00.415361483Z 2026-11-08 18:17:00,415 [[32m INFO[m] [[36mhz.quirky_galileo.IO.thread-in-1[m] [[34mc.h.i.s.t.TcpServerConnection[m]: [hz-1]:5701 [search-engine] [5.7.0] Initialized new cluster connection between /172.18.0.4:57453 and hz-2/172.18.0.3:5701
+hz-1  | 2026-11-08T18:17:05.398914737Z 2026-11-08 18:17:05,398 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.ClusterService[m]: [hz-1]:5701 [search-engine] [5.7.0] 
+hz-1  | 2026-11-08T18:17:05.398936608Z 
+hz-1  | 2026-11-08T18:17:05.398939484Z Members {size:1, ver:1} [
+hz-1  | 2026-11-08T18:17:05.398941592Z 	Member [hz-1]:5701 - 4ca4f412-ed55-4bc1-b6fd-af714d9733e8 this
+hz-1  | 2026-11-08T18:17:05.398943722Z ]
+hz-1  | 2026-11-08T18:17:05.398945694Z 
+hz-1  | 2026-11-08T18:17:05.404823201Z 2026-11-08 18:17:05,404 [[32m INFO[m] [[36mmain[m] [[34mc.h.c.LifecycleService[m]: [hz-1]:5701 [search-engine] [5.7.0] [hz-1]:5701 is STARTED
+hz-1  | 2026-11-08T18:17:06.258898444Z 2026-11-08 18:17:06,258 [[32m INFO[m] [[36mhz.quirky_galileo.priority-generic-operation.thread-0[m] [[34mc.h.i.c.ClusterService[m]: [hz-1]:5701 [search-engine] [5.7.0] 
+hz-1  | 2026-11-08T18:17:06.258926405Z 
+hz-1  | 2026-11-08T18:17:06.258931375Z Members {size:2, ver:2} [
+hz-1  | 2026-11-08T18:17:06.258935353Z 	Member [hz-1]:5701 - 4ca4f412-ed55-4bc1-b6fd-af714d9733e8 this
+hz-1  | 2026-11-08T18:17:06.258938687Z 	Member [hz-2]:5701 - 349f0416-db42-4fb3-a237-a4349efda507
+hz-1  | 2026-11-08T18:17:06.258942152Z ]
+hz-1  | 2026-11-08T18:17:06.258945341Z 
+hz-1  | 2026-11-08T18:17:17.168443015Z 2026-11-08 18:17:17,168 [[32m INFO[m] [[36mhz.quirky_galileo.priority-generic-operation.thread-0[m] [[34mc.h.c.i.p.t.AuthenticationMessageTask[m]: [hz-1]:5701 [search-engine] [5.7.0] Received auth from Connection[id=5, /172.18.0.4:5701->/172.18.0.5:54021, qualifier=null, endpoint=[172.18.0.5]:54021, remoteUuid=61a1dede-7e31-41f7-899b-e04864ae647a, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: 61a1dede-7e31-41f7-899b-e04864ae647a, client name: hz.client_1, client version: 5.7.0
+hz-1  | 2026-11-08T18:17:17.331953309Z 2026-11-08 18:17:17,331 [[32m INFO[m] [[36mhz.quirky_galileo.client-blocking-tasks.thread-1[m] [[34mc.h.i.p.i.PartitionStateManagerImpl[m]: [hz-1]:5701 [search-engine] [5.7.0] Initializing cluster partition table arrangement...
+hz-1  | 2026-11-08T18:17:18.077104261Z 2026-11-08 18:17:18,076 [[32m INFO[m] [[36mhz.quirky_galileo.priority-generic-operation.thread-0[m] [[34mc.h.c.i.p.t.AuthenticationMessageTask[m]: [hz-1]:5701 [search-engine] [5.7.0] Received auth from Connection[id=6, /172.18.0.4:5701->/172.18.0.7:55535, qualifier=null, endpoint=[172.18.0.7]:55535, remoteUuid=291ad851-fe9b-4223-bff7-d60cb3eb363e, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: 291ad851-fe9b-4223-bff7-d60cb3eb363e, client name: hz.client_1, client version: 5.7.0
+hz-1  | 2026-11-08T18:17:21.097823934Z 2026-11-08 18:17:21,097 [[32m INFO[m] [[36mhz.quirky_galileo.priority-generic-operation.thread-0[m] [[34mc.h.c.i.p.t.AuthenticationMessageTask[m]: [hz-1]:5701 [search-engine] [5.7.0] Received auth from Connection[id=7, /172.18.0.4:5701->/172.18.0.6:57853, qualifier=null, endpoint=[172.18.0.6]:57853, remoteUuid=55548e25-766a-416a-be5e-0d29d386123b, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: 55548e25-766a-416a-be5e-0d29d386123b, client name: hz.client_1, client version: 5.7.0
+hz-1  | 2026-11-08T18:17:33.710532566Z ########################################
+hz-1  | 2026-11-08T18:17:33.710570195Z # JAVA=/usr/bin/java
+hz-1  | 2026-11-08T18:17:33.710580863Z # JAVA_OPTS=--add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED -Dlog4j.shutdownHookEnabled=false -Dhazelcast.logging.shutdown=true --sun-misc-unsafe-memory-access=allow -Dhazelcast.logging.type=log4j2 -Dlog4j.configurationFile=file:/opt/hazelcast/config/log4j2.properties -Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml -Djava.net.preferIPv4Stack=true -XX:MaxRAMPercentage=80.0 -Xms512m -Xmx512m
+hz-1  | 2026-11-08T18:17:33.710592744Z # CLASSPATH=/opt/hazelcast/*:/opt/hazelcast/lib:/opt/hazelcast/lib/*:/opt/hazelcast/bin/user-lib:/opt/hazelcast/bin/user-lib/*
+hz-1  | 2026-11-08T18:17:33.710599834Z ########################################
+hz-1  | 2026-11-08T18:17:35.685628305Z 2026-11-08 18:17:35,684 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.AbstractConfigLocator[m]: Loading configuration '/opt/hazelcast/config_ext/hazelcast.yaml' from System property 'hazelcast.config'
+hz-1  | 2026-11-08T18:17:35.685691956Z 2026-11-08 18:17:35,685 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.AbstractConfigLocator[m]: Using configuration file at /opt/hazelcast/config_ext/hazelcast.yaml
+hz-1  | 2026-11-08T18:17:36.699690431Z 2026-11-08 18:17:36,699 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.o.ExternalConfigurationOverride[m]: Detected external configuration entries in environment variables: [hazelcast.network.publicaddress=hz-1:5701,hazelcast.clustername=search-engine]
+hz-1  | 2026-11-08T18:17:36.797976366Z 2026-11-08 18:17:36,797 [[33m WARN[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] You configured your member address as host name. Please be aware of that your dns can be spoofed. Make sure that your dns configurations are correct.
+hz-1  | 2026-11-08T18:17:36.798283022Z 2026-11-08 18:17:36,798 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Resolving domain name 'hz-2' to address(es): [172.18.0.4]
+hz-1  | 2026-11-08T18:17:36.798463118Z 2026-11-08 18:17:36,798 [[33m WARN[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] You configured your member address as host name. Please be aware of that your dns can be spoofed. Make sure that your dns configurations are correct.
+hz-1  | 2026-11-08T18:17:36.798569513Z 2026-11-08 18:17:36,798 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Resolving domain name 'hz-1' to address(es): [172.18.0.3]
+hz-1  | 2026-11-08T18:17:36.799497829Z 2026-11-08 18:17:36,799 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Interfaces is disabled, trying to pick one address from TCP-IP config addresses: [hz-2/172.18.0.4, hz-1/172.18.0.3]
+hz-1  | 2026-11-08T18:17:36.809500392Z 2026-11-08 18:17:36,809 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.AddressPicker[m]: [LOCAL] [search-engine] [5.7.0] Using public address: [hz-1]:5701
+hz-1  | 2026-11-08T18:17:36.879544894Z 2026-11-08 18:17:36,879 [[32m INFO[m] [[36mmain[m] [[34mc.h.s.logo[m]: [hz-1]:5701 [search-engine] [5.7.0] 
+hz-1  | 2026-11-08T18:17:36.879563429Z     o    o     o     o---o   o--o o      o---o     o     o----o o--o--o
+hz-1  | 2026-11-08T18:17:36.879566490Z     |    |    / \       /         |     /         / \    |         |
+hz-1  | 2026-11-08T18:17:36.879569202Z     o----o       o     o   o----o |    o             o   o----o    |
+hz-1  | 2026-11-08T18:17:36.879571394Z     |    |  *     \   /           |     \       *     \       |    |
+hz-1  | 2026-11-08T18:17:36.879573689Z     o    o *       o o---o   o--o o----o o---o *       o o----o    o
+hz-1  | 2026-11-08T18:17:36.879575846Z 
+hz-1  | 2026-11-08T18:17:36.879621884Z 2026-11-08 18:17:36,879 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Copyright (c) 2008-2026, Hazelcast, Inc. All Rights Reserved.
+hz-1  | 2026-11-08T18:17:36.880661892Z 2026-11-08 18:17:36,880 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Hazelcast Platform 5.7.0 (20260512 - b9df48a) starting at [hz-1]:5701
+hz-1  | 2026-11-08T18:17:36.880761047Z 2026-11-08 18:17:36,880 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Cluster name: search-engine
+hz-1  | 2026-11-08T18:17:36.880928370Z 2026-11-08 18:17:36,880 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] Integrity Checker is disabled. Fail-fast on corrupted executables will not be performed. For more information, see the documentation for Integrity Checker.
+hz-1  | 2026-11-08T18:17:36.883300126Z 2026-11-08 18:17:36,883 [[32m INFO[m] [[36mmain[m] [[34mc.h.system[m]: [hz-1]:5701 [search-engine] [5.7.0] The Jet engine is disabled.
+hz-1  | 2026-11-08T18:17:36.883314661Z To enable the Jet engine on the members, do one of the following:
+hz-1  | 2026-11-08T18:17:36.883317767Z   - Change member config using Java API: config.getJetConfig().setEnabled(true)
+hz-1  | 2026-11-08T18:17:36.883320557Z   - Change XML/YAML configuration property: Set hazelcast.jet.enabled to true
+hz-1  | 2026-11-08T18:17:36.883322852Z   - Add system property: -Dhz.jet.enabled=true (for Hazelcast embedded, works only when loading config via Config.load)
+hz-1  | 2026-11-08T18:17:36.883325175Z   - Add environment variable: HZ_JET_ENABLED=true (recommended when running container image. For Hazelcast embedded, works only when loading config via Config.load)
+hz-1  | 2026-11-08T18:17:38.518197955Z 2026-11-08 18:17:38,517 [[32m INFO[m] [[36mmain[m] [[34mc.h.s.security[m]: [hz-1]:5701 [search-engine] [5.7.0] Enable DEBUG/FINE log level for log category com.hazelcast.system.security  or use -Dhazelcast.security.recommendations system property to see 🔒 security recommendations and the status of current config.
+hz-1  | 2026-11-08T18:17:38.680847598Z 2026-11-08 18:17:38,680 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.i.Node[m]: [hz-1]:5701 [search-engine] [5.7.0] Using TCP/IP discovery
+hz-1  | 2026-11-08T18:17:39.272675803Z 2026-11-08 18:17:39,272 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.d.Diagnostics[m]: [hz-1]:5701 [search-engine] [5.7.0] Diagnostics service is disabled. You can enable it over Management Center or Operator dynamically.
+hz-1  | 2026-11-08T18:17:39.278612560Z 2026-11-08 18:17:39,278 [[32m INFO[m] [[36mmain[m] [[34mc.h.c.LifecycleService[m]: [hz-1]:5701 [search-engine] [5.7.0] [hz-1]:5701 is STARTING
+hz-1  | 2026-11-08T18:17:39.469866601Z 2026-11-08 18:17:39,397 [[32m INFO[m] [[36mhz.fervent_hamilton.IO.thread-in-1[m] [[34mc.h.i.s.t.TcpServerConnection[m]: [hz-1]:5701 [search-engine] [5.7.0] Initialized new cluster connection between /172.18.0.3:38887 and hz-2/172.18.0.4:5701
+hz-1  | 2026-11-08T18:17:39.470709475Z 2026-11-08 18:17:39,470 [[32m INFO[m] [[36mhz.fervent_hamilton.IO.thread-in-0[m] [[34mc.h.i.s.t.TcpServerConnection[m]: [hz-1]:5701 [search-engine] [5.7.0] Initialized new cluster connection between /172.18.0.3:5701 and /172.18.0.4:56311
+hz-1  | 2026-11-08T18:17:44.378229819Z 2026-11-08 18:17:44,377 [[32m INFO[m] [[36mmain[m] [[34mc.h.i.c.ClusterService[m]: [hz-1]:5701 [search-engine] [5.7.0] 
+hz-1  | 2026-11-08T18:17:44.378256200Z 
+hz-1  | 2026-11-08T18:17:44.378261035Z Members {size:1, ver:1} [
+hz-1  | 2026-11-08T18:17:44.378264517Z 	Member [hz-1]:5701 - e0ac1356-1708-4e93-ab3f-4288cbba5745 this
+hz-1  | 2026-11-08T18:17:44.378268019Z ]
+hz-1  | 2026-11-08T18:17:44.378271364Z 
+hz-1  | 2026-11-08T18:17:44.387500965Z 2026-11-08 18:17:44,387 [[32m INFO[m] [[36mmain[m] [[34mc.h.c.LifecycleService[m]: [hz-1]:5701 [search-engine] [5.7.0] [hz-1]:5701 is STARTED
+hz-1  | 2026-11-08T18:17:44.399830740Z 2026-11-08 18:17:44,399 [[32m INFO[m] [[36mhz.fervent_hamilton.generic-operation.thread-1[m] [[34mc.h.i.c.ClusterService[m]: [hz-1]:5701 [search-engine] [5.7.0] 
+hz-1  | 2026-11-08T18:17:44.399863516Z 
+hz-1  | 2026-11-08T18:17:44.399870838Z Members {size:2, ver:2} [
+hz-1  | 2026-11-08T18:17:44.399874860Z 	Member [hz-1]:5701 - e0ac1356-1708-4e93-ab3f-4288cbba5745 this
+hz-1  | 2026-11-08T18:17:44.399885818Z 	Member [hz-2]:5701 - 44ec5150-a11a-4494-b4c6-eacd6ad31b24
+hz-1  | 2026-11-08T18:17:44.399891264Z ]
+hz-1  | 2026-11-08T18:17:44.399895020Z 
+hz-1  | 2026-11-08T18:17:44.513440356Z 2026-11-08 18:17:44,513 [[32m INFO[m] [[36mhz.fervent_hamilton.generic-operation.thread-0[m] [[34mc.h.c.i.p.t.AuthenticationMessageTask[m]: [hz-1]:5701 [search-engine] [5.7.0] Received auth from Connection[id=1, /172.18.0.3:5701->/172.18.0.7:43849, qualifier=null, endpoint=[172.18.0.7]:43849, remoteUuid=291ad851-fe9b-4223-bff7-d60cb3eb363e, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: 291ad851-fe9b-4223-bff7-d60cb3eb363e, client name: hz.client_1, client version: 5.7.0
+hz-1  | 2026-11-08T18:17:44.513476502Z 2026-11-08 18:17:44,513 [[32m INFO[m] [[36mhz.fervent_hamilton.priority-generic-operation.thread-0[m] [[34mc.h.c.i.p.t.AuthenticationMessageTask[m]: [hz-1]:5701 [search-engine] [5.7.0] Received auth from Connection[id=2, /172.18.0.3:5701->/172.18.0.6:59803, qualifier=null, endpoint=[172.18.0.6]:59803, remoteUuid=55548e25-766a-416a-be5e-0d29d386123b, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: 55548e25-766a-416a-be5e-0d29d386123b, client name: hz.client_1, client version: 5.7.0
+hz-1  | 2026-11-08T18:17:44.670829516Z 2026-11-08 18:17:44,670 [[32m INFO[m] [[36mhz.fervent_hamilton.priority-generic-operation.thread-0[m] [[34mc.h.i.p.i.PartitionStateManagerImpl[m]: [hz-1]:5701 [search-engine] [5.7.0] Initializing cluster partition table arrangement...
+hz-1  | 2026-11-08T18:18:04.389993371Z 2026-11-08 18:18:04,388 [[32m INFO[m] [[36mhz.fervent_hamilton.HealthMonitor[m] [[34mc.h.i.d.HealthMonitor[m]: [hz-1]:5701 [search-engine] [5.7.0] The HealthMonitor has detected a high load on the system. For more detailed information,
+hz-1  | 2026-11-08T18:18:04.390020807Z enable Diagnostics by adding the property -Dhazelcast.diagnostics.enabled=true
+hz-1  | 2026-11-08T18:18:04.395764354Z 2026-11-08 18:18:04,395 [[32m INFO[m] [[36mhz.fervent_hamilton.HealthMonitor[m] [[34mc.h.i.d.HealthMonitor[m]: [hz-1]:5701 [search-engine] [5.7.0] processors=1, physical.memory.total=768.0M, physical.memory.free=451.5M, swap.space.total=768.0M, swap.space.free=768.0M, heap.memory.used=159.9M, heap.memory.free=334.3M, heap.memory.total=494.9M, heap.memory.max=494.9M, heap.memory.used/total=32.31%, heap.memory.used/max=32.31%, minor.gc.count=1, minor.gc.time=99ms, major.gc.count=2, major.gc.time=122ms, load.process=89.05%, load.system=89.83%, load.systemAverage=2.16, thread.count=79, thread.peakCount=80, cluster.timeDiff=0, event.q.size=0, executor.q.async.size=0, executor.q.client.size=0, executor.q.client.query.size=0, executor.q.client.blocking.size=0, executor.q.query.size=0, executor.q.scheduled.size=0, executor.q.io.size=0, executor.q.system.size=0, executor.q.operations.size=0, executor.q.priorityOperation.size=0, operations.completed.count=21269, executor.q.mapLoad.size=0, executor.q.mapLoadAllKeys.size=0, executor.q.cluster.size=0, executor.q.response.size=0, operations.running.count=0, operations.pending.invocations.percentage=0.00%, operations.pending.invocations.count=0, proxy.count=7, clientEndpoint.count=2, connection.active.count=4, client.connection.count=2, connection.count=3

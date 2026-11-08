@@ -1,0 +1,8 @@
+# LaTeX build files: build with latexmk -pdf from this folder
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+/*.pdf
