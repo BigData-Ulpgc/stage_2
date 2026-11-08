@@ -4,6 +4,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.MongoSettings;
 import es.ulpgc.bigdata.datamart.index.MongoInvertedIndex;
+import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
 import es.ulpgc.bigdata.datamart.metadata.MongoMetadataRepository;
@@ -13,6 +14,7 @@ import es.ulpgc.bigdata.search.index.IndexSnapshotLoader;
 import org.bson.Document;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +28,7 @@ import java.util.Objects;
  * <pre>
  *   books           metadata of every book       MetadataParser + MongoMetadataRepository (common)
  *   &lt;collection&gt;    posting lists                Tokenizer.standard() + MongoInvertedIndex (common)
+ *   index_log       every indexed book           MongoIndexLog (common), written after the posting lists
  *   index_books     {_id, version} per published book
  *   index_meta      {_id: "CURRENT", version, collection, books, published_at}   written LAST
  * </pre>
@@ -66,6 +69,7 @@ public final class MongoFixtureLoader {
             MongoDatabase db = client.getDatabase(database);
             db.getCollection(IndexSnapshotLoader.INDEX_META).drop();
             db.getCollection(IndexSnapshotLoader.INDEX_BOOKS).drop();
+            db.getCollection(MongoIndexLog.DEFAULT_COLLECTION).drop();
             index.clear();
             MongoMetadataRepository metadata = new MongoMetadataRepository(db);
             metadata.clear();
@@ -80,6 +84,7 @@ public final class MongoFixtureLoader {
             }
             metadata.saveAll(parsed);
             index.flush();
+            new MongoIndexLog(db).markIndexed(books.stream().map(Book::id).toList(), Instant.parse(PUBLISHED_AT));
 
             // 2. Publication: index_books first, CURRENT last (contract §6.5).
             List<Document> published = new ArrayList<>();

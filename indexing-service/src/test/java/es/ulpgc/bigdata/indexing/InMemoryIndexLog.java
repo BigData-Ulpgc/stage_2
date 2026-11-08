@@ -38,6 +38,11 @@ public class InMemoryIndexLog implements IndexLog {
         return Set.copyOf(log.keySet());
     }
 
+    @Override
+    public Set<Integer> indexedIds() {
+        return ids();
+    }
+
     private void failIfDown() {
         if (failing) {
             throw new MongoException("MongoDB no responde (simulado)");
