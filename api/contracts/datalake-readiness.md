@@ -55,7 +55,7 @@ Rules:
 
 - **A ready book (marker, header and body) is never modified.** Saving it again writes nothing
   and returns where it is (DR-06). The books of the datalake are immutable once ready: the index
-  publication relies on it (`coordination.md` §6, plan §6.5).
+  publication relies on it (`index-publication.md` §1).
 - A failed or interrupted write leaves the book not ready, so it does not exist (§3). Writing it
   again replaces the half-written files. A leftover `.tmp` is never reused: every reader ignores
   it.

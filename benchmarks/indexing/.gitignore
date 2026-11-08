@@ -1,0 +1,3 @@
+# The --smoke results only check that it runs: never committed
+results/jmh-smoke/
+results/experiments-smoke/

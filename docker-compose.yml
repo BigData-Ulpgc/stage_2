@@ -120,9 +120,12 @@ services:
       PUBLISH_INTERVAL_S: ${PUBLISH_INTERVAL_S}
       INDEXING_URL: http://indexing:7002
       DATA_DIR: /data
+      # Optional list of books to seed once connected, e.g. /shared/book_ids.txt (.env).
+      CONTROL_SEED_FILE: ${CONTROL_SEED_FILE:-}
     # Read-only: its recovery only looks at the <id>._READY markers (coordination contract §7).
     volumes:
       - ${DATALAKE_HOST_DIR}:/data/datalake:ro
+      - ./shared:/shared:ro
     ports:
       - "127.0.0.1:${CONTROL_HOST_PORT}:7000"
     healthcheck:
@@ -176,14 +179,21 @@ services:
       dockerfile: docker/service.Dockerfile
       args: { MODULE: indexing-service }
     image: stage2/indexing-service
+    # docker compose stop waits this long before SIGKILL: the index writer finishes its batch.
+    stop_grace_period: 15s
     cpus: ${INDEXING_CPUS}
     mem_limit: ${INDEXING_MEM_LIMIT}
     environment:
       <<: [*hazelcast-client, *mongo-client]
+      # Also ends the JVM on an OutOfMemoryError in any thread, so that Docker restarts it: a large
+      # batch fills the heap, and the error may hit the MongoDB or Hazelcast threads instead of
+      # the writer, leaving a service that answers /status but indexes nothing (DR-13).
+      JAVA_OPTS: "-XX:MaxRAMPercentage=${JAVA_HEAP_PERCENT} -XX:+ExitOnOutOfMemoryError"
       INDEXING_PORT: 7002
       INDEXING_HTTP_THREADS: ${INDEXING_HTTP_THREADS}
       INDEXING_THREADS: ${INDEXING_THREADS}
       INDEX_WRITE_BATCH: ${INDEX_WRITE_BATCH}
+      INDEX_REBUILD_DROP_SECONDS: ${INDEX_REBUILD_DROP_SECONDS}
       DATA_DIR: /data
     # Read-only: Indexing reads the books and writes only to MongoDB.
     volumes:

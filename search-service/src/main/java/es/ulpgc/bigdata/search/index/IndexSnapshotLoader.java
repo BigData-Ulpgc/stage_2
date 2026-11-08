@@ -4,6 +4,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Projections;
 import es.ulpgc.bigdata.datamart.metadata.MetadataRepository;
+import es.ulpgc.bigdata.datamart.publication.MongoPublishedBooks;
 import es.ulpgc.bigdata.model.BookMetadata;
 import org.bson.Document;
 
@@ -32,9 +33,10 @@ import java.util.Optional;
  */
 public final class IndexSnapshotLoader {
 
-    public static final String INDEX_META = "index_meta";
-    public static final String INDEX_BOOKS = "index_books";
-    public static final String CURRENT = "CURRENT";
+    // The names Indexing writes, from one place in common (they used to be repeated here)
+    public static final String INDEX_META = MongoPublishedBooks.INDEX_META;
+    public static final String INDEX_BOOKS = MongoPublishedBooks.INDEX_BOOKS;
+    public static final String CURRENT = MongoPublishedBooks.CURRENT;
 
     private final MongoDatabase database;
     private final MetadataRepository metadata;

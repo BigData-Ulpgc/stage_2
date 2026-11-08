@@ -1,15 +1,14 @@
 openapi: 3.0.3
 info:
   title: Stage 2 Search Engine — Search Service API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Front-end-facing API of the search engine (provider: **Search Service**), plus its
     operational status endpoint.
 
-    **Status: draft v0.2.0** (DP-01, updated to plan v3.1: index and metadata in MongoDB).
-    Internal endpoints of Ingestion, Indexing and the Control Module are added by their owners
-    in later versions, together with the full inventory of front-end, internal and operational
-    endpoints.
+    **Status: v0.3.0** (DP-10): the implemented API. Each service has its own specification: the
+    inventory of every endpoint, front-end, internal and operational, is `api/endpoints.md`, and
+    the contracts that are not HTTP are linked from there.
 
     ## Common rules
     - All responses are JSON (`application/json; charset=utf-8`).
@@ -20,7 +19,7 @@ info:
       that version (`index_books`) and their metadata (`books`). A request takes the snapshot
       once when it starts, reads the posting lists of its terms from MongoDB and discards any
       book that is not in the snapshot, so it never sees a book that is indexed but not yet
-      published, nor mixes two versions (contract §6.5 of the group plan). Filters are applied
+      published, nor mixes two versions (`api/contracts/index-publication.md` §8). Filters are applied
       in memory on the snapshot metadata.
     - **Errors** always use the `Error` schema with a machine-readable `code`:
       `MISSING_PARAMETER`, `INVALID_PARAMETER` (400), `NOT_FOUND` (404),

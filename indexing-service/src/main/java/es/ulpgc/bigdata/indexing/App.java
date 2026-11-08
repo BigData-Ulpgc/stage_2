@@ -6,9 +6,11 @@ import com.mongodb.client.MongoDatabase;
 import es.ulpgc.bigdata.config.DataLayout;
 import es.ulpgc.bigdata.config.Env;
 import es.ulpgc.bigdata.config.MongoSettings;
+import es.ulpgc.bigdata.coordination.BackgroundConnection;
 import es.ulpgc.bigdata.coordination.Coordination;
 import es.ulpgc.bigdata.coordination.CoordinationSettings;
 import es.ulpgc.bigdata.datalake.RangeBasedDatalake;
+import es.ulpgc.bigdata.datamart.index.MongoInvertedIndex;
 import es.ulpgc.bigdata.datamart.index.Tokenizer;
 import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
 import es.ulpgc.bigdata.datamart.metadata.MetadataParser;
@@ -23,8 +25,14 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 
 /**
  * Entry point of the Indexing Service: the only place that knows the concrete classes
@@ -35,10 +43,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * <pre>
  *   INDEXING_PORT          HTTP port (default 7002; 0 = a free one, for tests)
  *   INDEXING_HTTP_THREADS  maximum Jetty request threads (default ServiceServer.DEFAULT_MAX_THREADS)
+ *   INDEXING_THREADS       threads that prepare (read, parse, tokenize) the books of a batch (default 4)
+ *   INDEX_WRITE_BATCH      the most books of index-queue written together (default 100)
+ *   INDEX_REBUILD_DROP_SECONDS  how long a rebuild keeps the old collection after the switch,
+ *                          for the Search replicas still reading it (default 60)
  *   DATA_DIR               root of the shared volume; the datalake is DATA_DIR/datalake/range (default ./data)
  *   MONGO_URI              mongodb://localhost:27017 (inside Docker: mongodb://mongo:27017)
  *   MONGO_DATABASE         search_engine
- *   MONGO_COLLECTION       inverted_index
+ *   MONGO_COLLECTION       inverted_index: the first collection; a rebuild publishes MONGO_COLLECTION_rNN
  *   HZ_MEMBERS, HZ_CLUSTER_NAME  the Hazelcast cluster (CoordinationSettings)
  * </pre>
  *
@@ -52,15 +64,24 @@ import java.util.concurrent.atomic.AtomicReference;
  * crash (DR-08a, D2 and D3). In the background so that a MongoDB that does not answer never
  * delays or stops the start; if it fails, the next POST /index/publish does the same work.
  *
- * Another one connects to Hazelcast (DR-08b), to mark the published books (T10) and announce
- * each version on index-events. Connecting blocks until the cluster answers
- * (CoordinationSettings.openClient), and GET /status must answer meanwhile, so it runs after
- * the server, in the background; /status shows "coordination": connecting, connected or
- * disconnected. Without Hazelcast the service publishes anyway (HazelcastPublicationNotifier).
+ * The Hazelcast client connects in the background too (BackgroundConnection, CF-09): to mark
+ * the published books (T10) and announce each version on index-events (DR-08b). Connecting
+ * blocks until the cluster answers (CoordinationSettings.openClient), and GET /status must
+ * answer meanwhile, so it starts after the server; /status shows "coordination" (connecting,
+ * connected, disconnected, failed or closed) and "coordination_failure" (why it failed, or
+ * what failed once connected; null if nothing did). Without Hazelcast the service publishes
+ * anyway (HazelcastPublicationNotifier).
  *
  * Once connected, the same thread starts the index writer (DR-06b, IndexingWriter): the
  * consumer of index-queue, active while this replica holds the lock index-writer and a
- * standby otherwise. /status shows what it does in "writer" (null until connected).
+ * standby otherwise. It writes in batches of up to INDEX_WRITE_BATCH books, prepared on
+ * INDEXING_THREADS parser threads (DR-09). /status shows what it does in "writer" (null until
+ * connected). If the writer thread dies (an Error, such as an OutOfMemoryError), the service
+ * exits with code 1 so that Docker restarts it (exitWhenWriterDies).
+ *
+ * POST /index/rebuild (DR-10, Rebuilder) runs in a thread of its own, from any replica: it
+ * needs the Hazelcast connection (the rebuild marker and index-writer), so until it is there
+ * it answers 503.
  */
 public final class App {
 
@@ -68,6 +89,12 @@ public final class App {
     static final String PORT = "INDEXING_PORT";
     static final int DEFAULT_PORT = 7002;
     static final String HTTP_THREADS = "INDEXING_HTTP_THREADS";
+    static final String THREADS = "INDEXING_THREADS";
+    static final int DEFAULT_THREADS = 4;
+    static final String WRITE_BATCH = "INDEX_WRITE_BATCH";
+    static final int DEFAULT_WRITE_BATCH = 100;
+    static final String REBUILD_DROP_SECONDS = "INDEX_REBUILD_DROP_SECONDS";
+    static final int DEFAULT_REBUILD_DROP_SECONDS = 60;
 
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
@@ -86,32 +113,51 @@ public final class App {
      * connection open.
      */
     public static RunningService start(Env env) {
+        return start(env, System::exit);
+    }
+
+    /** @param exit how the service ends the JVM when its writer dies (exitWhenWriterDies); tests record it */
+    static RunningService start(Env env, IntConsumer exit) {
         Objects.requireNonNull(env, "env");
+        Objects.requireNonNull(exit, "exit");
         int port = env.port(PORT, DEFAULT_PORT);
         int httpThreads = env.integerAtLeast(HTTP_THREADS,
                 ServiceServer.DEFAULT_MAX_THREADS, ServiceServer.MIN_THREADS);
+        int threads = env.integerAtLeast(THREADS, DEFAULT_THREADS, 1);
+        int writeBatch = env.integerAtLeast(WRITE_BATCH, DEFAULT_WRITE_BATCH, 1);
+        int dropSeconds = env.integerAtLeast(REBUILD_DROP_SECONDS, DEFAULT_REBUILD_DROP_SECONDS, 0);
         MongoSettings mongo = MongoSettings.fromEnv(env);
         DataLayout layout = DataLayout.fromEnv(env);
         CoordinationSettings coordination = CoordinationSettings.fromEnv(env);
 
         MongoClient client = mongo.openClient();
+        ExecutorService parsers = parserPool(threads);
         try {
             MongoDatabase db = client.getDatabase(mongo.database());
             PublicationRepository publications = new MongoPublicationRepository(db);
+            RangeBasedDatalake datalake = new RangeBasedDatalake(layout.datalakeDir());
             IndexingService service = new IndexingService(
-                    new RangeBasedDatalake(layout.datalakeDir()),
+                    datalake,
                     new MongoMetadataRepository(db),
-                    mongo.openIndex(client),                 // shared client: does not own it
+                    // The collection of CURRENT (D8, DR-10), on the shared client that App closes
+                    collection -> new MongoInvertedIndex(db, collection),
+                    mongo.collection(),
                     new MongoIndexLog(db),
                     publications,
                     new MetadataParser(),
-                    Tokenizer.standard());
+                    Tokenizer.standard(),
+                    parsers);
             // The first version uses MONGO_COLLECTION; later ones keep the one of CURRENT (D8).
             HazelcastPublicationNotifier notifier = new HazelcastPublicationNotifier(publications);
             Publisher publisher = new Publisher(publications, mongo.collection(), Clock.systemUTC(), notifier);
             AtomicReference<IndexingWriter> writer = new AtomicReference<>();
-            Javalin server = new IndexingApi(service, publisher)
-                    .create(SERVICE_NAME, httpThreads, () -> extraStatus(notifier, writer.get()))
+            AtomicReference<BackgroundConnection> connection = new AtomicReference<>();
+            AtomicReference<Coordination> cluster = new AtomicReference<>();
+            Rebuilder rebuilder = new Rebuilder(() -> Optional.ofNullable(cluster.get()), service, datalake,
+                    publications, publisher, new MongoRebuildRepository(db), mongo.collection(), writeBatch,
+                    Duration.ofSeconds(dropSeconds), Clock.systemUTC());
+            Javalin server = new IndexingApi(service, publisher, rebuilder)
+                    .create(SERVICE_NAME, httpThreads, () -> extraStatus(connection.get(), writer.get()))
                     .start(port);
 
             // Hosts only, never the whole URI: in production it may carry user and password.
@@ -119,19 +165,33 @@ public final class App {
                     SERVICE_NAME, server.port(), layout.datalakeDir().toAbsolutePath(),
                     new ConnectionString(mongo.uri()).getHosts(), mongo.database(), mongo.collection());
             startRecovery(publisher);
-            RunningService running = new RunningService(server, client, writer);
-            running.connectInBackground(coordination, notifier, service);
+            RunningService running = new RunningService(server, client, writer, notifier, parsers, rebuilder, exit);
+            running.connectInBackground(coordination, connection, cluster, service, writeBatch);
             return running;
         } catch (RuntimeException e) {
+            parsers.shutdownNow();
             client.close();                                  // the start failed: do not leave it open
             throw e;
         }
     }
 
-    /** The fields of GET /status beyond service and status: cheap, never MongoDB. */
-    private static Map<String, Object> extraStatus(HazelcastPublicationNotifier notifier, IndexingWriter writer) {
+    /** DR-09: daemon threads, so they never keep the JVM alive; close() shuts them down. */
+    private static ExecutorService parserPool(int threads) {
+        AtomicInteger next = new AtomicInteger();
+        return Executors.newFixedThreadPool(threads, task -> {
+            Thread thread = new Thread(task, SERVICE_NAME + "-parser-" + next.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    /** The fields of GET /status beyond service and status: cheap, never MongoDB nor Hazelcast. */
+    static Map<String, Object> extraStatus(BackgroundConnection connection, IndexingWriter writer) {
         Map<String, Object> status = new LinkedHashMap<>();
-        status.put("coordination", notifier.state());
+        status.put("coordination", connection == null
+                ? BackgroundConnection.State.CONNECTING.label()       // the instant before it starts
+                : connection.state().label());
+        status.put("coordination_failure", connection == null ? null : connection.failure().orElse(null));
         status.put("writer", writer == null ? null : writer.status());
         return status;
     }
@@ -153,80 +213,101 @@ public final class App {
     }
 
     /**
+     * The handler of the writer thread (DR-13). IndexingWriter.run() handles every exception, so
+     * only an Error ends that thread, for instance an OutOfMemoryError while a large batch is
+     * written. Without its writer the replica would go on answering /status as healthy while it
+     * indexes nothing, and its index-writer lock would stay taken until its Hazelcast client
+     * closes. So the service ends with exit code 1, and Docker (restart: unless-stopped) starts it
+     * again; the books of the batch wait for their lease to expire and the Control requeues them.
+     * An OutOfMemoryError may hit any other thread instead (the MongoDB driver's, Hazelcast's, an
+     * HTTP one) while the writer holds the heap: for that, docker-compose.yml starts Indexing with
+     * -XX:+ExitOnOutOfMemoryError. This handler covers the other Errors that end the writer.
+     *
+     * exit runs in a new thread: it runs the shutdown hook, and close() joins the writer thread,
+     * the one dying here. If the service is already stopping, it does nothing: exit inside the
+     * shutdown hook would never return.
+     */
+    static Thread.UncaughtExceptionHandler exitWhenWriterDies(BooleanSupplier stopping, IntConsumer exit) {
+        Objects.requireNonNull(stopping, "stopping");
+        Objects.requireNonNull(exit, "exit");
+        return (thread, error) -> {
+            if (stopping.getAsBoolean()) {
+                LOG.warn("{} ended while the service stops ({})", thread.getName(), error.toString());
+                return;
+            }
+            LOG.error("{} died; stopping the service so that it is restarted", thread.getName(), error);
+            new Thread(() -> exit.accept(1), SERVICE_NAME + "-exit").start();
+        };
+    }
+
+    /**
      * The running service. close() stops it in order: first the HTTP server (no new requests),
-     * then the index writer (after its current book, see WRITER_GRACE), then the Hazelcast
-     * client, then the MongoClient they use. Closing twice does nothing (the shutdown hook and
+     * then a running rebuild (it fails and drops its collection, CURRENT untouched), then the
+     * index writer (after its current batch, see WRITER_GRACE) and the parser threads,
+     * then the notifier (what it has queued, see HazelcastPublicationNotifier.CLOSE_GRACE), then
+     * the Hazelcast client, then the MongoClient they use. Closing twice does nothing (the shutdown hook and
      * a test may both call it).
      */
     public static final class RunningService implements AutoCloseable {
 
         /**
-         * How long close() waits for the writer to finish its book; then it is interrupted, and
-         * its book stays INDEXING until the Control requeues it (contract §7).
+         * How long close() waits for the writer to finish its batch; then it is interrupted, and
+         * the books of the batch stay INDEXING until the Control requeues them (contract §7).
          */
         static final Duration WRITER_GRACE = Duration.ofSeconds(10);
 
         private final Javalin server;
         private final MongoClient client;
         private final AtomicReference<IndexingWriter> writer;
-        private final AtomicReference<Coordination> coordination = new AtomicReference<>();
+        private final HazelcastPublicationNotifier notifier;
+        private final ExecutorService parsers;
+        private final Rebuilder rebuilder;
+        private BackgroundConnection connection;             // guarded by this
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private Thread writerThread;                         // guarded by this
+        private final IntConsumer exit;
 
-        private RunningService(Javalin server, MongoClient client, AtomicReference<IndexingWriter> writer) {
+        private RunningService(Javalin server, MongoClient client, AtomicReference<IndexingWriter> writer,
+                               HazelcastPublicationNotifier notifier, ExecutorService parsers, Rebuilder rebuilder,
+                               IntConsumer exit) {
             this.server = server;
             this.client = client;
             this.writer = writer;
+            this.notifier = notifier;
+            this.parsers = parsers;
+            this.rebuilder = rebuilder;
+            this.exit = exit;
         }
 
-        /** D2: daemon, so a JVM that stops does not wait for a cluster that never answers. */
-        private void connectInBackground(CoordinationSettings settings, HazelcastPublicationNotifier notifier,
-                                         IndexingService service) {
-            Thread connector = new Thread(() -> {
-                Coordination connected;
-                try {
-                    connected = Coordination.connect(settings);                    // blocks
-                } catch (RuntimeException e) {
-                    LOG.warn("Hazelcast: {} (no writer and no notifications until the next start)", e.toString());
-                    return;
-                }
-                if (!adopt(connected)) {
-                    return;                                      // closed while connecting
-                }
-                try {
-                    int marked = notifier.connected(connected);
-                    LOG.info("connected to Hazelcast {} · {} books PUBLISHED by the repair at start",
-                            settings.members(), marked);
-                } catch (RuntimeException e) {
-                    // MongoDB down at start, for example: the next publication repairs the states.
-                    LOG.warn("connected to Hazelcast {}, but the repair of the states failed: {}",
-                            settings.members(), e.toString());
-                }
-                startWriter(connected, service);
-            }, SERVICE_NAME + "-connect");
-            connector.setDaemon(true);
-            connector.start();
-        }
-
-        /** Keeps the client to close it; if the service already stopped, closes it now. */
-        private boolean adopt(Coordination connected) {
-            coordination.set(connected);
-            if (closed.get() && coordination.compareAndSet(connected, null)) {
-                connected.close();
-                return false;
-            }
-            return true;
+        /**
+         * D2: in BackgroundConnection's daemon thread, so a JVM that stops does not wait for a
+         * cluster that never answers. Once connected, in that thread: the notifier (it only
+         * queues the announcement of what was skipped and the repair of the states) and the
+         * writer. If one of them fails, /status shows it in coordination_failure.
+         */
+        private synchronized void connectInBackground(CoordinationSettings settings,
+                                                      AtomicReference<BackgroundConnection> forStatus,
+                                                      AtomicReference<Coordination> forRebuild,
+                                                      IndexingService service, int writeBatch) {
+            connection = BackgroundConnection.start(settings, connected -> {
+                notifier.connected(connected);
+                forRebuild.set(connected);
+                LOG.info("connected to Hazelcast {}", settings.members());
+                startWriter(connected, service, writeBatch);
+            });
+            forStatus.set(connection);
         }
 
         /** D6, D9: the writer starts as soon as there is a cluster, unless the service already stopped. */
-        private synchronized void startWriter(Coordination connected, IndexingService service) {
+        private synchronized void startWriter(Coordination connected, IndexingService service, int writeBatch) {
             if (closed.get()) {
                 return;
             }
             IndexingWriter started = new IndexingWriter(connected, service,
-                    Coordination.owner("indexing", 0), d -> Thread.sleep(d.toMillis()));
+                    Coordination.owner("indexing", 0), d -> Thread.sleep(d.toMillis()), writeBatch);
             connected.onConnectionChange(started::connectionChanged);
             writerThread = new Thread(started, SERVICE_NAME + "-writer");
+            writerThread.setUncaughtExceptionHandler(exitWhenWriterDies(closed::get, exit));
             writer.set(started);
             writerThread.start();
         }
@@ -268,10 +349,16 @@ public final class App {
                 server.stop();
             } finally {
                 try {
+                    rebuilder.close();                       // a running one fails and drops its collection
                     stopWriter();
-                    Coordination connected = coordination.getAndSet(null);
-                    if (connected != null) {
-                        connected.close();
+                    parsers.shutdownNow();                   // idle: only the writer and a rebuild use them
+                    notifier.close();
+                    BackgroundConnection started;
+                    synchronized (this) {
+                        started = connection;
+                    }
+                    if (started != null) {
+                        started.close();                     // or as soon as it connects
                     }
                 } finally {
                     client.close();                          // even if stopping the rest failed

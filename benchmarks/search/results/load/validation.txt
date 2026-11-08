@@ -1,0 +1,79 @@
+== Before starting
+PASS  the sample dataset is published                            15 books
+
+== Search: keywords
+PASS  one term                                                   total 1: 84
+PASS  another term, ordered by book_id                           total 4: 76 84 345 2701
+PASS  several terms are AND                                      total 3: 84 345 2701
+PASS  upper case is the same term                                total 1: 84
+PASS  a stopword in q is ignored                                 total 1: 84
+
+== Search: filters, one by one and combined
+PASS  author, part of the name                                   total 2: 74 76
+PASS  author, any case                                           total 2: 74 76
+PASS  year                                                       total 3: 46 74 76
+PASS  language                                                   total 1: 84
+PASS  author + year                                              total 1: 98
+PASS  author + year + language                                   total 1: 98
+
+== Search: empty results are a 200
+PASS  a word in no book                                          total 0: no books
+PASS  a term in no book makes the AND empty                      total 0: no books
+PASS  a filter nobody matches                                    total 0: no books
+PASS  a supported language no book has                           total 0: no books
+
+== Search: pagination
+PASS  first page                                                 total 10: 46 74 76
+PASS  second page                                                total 10: 84 98 174
+PASS  last page, partial                                         total 10: 2701
+PASS  offset beyond the end                                      total 10: no books
+PASS  default limit keeps every match                            total 10: 46 74 76 84 98 174 345 1342 1661 2701
+
+== Search: invalid parameters are a 400 and touch nothing
+PASS  q missing                                                  HTTP 400 MISSING_PARAMETER "field":"q"
+PASS  q with only stopwords                                      HTTP 400 INVALID_PARAMETER "field":"q"
+PASS  q is not valid percent-encoding                            HTTP 400 INVALID_PARAMETER "field":null
+PASS  language not supported                                     HTTP 400 INVALID_PARAMETER "field":"language"
+PASS  year is not 4 digits                                       HTTP 400 INVALID_PARAMETER "field":"year"
+PASS  offset negative                                            HTTP 400 INVALID_PARAMETER "field":"offset"
+PASS  limit 0                                                    HTTP 400 INVALID_PARAMETER "field":"limit"
+PASS  limit above the maximum                                    HTTP 400 INVALID_PARAMETER "field":"limit"
+
+== Search: a book and the filter values
+PASS  book published                                             HTTP 200 "title":"Pride and Prejudice"
+PASS  book not in the index                                      HTTP 404 NOT_FOUND "field":"book_id"
+PASS  book_id 0                                                  HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  book_id with a sign                                        HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  book_id with leading zeros                                 HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  book_id not a number                                       HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  languages and years                                        HTTP 200 "years":{"min":1975,"max":2008}
+PASS  a route that does not exist                                HTTP 404 NOT_FOUND "field":null
+PASS  status of the service                                      HTTP 200 "service":"search-service"
+
+== Indexing (internal)
+PASS  status                                                     HTTP 200 "service":"indexing-service"
+PASS  index status: books published                              HTTP 200 "books_published":15,
+PASS  index status: books indexed                                HTTP 200 "books_indexed":15,
+PASS  update: invalid id                                         HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  update: a book not in the datalake                         HTTP 404 NOT_FOUND "field":"book_id"
+PASS  publish with nothing new                                   HTTP 200 "books_published":0,
+PASS  publish created no new version                             HTTP 200 "published_version":1,
+
+== Ingestion (internal)
+PASS  status                                                     HTTP 200 "service":"ingestion-service"
+PASS  ingest: invalid id                                         HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  status: invalid id                                         HTTP 400 INVALID_PARAMETER "field":"book_id"
+PASS  status of a book not stored                                HTTP 200 "status":"not_available"
+PASS  list of stored books                                       HTTP 200 "books":[
+PASS  GET where only POST exists                                 HTTP 404 NOT_FOUND "field":null
+
+== Control Module
+PASS  status                                                     HTTP 200 "service":"control-module"
+
+== Interactions that are not HTTP
+PASS  Hazelcast: the 2 members form one cluster                  clusterSize 2
+PASS  MongoDB: Search serves the version of CURRENT              version 1
+PASS  datalake: indexing cannot write                            read-only
+PASS  datalake: control cannot write                             read-only
+
+passed 56, failed 0, skipped 0

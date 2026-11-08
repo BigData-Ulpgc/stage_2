@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -31,6 +32,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,6 +49,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CoordinationTest {
 
     private static final Duration SHORT = Duration.ofMillis(300);
+    /** Hazelcast TTLs are whole seconds, so the rebuild marker's tests wait in real time. */
+    private static final Duration MARKER_TTL = Duration.ofSeconds(2);
 
     private static HazelcastInstance client;
     private final TestClock clock = new TestClock();
@@ -448,6 +452,71 @@ class CoordinationTest {
         assertTrue(coordination.isInitialized());
     }
 
+    // --- Rebuild marker (DR-10) ---------------------------------------------------------
+
+    @Test
+    void soloUnaReconstruccionALaVez() {
+        OptionalLong first = coordination.tryStartRebuild(Duration.ofSeconds(30));
+        assertTrue(first.isPresent());
+        assertTrue(coordination.isRebuilding());
+        clock.advance(Duration.ofSeconds(1));                       // a second attempt has another token
+        assertTrue(coordination.tryStartRebuild(Duration.ofSeconds(30)).isEmpty(), "ya hay una en marcha");
+        assertTrue(coordination.renewRebuild(first.getAsLong(), Duration.ofSeconds(30)),
+                "el segundo intento no le quita la marca a la primera");
+
+        coordination.endRebuild(first.getAsLong());
+        assertFalse(coordination.isRebuilding());
+        assertTrue(coordination.tryStartRebuild(Duration.ofSeconds(30)).isPresent(), "al terminar, otra puede empezar");
+    }
+
+    @Test
+    void laMarcaCaducaSiNadieLaRenuevaYEntoncesYaNoSePuedeRenovar() throws Exception {
+        long token = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        waitUntil(() -> !coordination.isRebuilding());
+        assertFalse(coordination.renewRebuild(token, Duration.ofSeconds(30)), "una marca caducada no revive");
+        assertFalse(coordination.isRebuilding());
+    }
+
+    @Test
+    void renovarlaLaMantieneMasAllaDeSuTtl() throws Exception {
+        long token = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        long until = System.nanoTime() + MARKER_TTL.multipliedBy(3).toNanos();
+        while (System.nanoTime() < until) {
+            assertTrue(coordination.renewRebuild(token, MARKER_TTL));
+            Thread.sleep(MARKER_TTL.toMillis() / 4);
+        }
+        assertTrue(coordination.isRebuilding());
+    }
+
+    @Test
+    void unaReconstruccionCaducadaNoQuitaNiRenuevaLaMarcaDeLaSiguiente() throws Exception {
+        long old = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        waitUntil(() -> !coordination.isRebuilding());
+        clock.advance(Duration.ofSeconds(1));                       // the next one has another token
+        long next = coordination.tryStartRebuild(MARKER_TTL).orElseThrow();
+        assertTrue(coordination.renewRebuild(next, MARKER_TTL));
+
+        assertFalse(coordination.renewRebuild(old, Duration.ofSeconds(30)));
+        coordination.endRebuild(old);
+        assertTrue(coordination.isRebuilding(), "la marca de la siguiente sigue");
+        waitUntil(() -> !coordination.isRebuilding());              // with its own TTL, not the old one's 30 s
+    }
+
+    @Test
+    void unTtlDeMenosDeUnSegundoSeRechaza() {
+        // Hazelcast keeps TTLs in whole seconds: 300 ms would make a marker that is born expired
+        assertThrows(IllegalArgumentException.class, () -> coordination.tryStartRebuild(Duration.ofMillis(300)));
+        long token = coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+        assertThrows(IllegalArgumentException.class, () -> coordination.renewRebuild(token, Duration.ofMillis(999)));
+        assertTrue(coordination.isRebuilding());
+    }
+
+    @Test
+    void laMarcaDeReconstruccionNoEsLaDeClusterInicializado() {
+        coordination.tryStartRebuild(Duration.ofSeconds(30)).orElseThrow();
+        assertFalse(coordination.isInitialized(), "la recuperación del Control solo mira 'initialized'");
+    }
+
     // --- Recovery (contract §7, CF-10) ----------------------------------------------------
 
     @Test
@@ -687,6 +756,15 @@ class CoordinationTest {
             return thread.submit(task).get(30, TimeUnit.SECONDS);
         } finally {
             thread.shutdownNow();
+        }
+    }
+
+    /** Waits, in real time, for a Hazelcast TTL: the test clock does not move those. */
+    private static void waitUntil(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!condition.getAsBoolean()) {
+            assertTrue(System.nanoTime() < deadline, "the condition did not hold in 10 s");
+            Thread.sleep(50);
         }
     }
 
