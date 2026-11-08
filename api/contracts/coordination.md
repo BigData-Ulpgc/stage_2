@@ -198,9 +198,11 @@ because it is not the book's fault: otherwise one outage would send every book i
 | `publishedAt` | `String` | ISO-8601 UTC, e.g. `2026-11-03T10:15:00Z` |
 
 - Indexing publishes it after `CURRENT` has switched (plan §6.5), only when a new version is
-  created (`books_published > 0`): one per version, in order, from the same thread as T10,
-  right after `POST /index/publish` answers. A version created while Indexing has no cluster
-  is announced when it connects or reconnects (only the last one, which is enough for Search).
+  created (`books_published > 0`): one per version, in order while connected, from the same
+  thread as T10, right after `POST /index/publish` answers. A version created while Indexing
+  has no cluster is announced when it connects or reconnects (only the last one, which is
+  enough for Search); that announcement may come after the one of a newer version published
+  at the same moment.
 - The event is only a **wake-up**: on receiving it, a Search replica reads `CURRENT` from
   MongoDB and reloads only if the version is newer than the one it serves. A lost, repeated or
   out-of-order event therefore does no harm, and the periodic check of `CURRENT`

@@ -5,7 +5,6 @@ import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
-import es.ulpgc.bigdata.datamart.publication.MongoPublishedBooks;
 import com.mongodb.client.model.BulkWriteOptions;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Indexes;
@@ -17,6 +16,7 @@ import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.model.Updates;
 import com.mongodb.client.model.WriteModel;
 import es.ulpgc.bigdata.datamart.indexlog.MongoIndexLog;
+import es.ulpgc.bigdata.datamart.publication.MongoPublishedBooks;
 import org.bson.Document;
 
 import java.time.temporal.ChronoUnit;
