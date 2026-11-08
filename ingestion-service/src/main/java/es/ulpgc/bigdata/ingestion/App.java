@@ -18,6 +18,8 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Entry point of the Ingestion Service: the HTTP API (CF-06) and the ingest-queue workers
@@ -27,7 +29,8 @@ import java.util.Objects;
  * (BackgroundConnection, common), then the workers. Connecting blocks until the cluster answers
  * (CoordinationSettings.openClient), and GET /status must answer meanwhile: it does not depend
  * on Hazelcast (api/endpoints.md). It shows "coordination": disabled (INGESTION_WORKERS=0) |
- * connecting | connected | disconnected | failed | closed.
+ * connecting | connected | disconnected | failed | closed, and "coordination_error" when the
+ * connection failed or the workers could not start (as the Control does).
  *
  * Configuration (environment variables):
  * <pre>
@@ -62,6 +65,11 @@ public final class App {
      * anything, so a wrong one stops the start.
      */
     public static RunningService start(Env env) {
+        return start(env, settings -> () -> Coordination.connect(settings));
+    }
+
+    /** The same with another way of connecting: the tests make it fail. */
+    static RunningService start(Env env, Function<CoordinationSettings, Supplier<Coordination>> connector) {
         Objects.requireNonNull(env, "env");
         int port = env.port(PORT, DEFAULT_PORT);
         int httpThreads = env.integerAtLeast(HTTP_THREADS,
@@ -81,7 +89,7 @@ public final class App {
                 layout.datalakeDir().toAbsolutePath(), source.describe(), workers);
 
         if (coordination != null) {
-            service.connection = BackgroundConnection.start(coordination,
+            service.connection = BackgroundConnection.start(connector.apply(coordination),
                     connected -> service.startWorkers(connected, ingestion, workers, fetchRetries, coordination));
         }
         return service;
@@ -110,7 +118,13 @@ public final class App {
                 if (closed) {
                     return;
                 }
-                workers = IngestionWorkers.start(connected, ingestion, count, fetchRetries, Clock.systemUTC());
+                try {
+                    workers = IngestionWorkers.start(connected, ingestion, count, fetchRetries, Clock.systemUTC());
+                } catch (RuntimeException e) {
+                    // BackgroundConnection keeps it for /status (coordination_error) but does not log it
+                    LOG.error("connected to Hazelcast {}, but the workers could not start", settings.members(), e);
+                    throw e;
+                }
             }
             LOG.info("connected to Hazelcast {} · {} workers started", settings.members(), count);
         }
@@ -121,6 +135,9 @@ public final class App {
             BackgroundConnection current = connection;
             // connection is set right after BackgroundConnection.start returns: "connecting" until then
             status.put("coordination", current != null ? current.state().label() : coordinated ? "connecting" : "disabled");
+            if (current != null) {
+                current.failure().ifPresent(failure -> status.put("coordination_error", failure));
+            }
             IngestionWorkers running;
             synchronized (this) {
                 running = workers;
