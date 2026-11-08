@@ -21,6 +21,8 @@
 # Variables: BASE (books of the base index), EXTRA (books processed during the load), CLIENTS,
 # WARMUP, DURATION, REPETITIONS, OUT, MVN, COMPOSE.
 set -euo pipefail
+# awk printf follows LC_NUMERIC: with es_ES it writes 2,54 and breaks pipeline.csv
+export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
@@ -85,7 +87,8 @@ if [ ! -f "$BOOKS/manifest.json" ] || ! grep -q "\"count\": $TOTAL\b" "$BOOKS/ma
         "$PYTHON" scripts/dataset/generate_dataset.py --count "$TOTAL" --out "$BOOKS"
     fi
 fi
-grep -E '^[0-9]+$' "$BOOKS/book_ids.txt" | head -n "$BASE" > "$OUT/base-ids.txt"
+# grep stops by itself: "grep | head" would die of SIGPIPE under pipefail once head has its lines
+grep -E -m "$BASE" '^[0-9]+$' "$BOOKS/book_ids.txt" > "$OUT/base-ids.txt"
 grep -E '^[0-9]+$' "$BOOKS/book_ids.txt" | sed -n "$((BASE + 1)),$((BASE + EXTRA))p" > "$OUT/extra-ids.txt"
 
 echo "Building the images"

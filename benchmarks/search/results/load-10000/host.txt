@@ -1,0 +1,24 @@
+date_utc: 2026-11-07T17:01:29Z
+commit: 5e85611
+uname: Linux 7.0.0-42-generic x86_64 GNU/Linux
+logical_cpus: 12
+cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+memory: 16205352 kB
+docker: 12 CPUs, 16594280448 bytes, Ubuntu 24.04.5 LTS
+java: openjdk version "21.0.12.1" 2026-08-18
+java: OpenJDK Runtime Environment (build 21.0.12.1+1-1-24.04.4-Ubuntu)
+java: OpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-24.04.4-Ubuntu, mixed mode, sharing)
+dataset: data/bench-books/book_ids.txt (10000 books)
+ingestion source: local
+synthetic dataset digest: "digest": "d2bd9f45e701ed144922945ea67ad3bbe2cbfdf33eb0f3925db8ba97d864572f"
+repetitions: 3, warmup: 15s, duration: 30s, warm run after each start: 60s
+nginx CPUs in these tests: 2, except in the experiment named nginx<CPUs>
+limits (.env):
+  MONGO_MEM_LIMIT=1g
+  MONGO_CPUS=2
+  HZ_CPUS=1
+  HZ_MEM_LIMIT=768m
+  SEARCH_CPUS=2
+  SEARCH_MEM_LIMIT=1g
+  NGINX_CPUS=0.5
+  NGINX_MEM_LIMIT=128m

@@ -336,7 +336,8 @@ def main():
 
     directories = args.load
     if directories is None:
-        directories = [d for d in sorted((HERE / "results").glob("load*")) if d.name != "load-smoke"]
+        directories = [d for d in sorted((HERE / "results").glob("load*"))
+                       if d.name != "load-smoke" and ".failed-" not in d.name]
     directories = [d for d in directories if (d / "summary.csv").exists()]
     load = load_runs(directories)
     jmh = jmh_rows(args.jmh)
