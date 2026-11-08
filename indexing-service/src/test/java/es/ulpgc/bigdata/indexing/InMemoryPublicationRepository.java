@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * test can also:
  *  - setCurrent: write CURRENT as another program would;
  *  - beforeSwitch: run something just before the CAS (another replica that publishes first);
+ *  - beforeCurrent: run something every time CURRENT is read (count the reads, make a read
+ *    slow or fail);
  *  - failSwitch / failHistory: make that step fail like a MongoDB that stops answering (a
  *    publication that dies halfway).
  */
@@ -32,6 +34,7 @@ class InMemoryPublicationRepository implements PublicationRepository {
     private final Map<Integer, PublishedVersion> history = new ConcurrentHashMap<>();
 
     private volatile Runnable beforeSwitch = () -> { };
+    private volatile Runnable beforeCurrent = () -> { };
     private volatile boolean failSwitch = false;
     private volatile boolean failHistory = false;
     private volatile int switchAttempts = 0;
@@ -51,6 +54,10 @@ class InMemoryPublicationRepository implements PublicationRepository {
 
     void beforeSwitch(Runnable action) {
         this.beforeSwitch = Objects.requireNonNull(action, "action");
+    }
+
+    void beforeCurrent(Runnable action) {
+        this.beforeCurrent = Objects.requireNonNull(action, "action");
     }
 
     void failSwitch(boolean fail) {
@@ -82,6 +89,7 @@ class InMemoryPublicationRepository implements PublicationRepository {
 
     @Override
     public Optional<Publication> current() {
+        beforeCurrent.run();
         return Optional.ofNullable(current.get());
     }
 

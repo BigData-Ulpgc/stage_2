@@ -1,0 +1,35 @@
+\section{Introduction and objectives}
+\label{sec:intro}
+
+Stage 1 built and measured the data layer of a search engine over the books of Project Gutenberg: a
+datalake, an inverted index and a metadata store. Stage 2 turns that data layer into a system of
+cooperating services that keeps working while books are being added and users are searching, all on a
+single machine.
+
+The system has four kinds of process. \textbf{Ingestion} downloads books and stores them in the datalake.
+\textbf{Indexing} adds complete books to the index and publishes new versions of it. \textbf{Search}
+answers the front-end. The \textbf{Control Module} decides what has to be done and when, without doing
+any of the work itself. They coordinate through Hazelcast and share their results through the datalake and
+MongoDB. A front-end only sees one public API, behind nginx.
+
+The objectives of the stage, and how the system meets them, are:
+
+\begin{itemize}
+  \item \textbf{Clear contracts.} Every HTTP endpoint is specified in OpenAPI and classified as
+        front-end, internal or operational, and the interactions that are not HTTP have their own
+        contracts (Section~\ref{sec:api}).
+  \item \textbf{Correct behaviour under concurrency.} A book is only indexed once complete, each book
+        is processed by one worker at a time, and a search never sees a partially published version.
+  \item \textbf{Survival of failures.} A worker that dies loses its lease and its book returns to the
+        queue. If Hazelcast loses its state, the Control rebuilds it from what is persistent. If a Search
+        replica dies, nginx sends the request to another one.
+  \item \textbf{Reproducible deployment.} One command starts every process with fixed resource limits,
+        and the number of replicas and threads of each service is configurable
+        (Section~\ref{sec:deployment}).
+  \item \textbf{Evidence.} The APIs are checked automatically against the running system, and the
+        benchmarks identify what limits performance on one machine, keeping client concurrency, threads
+        and replicas apart (Section~\ref{sec:benchmarks}).
+\end{itemize}
+
+Everything runs on one host by design: replicas and threads share its CPU, memory and disk. What these
+measures say about one machine does not establish how the system will scale on the Stage 3 cluster.

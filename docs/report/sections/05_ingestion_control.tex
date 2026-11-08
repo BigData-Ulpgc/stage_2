@@ -1,0 +1,161 @@
+\section{Microservice implementation: Ingestion and Control Module}
+\label{sec:ingestion-control}
+
+Both are written in Java 17 with Javalin 6.1.3 and Gson, like the rest, and share \code{common}: the HTTP server
+with its error format (\code{ServiceServer}), the configuration from the environment (\code{Env}), the range datalake
+and the coordination library. Ingestion implements \code{api/ingestion-openapi.yaml} and the Control
+\code{api/control-openapi.yaml}; both are checked against their specification by tests (\code{OpenApiContractTest})
+and by \code{scripts/validate-api.sh} on the running stack.
+
+\subsection{Ingestion Service}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{4.1cm}X@{}}
+\toprule
+\textbf{Class} & \textbf{Responsibility} \\
+\midrule
+\code{IngestionApi} & \code{POST /ingest/\{id\}}, \code{GET /ingest/status/\{id\}}, \code{GET /ingest/list}, \code{GET /status} \\
+\code{IngestionService} & One ingestion, without HTTP: locate, fetch, split, save. The API and the workers run this same code \\
+\code{GutenbergClient}, \code{LocalFileSource} & The two sources (\code{INGESTION\_SOURCE}): the download, or \code{pg<id>.txt} files of a folder \\
+\code{BookSplitter} & Header and body between the \code{*** START} and \code{*** END} markers, migrated from Stage 1 \\
+\code{IngestionWorkers}, \code{IngestionWorker} & The \code{INGESTION\_WORKERS} consumers of \code{ingest-queue} \\
+\code{Throttle} & One pause for the whole replica after a 429 or a 403 of Gutenberg \\
+\code{BackgroundConnection} (common) & Connects to Hazelcast without blocking the start, and follows the connection \\
+\bottomrule
+\end{tabularx}
+\caption{Structure of the Ingestion Service.}
+\end{table}
+
+\textbf{Two ways in, one code path.} \code{POST /ingest/\{id\}} is synchronous: when it answers 200 the book is
+complete in the datalake (\code{downloaded}, or \code{already\_available} if it was there). It is for administration
+and for the validation. In normal operation the books arrive through \code{ingest-queue}, and each worker calls the
+same \code{IngestionService}, so both paths store a book in exactly the same way.
+
+\textbf{The source.} \code{GutenbergClient} downloads \url{https://www.gutenberg.org/cache/epub/<id>/pg<id>.txt}
+with an identifying User-Agent. Its timeout (30~s) bounds the whole download: the timeout of the JDK client alone
+covers only the headers, and a body that arrives slowly was measured to last far longer. A 404 is
+\code{NOT\_FOUND}, a permanent error; a timeout, a network error or a 5xx is a transient one; a 429 or a 403 means that
+Gutenberg is throttling us. \code{LocalFileSource} reads the same text from a folder, untouched, so the benchmarks and
+the synthetic dataset (DR-16) run every step after the fetch exactly as online, without the network.
+
+\subsubsection{Readiness of the datalake}
+\label{sec:readiness}
+
+A book is in the datalake only when its \code{<id>.\_READY} marker exists together with its header and its body
+(\code{api/contracts/datalake-readiness.md}). Each file is written to a temporary file with a unique name and moved
+into place with an atomic move, and the marker is written last, with the time of the save. So:
+\begin{itemize}
+  \item a process that dies halfway leaves files without a marker: the book does not exist for anyone, and the next
+    ingestion writes it again, whole;
+  \item Indexing checks the marker before reading a book (\code{NOT\_READY} otherwise), and the Control's recovery
+    counts only books with a marker;
+  \item a ready book is never written again: \code{save} is a no-op and the ingestion answers \code{already\_available}
+    without fetching anything.
+\end{itemize}
+\code{locate} computes the path from the id, without listing any folder, so checking one book costs the same with 200
+books or with 100,000.
+
+\subsubsection{Task ownership and leases}
+\label{sec:ownership}
+
+A worker owns a book from its claim to its completion. The claim polls \code{ingest-queue} and writes
+\code{INGESTING} with the worker's name (\code{ingestion-<hostname>/w<n>}; inside Docker the hostname is the container
+id) and \code{leaseUntil = now + LEASE\_SECONDS} (120~s), in one transaction. If the process dies after the poll, the
+transaction is rolled back and the id goes back to the queue; if it dies after the commit, the book stays
+\code{INGESTING} with a lease that nobody renews.
+
+The Control queries \code{state IN (INGESTING, INDEXING) AND leaseUntil < now} every \code{LEASE\_CHECK\_SECONDS}
+(10~s) and requeues those books with one more attempt (\code{LEASE\_EXPIRED}). The completion is a compare-and-set
+against the entry the worker claimed: if the Control requeued the book meanwhile, the worker's completion fails, it
+drops the book, and whatever it wrote is harmless because writing is idempotent. The library can renew a lease
+(\code{Coordination.renew}), but Ingestion does not need to: one attempt lasts at most $3 \times 30 + 3$~s with the defaults (the download and two retries, each bounded by the
+30~s timeout, plus their pauses of 1 and 2~s), well within the 120~s lease. So a lease only expires when a process
+really died or hung.
+
+\subsubsection{Retries and errors}
+
+Each failure goes back to the contract with a code (§4.3 of the coordination contract):
+\begin{itemize}
+  \item \textbf{Permanent} (\code{NOT\_FOUND}, \code{INVALID\_BOOK} for a text without markers): \code{FAILED} at once.
+    Retrying would give the same answer.
+  \item \textbf{Transient} (\code{DOWNLOAD\_FAILED}): first \code{INGESTION\_FETCH\_RETRIES} (2) retries inside the
+    attempt, after 1~s and 2~s; then the book goes back to the queue with one more attempt, and after
+    \code{MAX\_ATTEMPTS} (3) it is \code{FAILED}. \code{POST /control/retry-failed} gives the failed books another round.
+  \item \textbf{Throttling} (429 or 403): not retried. The book goes back to the queue as a transient failure, and the
+    whole replica stops claiming for a pause of 30~s that doubles at each new throttling, up to 10~min (a successful
+    download brings it back to 30~s). Otherwise every worker would keep hitting Gutenberg and burn the attempts of every
+    book in the queue in a few seconds; with the pause they keep them.
+  \item \textbf{Hazelcast down:} the worker waits and tries again with a growing pause (1 to 30~s); the client
+    reconnects by itself.
+\end{itemize}
+
+\subsubsection{Idempotency}
+
+Repeating any step leaves the same result: seeding uses \code{putIfAbsent}; a book already ready is not fetched; each
+file is replaced atomically by a complete version, so two ingestions of the same book at the same time (an
+administrator's \code{POST /ingest} and a worker) leave one complete copy; and an id that appears twice in the queue is
+dropped by the claim, because its entry is no longer \code{PENDING} (counted in \code{ids\_skipped}). This is what makes
+the retries and the lease recovery safe: a book processed twice costs time, never a wrong result.
+
+\textbf{Start and status.} The HTTP server starts first, then the Hazelcast client connects in the background
+(\code{BackgroundConnection}, shared with the Control and Indexing), and the workers start once it is connected.
+\code{GET /status} answers from the first moment and shows \code{coordination} (\code{connecting},
+\code{connected}, \code{disconnected}, \code{failed} or \code{closed}) and the counters of the workers, including
+\code{coordination\_cost}: the wait in the queue, the claim, the work and the completion of each book (CF-12). A
+\code{SIGTERM} (\code{docker stop}) lets each worker finish its book for up to 10~s before the client and the server
+close.
+
+\subsection{Control Module}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}L{3.6cm}X@{}}
+\toprule
+\textbf{Class} & \textbf{Responsibility} \\
+\midrule
+\code{ControlApi} & \code{POST /control/jobs}, \code{GET /control/status}, \code{GET /control/tasks/\{id\}},
+  \code{POST /control/retry-failed} \\
+\code{ControlTasks} & The lease check and the decision to publish \\
+\code{ControlScheduler} & Runs both tasks on their own threads; a failure of one run is logged and the next run goes on \\
+\code{Recovery}, \code{StorageEvidence} & Rebuild \code{book-state} when the cluster lost it (CF-10) \\
+\code{IndexingClient} & \code{POST /index/publish}, with a 30~s timeout \\
+\bottomrule
+\end{tabularx}
+\caption{Structure of the Control Module.}
+\end{table}
+
+\textbf{The API.} \code{POST /control/jobs} takes 1 to 100,000 ids and answers 202 with how many were new and how many
+were already known: it only seeds, the work happens asynchronously in the workers. \code{GET /control/status} counts
+the books per state and the ids in each queue, and shows the last publication, the last lease check and the last
+recovery. \code{GET /control/tasks/\{id\}} shows the entry of one book: owner, lease, attempts and last error. While the
+Control is not connected to Hazelcast these routes answer 503 \code{COORDINATION\_UNAVAILABLE} at once instead of
+waiting for the cluster.
+
+\textbf{Publication of completed index updates.} The Control decides \emph{when} to publish; Indexing does the
+publication. Every second the Control counts the \code{INDEXED} books, and calls \code{POST /index/publish} when there are
+\code{PUBLISH\_BATCH} of them (100) or when \code{PUBLISH\_INTERVAL\_S} (30~s) have passed with at least one. A failed call
+(Indexing down, a timeout, 409 during a rebuild, 503 without MongoDB) is retried after 1, 2, 4\ldots{} up to 30~s, not
+every second; the publication is idempotent, so a retry never duplicates a version. A publication that makes nothing
+new visible (the books were already published but T10 has not marked them yet) does not trigger another one until the
+interval is over, or until the \code{INDEXED} books drop below the batch.
+
+\subsubsection{Recovery when Hazelcast loses its state}
+\label{sec:recovery}
+
+Hazelcast keeps everything in memory, so if both members stop the state of every book is gone. The Control writes a
+marker in \code{coordination-meta} after its first seed or recovery; at start and before every lease check it looks
+for it. If it is missing, it rebuilds \code{book-state} from the persistent evidence, from the most advanced state
+down (contract §7, row R):
+\begin{enumerate}
+  \item the books of \code{index\_books} with a version up to \code{CURRENT} are \code{PUBLISHED};
+  \item the rest of \code{index\_log} are \code{INDEXED};
+  \item the rest with a \code{\_READY} marker are \code{DOWNLOADED}, and offered again to \code{index-queue};
+  \item the seed file, if any, is seeded again as \code{PENDING};
+  \item the marker is written.
+\end{enumerate}
+Every source is read before anything is written, a recovered book never goes backwards, and an entry that already
+exists is only moved forward from \code{PENDING}. So a recovery interrupted halfway can simply run again. What has no
+evidence is lost from the cluster: a book that was \code{PENDING}, or \code{INGESTING} without its marker. It is sent again
+with \code{POST /control/jobs}, which leaves the recovered books as they are. The failure tests of CF-11 restart the whole
+cluster in the middle of a run and check this end to end (Section~\ref{sec:failure-tests}).
