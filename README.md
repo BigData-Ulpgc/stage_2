@@ -7,6 +7,8 @@ and deployed on one host with Docker Compose.
 
 **Repository:** <https://github.com/BigData-Ulpgc/stage_2>
 
+**Report:** [`docs/report/Stage2_SOA_BigData-Ulpgc.pdf`](docs/report/Stage2_SOA_BigData-Ulpgc.pdf)
+
 | I want to... | Go to |
 |---|---|
 | See how it works | [Architecture](#architecture) |
@@ -15,6 +17,7 @@ and deployed on one host with Docker Compose.
 | Change ports, data paths, replicas or threads | [Run without Docker](#run-a-service-without-docker), [Run with Docker](#run-the-whole-system-with-docker) |
 | Find the API specifications and check them | [APIs and validation](#apis-and-validation) |
 | Repeat the benchmarks | [Benchmarks](#benchmarks) |
+| Read the report | [`docs/report/Stage2_SOA_BigData-Ulpgc.pdf`](docs/report/Stage2_SOA_BigData-Ulpgc.pdf) |
 
 ## Architecture
 
@@ -291,8 +294,9 @@ mvn -B clean verify                         # every module
 
 All the valid measures must come from one idle machine, with the limits of `.env` recorded in `host.txt`.
 
-The report is in [`docs/report/`](docs/report/): `cd docs/report && pdflatex report.tex`, run twice so that the
-contents and the references are complete.
+The report is in [`docs/report/`](docs/report/): the submitted PDF is
+[`Stage2_SOA_BigData-Ulpgc.pdf`](docs/report/Stage2_SOA_BigData-Ulpgc.pdf), and `cd docs/report && pdflatex report.tex`,
+run three times so that the contents and the references settle, builds it again from the sources.
 
 ## Repository layout
 

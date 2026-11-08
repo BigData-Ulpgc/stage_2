@@ -7,7 +7,7 @@
 and tested against real Hazelcast members. A book never changes state before its evidence is persistent, so a crash
 at any point leaves a book that is either redone or recovered; the failure tests check it end to end
 (Table~\ref{tab:failure-tests}). Replicas of
-Ingestion and Search are added with \code{--scale} and nothing else, because nobody addresses a replica: the workers
+Ingestion and Search are added with \code{-{}-scale} and nothing else, because nobody addresses a replica: the workers
 pull from shared queues, and nginx spreads the queries. Losing the whole Hazelcast cluster costs a recovery, not data.
 
 \textbf{Weaknesses.} Hazelcast is in memory, so the books without evidence (\code{PENDING}, or \code{INGESTING} without
